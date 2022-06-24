@@ -149,7 +149,7 @@ int dsi_panel_full_power_seq(struct dsi_panel *panel)
 	return ret;
 }
 
-static const char *LPNAME[] = { "NOLP", "LP1", "LP2", "OFF" };
+static const char *LPNAME[] = { "NOLP", "LP1", "LP2", "OFF", "MAX"};
 static bool dsi_panel_need_mask(struct dsi_panel *panel)
 {
 	if (panel->lge.partial_area_vertical_changed)
@@ -162,31 +162,59 @@ static bool dsi_panel_need_mask(struct dsi_panel *panel)
 	return false;
 }
 
-static int set_lp(struct dsi_panel *panel, enum lge_panel_lp_state lp_state, enum dsi_cmd_set_type cmd_set_type)
+static void set_aod_area(struct dsi_panel *panel)
 {
 	int rc = 0;
 
 	if (!panel) {
 		pr_err("invalid params\n");
-		return -EINVAL;
+		return;
+	}
+
+	if (panel->lge.ddic_ops && panel->lge.ddic_ops->prepare_aod_area) {
+		panel->lge.ddic_ops->prepare_aod_area(panel,
+				panel->lge.lge_cmd_sets[LGE_DDIC_DSI_AOD_AREA].cmds,
+				panel->lge.lge_cmd_sets[LGE_DDIC_DSI_AOD_AREA].count);
+	}
+
+	rc = lge_ddic_dsi_panel_tx_cmd_set(panel, LGE_DDIC_DSI_AOD_AREA);
+	if (rc) {
+		pr_err("[%s] failed to send cmd, rc=%d\n",
+				panel->name, rc);
+	}
+
+	return;
+}
+
+static void set_lp(struct dsi_panel *panel, enum lge_panel_lp_state lp_state, enum dsi_cmd_set_type cmd_set_type)
+{
+	int rc = 0;
+
+	if (!panel) {
+		pr_err("invalid params\n");
+		return;
 	}
 
 	if (panel->lge.panel_state == lp_state) {
 		pr_debug("already %s state\n", LPNAME[lp_state]);
-		goto exit;
+		return;
 	}
+
+	if (!cmd_set_exists(panel, cmd_set_type)) {
+		pr_err("No %s cmd\n", LPNAME[lp_state]);
+		return;
+	}
+
 	rc = lge_ddic_dsi_panel_tx_cmd_set(panel, cmd_set_type);
 	if (rc) {
 		pr_err("[%s] failed to send %d cmd, rc=%d\n",
 		       panel->name, cmd_set_type, rc);
-	} else if (cmd_set_exists(panel, cmd_set_type)) {
+	} else {
 		panel->lge.panel_state = lp_state;
 		pr_info("sent %s cmd\n", LPNAME[lp_state]);
-	} else {
-		pr_debug("No %s cmd\n", LPNAME[lp_state]);
 	}
-exit:
-	return rc;
+
+	return;
 }
 
 static int dsi_panel_get_current_power_mode(struct dsi_panel *panel)
@@ -355,8 +383,9 @@ exit:
 static int dsi_panel_send_lp_cmds(struct dsi_panel *panel,
 				enum lge_ddic_dsi_cmd_set_type cmd_type)
 {
-	int rc;
+	int rc = 0;
 	bool need_mask = true;
+	bool need_prepare = true;
 	char *bist_name;
 	enum lge_panel_lp_state panel_state = LGE_PANEL_STATE_MAX;
 
@@ -375,6 +404,10 @@ static int dsi_panel_send_lp_cmds(struct dsi_panel *panel,
 	case LGE_DDIC_DSI_SET_NOLP:
 		bist_name = "nolp";
 		panel_state = LGE_PANEL_NOLP;
+		need_prepare = false;
+		break;
+	case LGE_DDIC_DSI_AOD_AREA:
+		bist_name ="aod_area";
 		break;
 	default:
 		bist_name = "none";
@@ -382,6 +415,10 @@ static int dsi_panel_send_lp_cmds(struct dsi_panel *panel,
 	};
 
 	mutex_lock(&panel->lge.pa_changed_lock);
+
+	if (cmd_type == LGE_DDIC_DSI_CMD_SET_MAX)
+		goto exit;
+
 	need_mask = dsi_panel_need_mask(panel);
 
 	/* 1. masking */
@@ -400,15 +437,21 @@ static int dsi_panel_send_lp_cmds(struct dsi_panel *panel,
 	if (panel->lge.use_ddic_reg_lock)
 		lge_ddic_dsi_panel_tx_cmd_set(panel, LGE_DDIC_DSI_REGISTER_UNLOCK);
 
-	if (panel && panel->cur_mode) {
-		if (panel->lge.ddic_ops && panel->lge.ddic_ops->prepare_aod_cmds) {
-			panel->lge.ddic_ops->prepare_aod_cmds(panel,
-					panel->lge.lge_cmd_sets[cmd_type].cmds,
-					panel->lge.lge_cmd_sets[cmd_type].count);
+
+	if (panel->cur_mode && need_prepare) {
+		set_aod_area(panel);
+
+		if (cmd_type != LGE_DDIC_DSI_AOD_AREA) {
+			if (panel->lge.ddic_ops && panel->lge.ddic_ops->prepare_aod_cmds) {
+				panel->lge.ddic_ops->prepare_aod_cmds(panel,
+						panel->lge.lge_cmd_sets[cmd_type].cmds,
+						panel->lge.lge_cmd_sets[cmd_type].count);
+			}
 		}
 	}
 
-	rc = set_lp(panel, panel_state, cmd_type);
+	if(cmd_type != LGE_DDIC_DSI_AOD_AREA)
+		set_lp(panel, panel_state, cmd_type);
 
 	/* LOCK REGISTER */
 	if (panel->lge.use_ddic_reg_lock)
@@ -448,6 +491,7 @@ static int dsi_panel_send_lp_cmds(struct dsi_panel *panel,
 
 	panel->lge.partial_area_vertical_changed = false;
 	panel->lge.partial_area_height_changed = false;
+exit:
 	mutex_unlock(&panel->lge.pa_changed_lock);
 
 	return rc;
@@ -473,14 +517,14 @@ int dsi_panel_set_lp2(struct dsi_panel *panel)
 
 	cmd_type = dsi_panel_select_cmd_type(panel);
 
-	if (cmd_type == LGE_DDIC_DSI_CMD_SET_MAX)
-		goto exit;
-
 	rc = dsi_panel_send_lp_cmds(panel, cmd_type);
 	if (rc < 0) {
 		pr_err("fail to send lp command\n");
 	}
-exit:
+
+	if ((cmd_type == LGE_DDIC_DSI_CMD_SET_MAX) || (cmd_type == LGE_DDIC_DSI_AOD_AREA))
+		panel->lge.panel_state = LGE_PANEL_LP2;
+
 	rc = dsi_panel_update_lp_state(panel, LGE_PANEL_LP2);
 	if (rc < 0) {
 		pr_err("fail to update lp state\n");
@@ -506,15 +550,14 @@ int dsi_panel_set_lp1(struct dsi_panel *panel)
 
 	cmd_type = dsi_panel_select_cmd_type(panel);
 
-	if (cmd_type == LGE_DDIC_DSI_CMD_SET_MAX)
-		goto exit;
-
 	rc = dsi_panel_send_lp_cmds(panel, cmd_type);
 	if (rc < 0) {
 		pr_err("fail to send lp command\n");
 	}
 
-exit:
+	if ((cmd_type == LGE_DDIC_DSI_CMD_SET_MAX) || (cmd_type == LGE_DDIC_DSI_AOD_AREA))
+		panel->lge.panel_state = LGE_PANEL_LP1;
+
 	rc = dsi_panel_update_lp_state(panel, LGE_PANEL_LP1);
 	if (rc < 0) {
 		pr_err("update lp state\n");
@@ -522,7 +565,6 @@ exit:
 		lge_panel_notifier_call_chain(LGE_PANEL_EVENT_BLANK,
 				0, LGE_PANEL_STATE_LP1); /* U2_BLANK; DOZE_SUSPEND */
 	}
-
 #if IS_ENABLED(CONFIG_LGE_DISPLAY_DIMMING_BOOT_SUPPORT)
 	lge_set_blank_called();
 #endif
@@ -562,12 +604,18 @@ int dsi_panel_set_nolp(struct dsi_panel *panel)
 		pr_err("fail to send lp command\n");
 	}
 
+	if (panel->lge.use_color_manager &&
+			panel->lge.ddic_ops &&
+			panel->lge.ddic_ops->lge_display_control_store)
+		panel->lge.ddic_ops->lge_display_control_store(panel, true);
+
 	rc = dsi_panel_update_lp_state(panel, LGE_PANEL_NOLP);
 	if (rc < 0) {
 		pr_err("fail to update lp state\n");
 	}
 
 	lge_panel_notifier_call_chain(LGE_PANEL_EVENT_BLANK, 0, LGE_PANEL_STATE_UNBLANK); // U3, UNBLANK
+
 	return rc;
 }
 
@@ -696,6 +744,13 @@ int dsi_panel_power_off(struct dsi_panel *panel)
 	if (panel->lge.use_ddic_reg_backup && panel->lge.ddic_reg_backup_complete &&
 			panel->lge.is_sent_bc_dim_set)
 		panel->lge.is_sent_bc_dim_set = false;
+	else if (!panel->lge.use_ddic_reg_backup && panel->lge.is_sent_bc_dim_set)
+		panel->lge.is_sent_bc_dim_set = false;
+
+	if (panel->lge.use_irc_ctrl) {
+		panel->lge.ddic_ops->set_irc_default_state(panel);
+		panel->lge.irc_pending = false;
+	}
 
 	lge_panel_notifier_call_chain(LGE_PANEL_EVENT_BLANK, 0, LGE_PANEL_STATE_BLANK); // U0, BLANK
 #if IS_ENABLED(CONFIG_LGE_DISPLAY_DIMMING_BOOT_SUPPORT)
@@ -922,14 +977,6 @@ int dsi_panel_unprepare(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-	if (panel->lge.use_ddic_reg_backup) {
-		if (atomic_read(&panel->lge.backup_state) > 0) {
-			pr_warn("WARNING: backup work pending\n");
-			flush_work(&panel->lge.backup_work);
-			atomic_set(&panel->lge.backup_state, 0);
-		}
-	}
-
 	if ((lge_drs_mngr_is_enabled(panel))
 			&& (lge_drs_mngr_get_state(panel) > DRS_IDLE)) {
 		rc = lge_drs_mngr_finish(panel);
@@ -999,6 +1046,33 @@ error:
 	return rc;
 }
 
+int lge_dsi_panel_mode_set(struct dsi_panel *panel)
+{
+	bool reg_backup_cond = false;
+
+	if (!panel) {
+		pr_err("invalid params\n");
+		return -EINVAL;
+	}
+	reg_backup_cond = !(panel->lge.use_ddic_reg_backup^panel->lge.ddic_reg_backup_complete);
+
+	pr_info("backup=%d, mode_set=%d\n", reg_backup_cond, panel->lge.is_sent_bc_dim_set);
+	if (reg_backup_cond && !panel->lge.is_sent_bc_dim_set && panel->lge.use_color_manager) {
+		if (panel->lge.ddic_ops &&
+				panel->lge.ddic_ops->lge_set_screen_mode)
+			panel->lge.ddic_ops->lge_set_screen_mode(panel, true);
+
+		if (panel->lge.ddic_ops &&
+				panel->lge.ddic_ops->lge_bc_dim_set)
+			panel->lge.ddic_ops->lge_bc_dim_set(panel, BC_DIM_ON, BC_DIM_FRAMES_NORMAL);
+		panel->lge.is_sent_bc_dim_set = true;
+	} else {
+		pr_warn("skip ddic mode set on booting or not supported!\n");
+	}
+
+	return 0;
+}
+
 /* @Override */
 int dsi_panel_post_enable(struct dsi_panel *panel)
 {
@@ -1046,20 +1120,6 @@ error:
 
 	if (panel->lge.lp_state == LGE_PANEL_NOLP)
 		lge_panel_notifier_call_chain(LGE_PANEL_EVENT_BLANK, 0, LGE_PANEL_STATE_UNBLANK); // U3, UNBLANK
-
-	if (panel->lge.use_ddic_reg_backup && panel->lge.ddic_reg_backup_complete &&
-			!panel->lge.is_sent_bc_dim_set) {
-		if (panel->lge.ddic_ops &&
-				panel->lge.ddic_ops->lge_set_screen_mode)
-			panel->lge.ddic_ops->lge_set_screen_mode(panel, true);
-
-		if (panel->lge.ddic_ops &&
-				panel->lge.ddic_ops->lge_bc_dim_set)
-			panel->lge.ddic_ops->lge_bc_dim_set(panel, BC_DIM_ON, BC_DIM_FRAMES_NORMAL);
-		panel->lge.is_sent_bc_dim_set = true;
-	} else {
-		pr_warn("skip ddic mode set on booting or not support!\n");
-	}
 
 	return rc;
 }
@@ -1178,12 +1238,12 @@ void lge_mdss_report_panel_dead(void)
 	struct dsi_display *display = NULL;
 	struct sde_connector *conn = NULL;
 
-	addr = (unsigned int **)kallsyms_lookup_name("main_display");
+	addr = (unsigned int **)kallsyms_lookup_name("primary_display");
 
 	if (addr) {
 		display = (struct dsi_display *)*addr;
 	} else {
-		pr_err("main_display not founded\n");
+		pr_err("primary_display not founded\n");
 		return;
 	}
 
@@ -1329,18 +1389,11 @@ static ssize_t mfts_auto_touch_test_mode_set(struct device *dev,
 static DEVICE_ATTR(mfts_auto_touch_test_mode, S_IRUGO | S_IWUSR | S_IWGRP,
 		mfts_auto_touch_test_mode_get, mfts_auto_touch_test_mode_set);
 
-static int cur_freeze_state = -1;
-void lge_dsi_panel_init_freeze_state(int val)
-{
-	pr_info("update freeze state (%d)->(%d)\n", cur_freeze_state, val);
-	cur_freeze_state = val;
-}
-EXPORT_SYMBOL(lge_dsi_panel_init_freeze_state);
-
 static ssize_t freeze_state_hal_show(struct class *class,
 		struct class_attribute *attr, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%d\n", cur_freeze_state);
+	int freeze_state = lge_drs_mngr_get_freeze_state();
+	return scnprintf(buf, PAGE_SIZE, "%d\n", freeze_state);
 }
 
 static ssize_t freeze_state_hal_store(struct class *class,
@@ -1348,6 +1401,7 @@ static ssize_t freeze_state_hal_store(struct class *class,
 {
 	ssize_t ret = strnlen(buf, PAGE_SIZE);
 	int rc, enable;
+	enum lge_drs_request new_state = DRS_REQUEST_MAX;
 
 	sscanf(buf, "%d", &enable);
 
@@ -1355,8 +1409,12 @@ static ssize_t freeze_state_hal_store(struct class *class,
 	if (rc < 0) {
 		pr_warn("WARNING: fail to freeze, rc=%d\n", rc);
 	} else {
-		cur_freeze_state = enable;
-		pr_info("set %d\n", enable);
+		if (enable)
+			new_state = DRS_FREEZE;
+		else
+			new_state = DRS_UNFREEZE;
+
+		lge_drs_mngr_set_freeze_state(new_state);
 	}
 
 	return ret;
@@ -1412,7 +1470,7 @@ static void lge_dsi_panel_create_sysfs(struct dsi_panel *panel)
 				lge_color_manager_create_sysfs(panel_img_tune_sysfs_dev);
 		}
 	}
-	if (panel->lge.use_hl_mode)
+	if (panel->lge.use_hl_mode || panel->lge.use_irc_ctrl)
 		lge_brightness_create_sysfs(panel, class_panel);
 	if (panel->lge.use_ambient)
 		lge_ambient_create_sysfs(panel, class_panel);
@@ -1647,11 +1705,14 @@ static int lge_dsi_panel_parse_dt(struct dsi_panel *panel, struct device_node *o
 	panel->lge.use_drs_mngr = of_property_read_bool(of_node, "lge,drs-mngr-enabled");
 	pr_info("use drs manager=%d\n", panel->lge.use_drs_mngr);
 
-	panel->lge.scaler_trigger_after_res_switched =
-		of_property_read_bool(of_node, "lge,drs-mngr-scaler-trigger-after-resolution-switch");
+	panel->lge.use_internal_pps_switch =
+		of_property_read_bool(of_node, "lge,drs-mngr-internal-pps-switch-enabled");
 
 	panel->lge.use_ddic_reg_backup = of_property_read_bool(of_node, "lge,ddic-register-backup");
 	pr_info("use register backup=%d\n", panel->lge.use_ddic_reg_backup);
+
+	panel->lge.bc_dim_en = of_property_read_bool(of_node, "lge,use-bc-dim");
+	pr_info("use bc dim =%d\n", panel->lge.bc_dim_en);
 
 	panel->lge.use_mplus = of_property_read_bool(of_node, "lge,use-mplus");
 	pr_info("use mplus=%d\n", panel->lge.use_mplus);
@@ -1750,6 +1811,22 @@ static int lge_dsi_panel_parse_dt(struct dsi_panel *panel, struct device_node *o
 
 	panel->lge.use_ddic_reg_lock = of_property_read_bool(of_node, "lge,use-ddic-register-lock");
 	pr_info("use ddic_register_lock=%d\n", panel->lge.use_ddic_reg_lock);
+
+	panel->lge.use_irc_ctrl = of_property_read_bool(of_node, "lge,use-irc-ctrl");
+	pr_info("use irc_ctrl=%d\n", panel->lge.use_irc_ctrl);
+
+	panel->lge.use_ace_ctrl = of_property_read_bool(of_node, "lge,use-ace-ctrl");
+	pr_info("use ace_ctrl=%d\n", panel->lge.use_ace_ctrl);
+
+	if (panel->lge.use_ace_ctrl) {
+		rc = of_property_read_u32(of_node, "lge,default-ace-mode", &tmp);
+		if (rc) {
+			pr_err("fail to get ace default, set %d\n", panel->lge.ace_mode);
+		} else {
+			panel->lge.ace_mode = tmp;
+			pr_info("ace default mode=%d\n", panel->lge.ace_mode);
+		}
+	}
 
 	return rc;
 }
@@ -1931,14 +2008,18 @@ int lge_mdss_dsi_panel_cmd_read(struct dsi_panel *panel, u8 cmd, int cnt, char* 
 	int i = 0, ret = 0, checksum = 0;
 	const struct mipi_dsi_host_ops *ops;
 
-	struct mipi_dsi_msg msg = {
-		.channel = 0,
-		.type = MIPI_DSI_DCS_READ,
-		.tx_buf = &cmd,
-		.tx_len = 1,
-		.rx_buf = &rx_buf[0],
-		.rx_len = cnt,
-		.flags = MIPI_DSI_MSG_USE_LPM | MIPI_DSI_MSG_LASTCOMMAND | MIPI_DSI_MSG_REQ_ACK
+	struct dsi_cmd_desc cmds = {
+		.msg = {
+			.channel = 0,
+			.type = MIPI_DSI_DCS_READ,
+			.tx_buf = &cmd,
+			.tx_len = 1,
+			.rx_buf = &rx_buf[0],
+			.rx_len = cnt,
+			.flags = MIPI_DSI_MSG_USE_LPM | MIPI_DSI_MSG_LASTCOMMAND | MIPI_DSI_MSG_REQ_ACK
+		},
+		.last_command = false,
+		.post_wait_ms = 0,
 	};
 
 	/* TO DO : panel connection check */
@@ -1950,7 +2031,7 @@ int lge_mdss_dsi_panel_cmd_read(struct dsi_panel *panel, u8 cmd, int cnt, char* 
 	}
 
 	ops = panel->host->ops;
-	ret = ops->transfer(panel->host, &msg);
+	ret = ops->transfer(panel->host, &cmds.msg);
 
 	for (i = 0; i < cnt; i++)
 		checksum += rx_buf[i];
@@ -2009,7 +2090,10 @@ int lge_mdss_dsi_panel_cmds_backup(struct dsi_panel *panel, char *owner,
 					mipi_read_max--;
 					if (mipi_read_max == 0) {
 						mutex_unlock(&panel->panel_lock);
-						panic("read fail - reboot");
+						if (dsi_panel_initialized(panel))
+							panic("read fail - reboot");
+						else
+							pr_warn("read failed, but panel not initialized yet\n");
 						return -EINVAL;
 					}
 				}

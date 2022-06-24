@@ -59,7 +59,7 @@ static ssize_t show_aft_sd(struct device *dev, char *buf);
 
 int ftm4_check_pure_autotune_key(void)
 {
-	char *fname = "/sdcard/touch_pure_autotune.txt";
+	char *fname = "/data/vendor/touch/touch_pure_autotune.txt";
 	char *pure_autotune_key = "pure_autotune_set";
 	char buf[20] = {0};
 	int ret = 0;
@@ -118,7 +118,7 @@ static void ftm4_log_file_size_check(struct device *dev)
 
 	switch (boot_mode) {
 	case NORMAL_BOOT:
-		fname = "/sdcard/touch_self_test.txt";
+		fname = "/data/vendor/touch/touch_self_test.txt";
 		break;
 	case MINIOS_AAT:
 		fname = "/data/touch/touch_self_test.txt";
@@ -224,7 +224,7 @@ static void ftm4_write_file(struct device *dev, char *data, int write_time)
 
 	switch (boot_mode) {
 	case NORMAL_BOOT:
-		fname = "/sdcard/touch_self_test.txt";
+		fname = "/data/vendor/touch/touch_self_test.txt";
 		break;
 	case MINIOS_AAT:
 		fname = "/data/touch/touch_self_test.txt";
@@ -268,61 +268,6 @@ static void ftm4_write_file(struct device *dev, char *data, int write_time)
 		TOUCH_I("%s: File open failed\n", __func__);
 	}
 	set_fs(old_fs);
-}
-
-static int ftm4_sdcard_spec_file_read(struct device *dev)
-{
-	int boot_mode = NORMAL_BOOT;
-	int path_idx = 0;
-	int fd = 0;
-	int size = 0;
-	char *path[3] = { "/sdcard/judyp_limit.txt",
-		"/data/touch/judyp/judyp_limit.txt",
-		"/data/touch/judyp/judyp_limit_mfts.txt"
-	};
-	int ret = 0;
-	mm_segment_t old_fs = get_fs();
-
-	TOUCH_TRACE();
-
-	boot_mode = touch_boot_mode_check(dev);
-
-	if (boot_mode >= MINIOS_MFTS_FOLDER)
-		path_idx = 2;
-	else if (boot_mode == MINIOS_AAT)
-		path_idx = 1;
-	else
-		path_idx = 0;
-
-	set_fs(KERNEL_DS);
-	fd = sys_open(path[path_idx], O_RDONLY, 0);
-	if (fd >= 0) {
-		size = sys_lseek(fd, 0, SEEK_END);
-
-		if (line) {
-			TOUCH_I("%s: line is already allocated. kfree line\n",
-					__func__);
-			kfree(line);
-			line = NULL;
-		}
-
-		line = kzalloc(size, GFP_KERNEL);
-		if (line == NULL) {
-			TOUCH_E("failed to kzalloc line\n");
-			sys_close(fd);
-			set_fs(old_fs);
-			return -ENOMEM;
-		}
-
-		sys_lseek(fd, 0, SEEK_SET);
-		sys_read(fd, line, size);
-		sys_close(fd);
-		TOUCH_I("%s: %s file existing\n", __func__, path[path_idx]);
-		ret = 1;
-	}
-	set_fs(old_fs);
-
-	return ret;
 }
 
 static int ftm4_spec_file_read(struct device *dev)
@@ -3047,12 +2992,7 @@ static ssize_t show_sd(struct device *dev, char *buf)
 		goto exit;
 	}
 
-	ret = ftm4_sdcard_spec_file_read(dev);
-	if (ret == 0) {
-		TOUCH_I("%s: There's no spec file. read it from F/W\n",	__func__);
-		ret = ftm4_spec_file_read(dev);
-	}
-
+	ret = ftm4_spec_file_read(dev);
 	if (ret < 0) {
 		TOUCH_E("failed to read spec file\n");
 		goto exit;
@@ -3236,12 +3176,7 @@ static ssize_t show_lpwg_sd(struct device *dev, char *buf)
 		goto exit;
 	}
 
-	ret = ftm4_sdcard_spec_file_read(dev);
-	if (ret == 0) {
-		TOUCH_I("%s: There's no spec file. read it from F/W\n",	__func__);
-		ret = ftm4_spec_file_read(dev);
-	}
-
+	ret = ftm4_spec_file_read(dev);
 	if (ret < 0) {
 		TOUCH_E("failed to read spec file\n");
 		goto exit;
@@ -3373,12 +3308,7 @@ static ssize_t show_aft_sd(struct device *dev, char *buf)
 		goto exit;
 	}
 
-	ret = ftm4_sdcard_spec_file_read(dev);
-	if (ret == 0) {
-		TOUCH_I("%s: There's no spec file. read it from F/W\n",	__func__);
-		ret = ftm4_spec_file_read(dev);
-	}
-
+	ret = ftm4_spec_file_read(dev);
 	if (ret < 0) {
 		TOUCH_E("failed to read spec file\n");
 		goto exit;
@@ -3541,12 +3471,7 @@ static ssize_t show_aft_lpwg_sd(struct device *dev, char *buf)
 		goto exit;
 	}
 
-	ret = ftm4_sdcard_spec_file_read(dev);
-	if (ret == 0) {
-		TOUCH_I("%s: There's no spec file. read it from F/W\n",	__func__);
-		ret = ftm4_spec_file_read(dev);
-	}
-
+	ret = ftm4_spec_file_read(dev);
 	if (ret < 0) {
 		TOUCH_E("failed to read spec file\n");
 		goto exit;

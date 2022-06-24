@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -189,7 +189,7 @@ static int __debug_mask = 0xFF;
 // PR_INTERRUPT : state change sigs of PMI charger block
 // PR_PARALLEL : to monitor DP/DM cotrol by hvdcp_opti
 // PR_MISC : necessary to check LGE W/As
-static int __debug_mask = PR_INTERRUPT | PR_PARALLEL | PR_MISC;
+static int __debug_mask = PR_INTERRUPT | PR_PARALLEL | PR_MISC | PR_OTG;
 
 #else
 static int __debug_mask;
@@ -333,6 +333,9 @@ static int smb2_parse_dt(struct smb2 *chip)
 	chip->dt.auto_recharge_soc = of_property_read_bool(node,
 						"qcom,auto-recharge-soc");
 
+	chg->use_extcon = of_property_read_bool(node,
+						"qcom,use-extcon");
+
 	chg->dcp_icl_ua = chip->dt.usb_icl_ua;
 
 	chg->suspend_input_on_debug_batt = of_property_read_bool(node,
@@ -342,6 +345,9 @@ static int smb2_parse_dt(struct smb2 *chip)
 					&chg->otg_delay_ms);
 	if (rc < 0)
 		chg->otg_delay_ms = OTG_DEFAULT_DEGLITCH_TIME_MS;
+
+	chg->disable_stat_sw_override = of_property_read_bool(node,
+					"qcom,disable-stat-sw-override");
 
 	return 0;
 }
@@ -354,6 +360,7 @@ static enum power_supply_property smb2_usb_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_PD_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
@@ -409,6 +416,9 @@ static int smb2_usb_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		rc = smblib_get_prop_usb_voltage_max(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
+		rc = smblib_get_prop_usb_voltage_max_design(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		rc = smblib_get_prop_usb_voltage_now(chg, val);
@@ -777,6 +787,7 @@ static enum power_supply_property smb2_usb_main_props[] = {
 	POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED,
 	POWER_SUPPLY_PROP_FCC_DELTA,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
+	POWER_SUPPLY_PROP_TOGGLE_STAT,
 	/*
 	 * TODO move the TEMP and TEMP_MAX properties here,
 	 * and update the thermal balancer to look here
@@ -814,6 +825,9 @@ static int smb2_usb_main_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		rc = smblib_get_icl_current(chg, &val->intval);
 		break;
+	case POWER_SUPPLY_PROP_TOGGLE_STAT:
+		val->intval = 0;
+		break;
 	default:
 		pr_debug("get prop %d is not supported in usb-main\n", psp);
 		rc = -EINVAL;
@@ -844,9 +858,29 @@ static int smb2_usb_main_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		rc = smblib_set_icl_current(chg, val->intval);
 		break;
+	case POWER_SUPPLY_PROP_TOGGLE_STAT:
+		rc = smblib_toggle_stat(chg, val->intval);
+		break;
 	default:
 		pr_err("set prop %d is not supported\n", psp);
 		rc = -EINVAL;
+		break;
+	}
+
+	return rc;
+}
+
+static int smb2_usb_main_prop_is_writeable(struct power_supply *psy,
+				enum power_supply_property psp)
+{
+	int rc;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_TOGGLE_STAT:
+		rc = 1;
+		break;
+	default:
+		rc = 0;
 		break;
 	}
 
@@ -860,6 +894,7 @@ static const struct power_supply_desc usb_main_psy_desc = {
 	.num_properties	= ARRAY_SIZE(smb2_usb_main_props),
 	.get_property	= smb2_usb_main_get_prop,
 	.set_property	= smb2_usb_main_set_prop,
+	.property_is_writeable = smb2_usb_main_prop_is_writeable,
 };
 
 static int smb2_init_usb_main_psy(struct smb2 *chip)
@@ -869,9 +904,30 @@ static int smb2_init_usb_main_psy(struct smb2 *chip)
 
 	usb_main_cfg.drv_data = chip;
 	usb_main_cfg.of_node = chg->dev->of_node;
+#ifdef CONFIG_LGE_PM_VENEER_PSY
+{	int extension_usb_main_get_property(struct power_supply *psy,
+		enum power_supply_property prop, union power_supply_propval *val);
+	int extension_usb_main_set_property(struct power_supply *psy,
+		enum power_supply_property prop, const union power_supply_propval *val);
+
+	static struct power_supply_desc usb_main_psy_desc_extension;
+	usb_main_psy_desc_extension.name = usb_main_psy_desc.name;
+	usb_main_psy_desc_extension.type = usb_main_psy_desc.type;
+	usb_main_psy_desc_extension.properties = usb_main_psy_desc.properties;
+	usb_main_psy_desc_extension.num_properties = usb_main_psy_desc.num_properties;
+	usb_main_psy_desc_extension.get_property = extension_usb_main_get_property;
+	usb_main_psy_desc_extension.set_property = extension_usb_main_set_property;
+	usb_main_psy_desc_extension.property_is_writeable = usb_main_psy_desc.property_is_writeable;
+
+	chg->usb_main_psy = power_supply_register(chg->dev,
+						  &usb_main_psy_desc_extension,
+						  &usb_main_cfg);
+}
+#else
 	chg->usb_main_psy = power_supply_register(chg->dev,
 						  &usb_main_psy_desc,
 						  &usb_main_cfg);
+#endif
 	if (IS_ERR(chg->usb_main_psy)) {
 		pr_err("Couldn't register USB main power supply\n");
 		return PTR_ERR(chg->usb_main_psy);
@@ -1040,6 +1096,7 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CURRENT_QNOVO,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
+	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED,
@@ -1053,6 +1110,8 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX,
 	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
+	POWER_SUPPLY_PROP_CHARGE_FULL,
+	POWER_SUPPLY_PROP_CYCLE_COUNT,
 };
 
 static int smb2_batt_get_prop(struct power_supply *psy,
@@ -1110,9 +1169,6 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
 		val->intval = chg->sw_jeita_enabled;
 		break;
-	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		rc = smblib_get_prop_batt_voltage_now(chg, val);
-		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		val->intval = get_client_vote(chg->fv_votable,
 				BATT_PROFILE_VOTER);
@@ -1124,9 +1180,6 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		val->intval = get_client_vote_locked(chg->fv_votable,
 				QNOVO_VOTER);
 		break;
-	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		rc = smblib_get_prop_batt_current_now(chg, val);
-		break;
 	case POWER_SUPPLY_PROP_CURRENT_QNOVO:
 		val->intval = get_client_vote_locked(chg->fcc_votable,
 				QNOVO_VOTER);
@@ -1135,8 +1188,9 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		val->intval = get_client_vote(chg->fcc_votable,
 					      BATT_PROFILE_VOTER);
 		break;
-	case POWER_SUPPLY_PROP_TEMP:
-		rc = smblib_get_prop_batt_temp(chg, val);
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
+		val->intval = get_client_vote(chg->fcc_votable,
+					      FG_ESR_VOTER);
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
@@ -1165,7 +1219,12 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		val->intval = 0;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-		rc = smblib_get_prop_batt_charge_counter(chg, val);
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+	case POWER_SUPPLY_PROP_TEMP:
+		rc = smblib_get_prop_from_bms(chg, psp, val);
 		break;
 	default:
 		pr_err("batt power supply prop %d not supported\n", psp);
@@ -1239,6 +1298,12 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 		chg->batt_profile_fcc_ua = val->intval;
 		vote(chg->fcc_votable, BATT_PROFILE_VOTER, true, val->intval);
+		break;
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
+		if (val->intval)
+			vote(chg->fcc_votable, FG_ESR_VOTER, true, val->intval);
+		else
+			vote(chg->fcc_votable, FG_ESR_VOTER, false, 0);
 		break;
 	case POWER_SUPPLY_PROP_SET_SHIP_MODE:
 		/* Not in ship mode as long as the device is active */
@@ -1698,20 +1763,12 @@ static int smb2_init_hw(struct smb2 *chip)
 		BATT_PROFILE_VOTER, true, chg->batt_profile_fv_uv);
 	vote(chg->dc_icl_votable,
 		DEFAULT_VOTER, true, chip->dt.dc_icl_ua);
-	vote(chg->hvdcp_disable_votable_indirect, PD_INACTIVE_VOTER,
-			true, 0);
-	vote(chg->hvdcp_disable_votable_indirect, VBUS_CC_SHORT_VOTER,
-			true, 0);
 	vote(chg->hvdcp_disable_votable_indirect, DEFAULT_VOTER,
 		chip->dt.hvdcp_disable, 0);
 	vote(chg->pd_disallowed_votable_indirect, CC_DETACHED_VOTER,
 			true, 0);
 	vote(chg->pd_disallowed_votable_indirect, HVDCP_TIMEOUT_VOTER,
 			true, 0);
-	vote(chg->pd_disallowed_votable_indirect, MICRO_USB_VOTER,
-		(chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB), 0);
-	vote(chg->hvdcp_enable_votable, MICRO_USB_VOTER,
-		(chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB), 0);
 
 	/*
 	 * AICL configuration:
@@ -1761,6 +1818,16 @@ static int smb2_init_hw(struct smb2 *chip)
 			"Couldn't configure Type-C interrupts rc=%d\n", rc);
 		return rc;
 	}
+
+	/* Connector types based votes */
+	vote(chg->hvdcp_disable_votable_indirect, PD_INACTIVE_VOTER,
+		(chg->connector_type == POWER_SUPPLY_CONNECTOR_TYPEC), 0);
+	vote(chg->hvdcp_disable_votable_indirect, VBUS_CC_SHORT_VOTER,
+		(chg->connector_type == POWER_SUPPLY_CONNECTOR_TYPEC), 0);
+	vote(chg->pd_disallowed_votable_indirect, MICRO_USB_VOTER,
+		(chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB), 0);
+	vote(chg->hvdcp_enable_votable, MICRO_USB_VOTER,
+		(chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB), 0);
 
 	/* configure VCONN for software control */
 	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
@@ -1933,6 +2000,16 @@ static int smb2_init_hw(struct smb2 *chip)
 		}
 	}
 
+	if (chg->disable_stat_sw_override) {
+		rc = smblib_masked_write(chg, STAT_CFG_REG,
+				STAT_SW_OVERRIDE_CFG_BIT, 0);
+		if (rc < 0) {
+			dev_err(chg->dev, "Couldn't disable STAT SW override rc=%d\n",
+				rc);
+			return rc;
+		}
+	}
+
 	return rc;
 }
 
@@ -1987,7 +2064,8 @@ static int smb2_chg_config_init(struct smb2 *chip)
 	switch (pmic_rev_id->pmic_subtype) {
 	case PMI8998_SUBTYPE:
 		chip->chg.smb_version = PMI8998_SUBTYPE;
-		chip->chg.wa_flags |= BOOST_BACK_WA | QC_AUTH_INTERRUPT_WA_BIT;
+		chip->chg.wa_flags |= BOOST_BACK_WA | QC_AUTH_INTERRUPT_WA_BIT
+				| TYPEC_PBS_WA_BIT;
 		if (pmic_rev_id->rev4 == PMI8998_V1P1_REV4) /* PMI rev 1.1 */
 			chg->wa_flags |= QC_CHARGER_DETECTION_WA_BIT;
 		if (pmic_rev_id->rev4 == PMI8998_V2P0_REV4) /* PMI rev 2.0 */
@@ -2002,7 +2080,8 @@ static int smb2_chg_config_init(struct smb2 *chip)
 		break;
 	case PM660_SUBTYPE:
 		chip->chg.smb_version = PM660_SUBTYPE;
-		chip->chg.wa_flags |= BOOST_BACK_WA | OTG_WA;
+		chip->chg.wa_flags |= BOOST_BACK_WA | OTG_WA | OV_IRQ_WA_BIT
+				| TYPEC_PBS_WA_BIT;
 		chg->param.freq_buck = pm660_params.freq_buck;
 		chg->param.freq_boost = pm660_params.freq_boost;
 		chg->chg_freq.freq_5V		= 650;
@@ -2094,7 +2173,11 @@ static struct smb_irq_info smb2_irqs[] = {
 	},
 	[OTG_OC_DIS_SW_STS_IRQ] = {
 		.name		= "otg-oc-dis-sw-sts",
+#ifdef CONFIG_LGE_USB
+		.handler	= smblib_handle_otg_overcurrent,
+#else
 		.handler	= smblib_handle_debug,
+#endif
 	},
 	[TESTMODE_CHANGE_DET_IRQ] = {
 		.name		= "testmode-change-detect",
@@ -2249,7 +2332,11 @@ static struct smb_irq_info smb2_irqs[] = {
 	},
 	[AICL_FAIL_IRQ] = {
 		.name		= "aicl-fail",
+#ifdef CONFIG_LGE_PM
+		.handler	= override_handle_aicl_fail,
+#else
 		.handler	= smblib_handle_debug,
+#endif
 	},
 	[AICL_DONE_IRQ] = {
 		.name		= "aicl-done",
@@ -2270,7 +2357,12 @@ static struct smb_irq_info smb2_irqs[] = {
 	},
 	[SWITCH_POWER_OK_IRQ] = {
 		.name		= "switcher-power-ok",
+#ifdef CONFIG_LGE_PM
+		.handler	= override_handle_switcher_power_ok,
+#else
 		.handler	= smblib_handle_switcher_power_ok,
+#endif
+		.wake		= true,
 		.storm_data	= {true, 1000, 8},
 	},
 };
@@ -2620,6 +2712,9 @@ static int smb2_probe(struct platform_device *pdev)
 
 	device_init_wakeup(chg->dev, true);
 #ifdef CONFIG_LGE_PM
+#define HW_ICL_VOTER		"HW_ICL_VOTER"
+#define MAX_HW_ICL_UA		3000000
+	vote(chg->usb_icl_votable, HW_ICL_VOTER, true, MAX_HW_ICL_UA);
 	// Resetting with aicl-fail, which causes usbin-suspend,
 	// there would be no trigger to resume this suspended status.
 	// So such usbin-suspend should be handled on boot progress.

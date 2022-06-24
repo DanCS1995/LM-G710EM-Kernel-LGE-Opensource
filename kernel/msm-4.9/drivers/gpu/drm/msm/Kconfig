@@ -189,3 +189,15 @@ config LGE_DISPLAY_XLOG_ENABLED
 	default n
 	---help---
 	This config is for debug log level to store memory and log
+
+config LGE_DISPLAY_SUPPORT_DP_KOPIN
+	bool "ENABLE DISPLAYPORT KOPIN DEVICE SUPPORT FEATURE"
+	default n
+	---help---
+	This config is for support only KOPIN devcie
+
+config LGE_DISPLAY_SUPPORT_DP_JUDYPN
+	bool "SUPPORT DISPLAYPORT JUDYPN"
+	default n
+	---help---
+	This config is for support only judypn device

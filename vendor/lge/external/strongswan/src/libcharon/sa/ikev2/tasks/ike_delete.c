@@ -20,6 +20,8 @@
 
 #include <utils/cust_settings.h>
 
+#include <libpatchcodeid.h>
+
 #ifdef __ANDROID__
 #include "wod_channel.h"
 #endif
@@ -64,6 +66,7 @@ METHOD(task_t, build_i, status_t,
 
 #ifdef __ANDROID__
 	if (get_cust_setting_bool(LGP_DATA_DEBUG_ENABLE_PRIVACY_LOG)) {
+        patch_code_id("LPCP-2249@n@c@libcharon@ike_delete.c@1");
 		DBG1(DBG_IKE, "deleting IKE_SA %s[%d] between %H[%Y]...%H[%Y]",
 			 this->ike_sa->get_name(this->ike_sa),
 			 this->ike_sa->get_unique_id(this->ike_sa),
@@ -125,6 +128,7 @@ METHOD(task_t, process_r, status_t,
 
 #ifdef __ANDROID__
 	if (get_cust_setting_bool(LGP_DATA_DEBUG_ENABLE_PRIVACY_LOG)) {
+        patch_code_id("LPCP-2249@n@c@libcharon@ike_delete.c@2");
 		DBG1(DBG_IKE, "deleting IKE_SA %s[%d] between %H[%Y]...%H[%Y]",
 			 this->ike_sa->get_name(this->ike_sa),
 			 this->ike_sa->get_unique_id(this->ike_sa),

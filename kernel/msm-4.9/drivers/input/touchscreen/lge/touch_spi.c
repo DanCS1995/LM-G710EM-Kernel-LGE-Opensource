@@ -243,6 +243,7 @@ static const struct dev_pm_ops touch_pm_ops = {
 
 static struct spi_device_id touch_id[] = {
 	{ LGE_TOUCH_NAME, 0 },
+	{},
 };
 
 #if defined(CONFIG_SECURE_TOUCH) && (0)

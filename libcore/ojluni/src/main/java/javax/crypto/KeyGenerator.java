@@ -33,9 +33,6 @@ import java.security.spec.*;
 
 import sun.security.jca.*;
 import sun.security.jca.GetInstance.Instance;
-/* Android-removed: this debugging mechanism is not used in Android.
-import sun.security.util.Debug;
-*/
 
 /**
  * This class provides the functionality of a secret (symmetric) key generator.
@@ -112,6 +109,10 @@ import sun.security.util.Debug;
  *       <td>10+</td>
  *     </tr>
  *     <tr>
+ *       <td>ChaCha20</td>
+ *       <td>28+</td>
+ *     </tr>
+ *     <tr>
  *       <td>DES</td>
  *       <td>1+</td>
  *     </tr>
@@ -167,7 +168,8 @@ import sun.security.util.Debug;
 
 public class KeyGenerator {
 
-    /* Android-removed: this debugging mechanism is not used in Android.
+    // Android-removed: this debugging mechanism is not used in Android.
+    /*
     private static final Debug pdebug =
                         Debug.getInstance("provider", "Provider");
     private static final boolean skipDebug =
@@ -212,7 +214,8 @@ public class KeyGenerator {
         this.provider = provider;
         this.algorithm = algorithm;
 
-        /* Android-removed: this debugging mechanism is not used in Android.
+        // Android-removed: this debugging mechanism is not used in Android.
+        /*
         if (!skipDebug && pdebug != null) {
             pdebug.println("KeyGenerator." + algorithm + " algorithm from: " +
                 this.provider.getName());
@@ -232,7 +235,8 @@ public class KeyGenerator {
                 (algorithm + " KeyGenerator not available");
         }
 
-        /* Android-removed: this debugging mechanism is not used in Android.
+        // Android-removed: this debugging mechanism is not used in Android.
+        /*
         if (!skipDebug && pdebug != null) {
             pdebug.println("KeyGenerator." + algorithm + " algorithm from: " +
                 this.provider.getName());
@@ -326,6 +330,8 @@ public class KeyGenerator {
     public static final KeyGenerator getInstance(String algorithm,
             String provider) throws NoSuchAlgorithmException,
             NoSuchProviderException {
+        // Android-added: Check for Bouncy Castle deprecation
+        Providers.checkBouncyCastleDeprecation(provider, "KeyGenerator", algorithm);
         Instance instance = JceSecurity.getInstance("KeyGenerator",
                 KeyGeneratorSpi.class, algorithm, provider);
         return new KeyGenerator((KeyGeneratorSpi)instance.impl,
@@ -364,6 +370,8 @@ public class KeyGenerator {
      */
     public static final KeyGenerator getInstance(String algorithm,
             Provider provider) throws NoSuchAlgorithmException {
+        // Android-added: Check for Bouncy Castle deprecation
+        Providers.checkBouncyCastleDeprecation(provider, "KeyGenerator", algorithm);
         Instance instance = JceSecurity.getInstance("KeyGenerator",
                 KeyGeneratorSpi.class, algorithm, provider);
         return new KeyGenerator((KeyGeneratorSpi)instance.impl,

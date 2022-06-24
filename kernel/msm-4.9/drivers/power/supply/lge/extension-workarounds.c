@@ -49,6 +49,75 @@ static struct smb_charger* workaround_helper_chg(void) {
 	return chg;
 }
 
+static bool workaround_command_chgtype(enum power_supply_type pst) {
+#ifdef CONFIG_LGE_PM_VENEER_PSY
+	struct power_supply* veneer = power_supply_get_by_name("veneer");
+
+	if (veneer) {
+		union power_supply_propval chgtype = { .intval = pst, };
+		power_supply_set_property(veneer, POWER_SUPPLY_PROP_REAL_TYPE, &chgtype);
+		power_supply_changed(veneer);
+		power_supply_put(veneer);
+		pr_info("[W/A] PSD-!) Setting charger type to %d by force\n", pst);
+
+		return true;
+	}
+#endif
+	return false;
+}
+
+static bool workaround_command_apsd(/*@Nonnull*/ struct smb_charger* chg) {
+	#define APSD_RERUN_DELAY_MS 4000
+	u8	buffer;
+	u8	command;
+	u8	oncc;
+	bool	ret = false;
+
+	static DEFINE_MUTEX(lock);
+	mutex_lock(&lock);
+
+	if (smblib_read(chg, APSD_RESULT_STATUS_REG, &buffer) >= 0) {
+		// Check the ICL_OVERRIDE_LATCH_BIT
+		bool override = !!(buffer & ICL_OVERRIDE_LATCH_BIT);
+		command = APSD_RERUN_BIT | (!override ? ICL_OVERRIDE_BIT : 0);
+	}
+	else {	pr_info("[W/A] PSD-1) Couldn't read APSD_RESULT_STATUS_REG\n");
+		goto failed;
+	}
+
+	oncc = chg->typec_mode == POWER_SUPPLY_TYPEC_NONE ? 0 : APSD_START_ON_CC_BIT;
+	if (smblib_masked_write(chg, TYPE_C_CFG_REG, APSD_START_ON_CC_BIT, oncc) < 0) {
+		pr_info("[W/A] PSD-2) Couldn't set APSD_START_ON_CC to %d\n", !!oncc);
+		goto failed;
+	}
+	if (smblib_masked_write(chg, USBIN_SOURCE_CHANGE_INTRPT_ENB_REG, AUTH_IRQ_EN_CFG_BIT, AUTH_IRQ_EN_CFG_BIT) < 0) {
+		pr_info("[W/A] PSD-3) Couldn't enable HVDCP auth IRQ\n");
+		goto failed;
+	}
+	if (smblib_masked_write(chg, CMD_APSD_REG, ICL_OVERRIDE_BIT | APSD_RERUN_BIT, command) < 0) {
+		pr_info("[W/A] PSD-4) Couldn't re-run APSD\n");
+		goto failed;
+	}
+
+	msleep(APSD_RERUN_DELAY_MS);
+
+	if (smblib_masked_write(chg, TYPE_C_CFG_REG, APSD_START_ON_CC_BIT, 0) < 0) {
+		pr_info("[W/A] PSD-5) Couldn't set APSD_START_ON_CC to 0\n");
+		goto failed;
+	}
+
+	if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB_FLOAT
+		&& !workaround_command_chgtype(POWER_SUPPLY_TYPE_USB_FLOAT)) {
+		pr_info("[W/A] PSD-6) Couldn't toast slowchg popup\n");
+	}
+
+	pr_info("[W/A] PSD-#) Success to detect charger type to %d\n", chg->real_charger_type);
+	ret = true;
+
+failed:	mutex_unlock(&lock);
+	return ret;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////
 // LGE Workaround : Resuming Suspended USBIN
@@ -196,35 +265,10 @@ static void workaround_resuming_suspended_usbin_func(struct work_struct *unused)
 	}
 
 // 7. If USBIN suspend is not resumed even with rerunning AICL, recover it from APSD.
-	#define APSD_RERUN_DELAY_MS 3000
 	msleep(APSD_RERUN_DELAY_MS);
 	if (workaround_resuming_suspended_usbin_required()) {
 		pr_info("[W/A] RSU-7) Recover USBIN from APSD\n");
-		if (smblib_masked_write(chg, USBIN_SOURCE_CHANGE_INTRPT_ENB_REG,
-			AUTH_IRQ_EN_CFG_BIT, AUTH_IRQ_EN_CFG_BIT) < 0) {
-			pr_info("[W/A] RSU-7) Couldn't enable HVDCP auth IRQ\n");
-			goto failed;
-		}
-		if (smblib_masked_write(chg, CMD_APSD_REG,
-			APSD_RERUN_BIT, APSD_RERUN_BIT) < 0) {
-			pr_info("[W/A] RSU-7) Couldn't re-run APSD\n");
-			goto failed;
-		}
-
-#ifdef CONFIG_LGE_PM_VENEER_PSY
-// 8. Toast the "INCOMPATIBLE CHARGER" by force if real_charger_type is the FLOAT
-		msleep(APSD_RERUN_DELAY_MS);
-		if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB_FLOAT) {
-			struct power_supply* veneer = power_supply_get_by_name("veneer");
-			if (veneer) {
-				union power_supply_propval floated = { .intval = POWER_SUPPLY_TYPE_USB_FLOAT, };
-				power_supply_set_property(veneer, POWER_SUPPLY_PROP_REAL_TYPE, &floated);
-				power_supply_changed(veneer);
-				power_supply_put(veneer);
-				pr_info("[W/A] RSU-8) Setting floated charger by force\n");
-			}
-		}
-#endif
+		workaround_command_apsd(chg);
 	}
 	else
 		pr_info("[W/A] RSU-#) Success resuming suspended usbin\n");
@@ -256,7 +300,7 @@ void workaround_resuming_suspended_usbin_trigger(struct smb_charger* chg) {
 }
 
 void workaround_resuming_suspended_usbin_clear(struct smb_charger* chg) {
-	cancel_delayed_work_sync(&workaround_resuming_suspended_usbin_dwork);
+	cancel_delayed_work(&workaround_resuming_suspended_usbin_dwork);
 }
 
 
@@ -268,24 +312,22 @@ static bool workaround_rerun_apsd_done_at_dcp = false;
 static bool workaround_rerun_apsd_done_at_phr = false;
 static bool workaround_raa_pd_resetdone = false;
 static bool workaround_raa_pd_disabled = false;
-#define RERUN_APSD_DELAY_MS 5000
 
 static void workaround_recovering_abnormal_apsd_main(struct work_struct *unused) {
 	struct smb_charger* chg = workaround_helper_chg();
 	union power_supply_propval val = {.intval = 0, };
 
-	if (!chg || chg->pd_active
-		 || !(workaround_rerun_apsd_done_at_phr || workaround_rerun_apsd_done_at_dcp)) {
+	if (!(workaround_rerun_apsd_done_at_phr || workaround_rerun_apsd_done_at_dcp)
+		|| !chg || chg->pd_active) {
 		pr_info("[W/A] RAA) stop apsd done. phr(%d), dcp(%d), pd(%d)\n",
-			workaround_rerun_apsd_done_at_phr, workaround_rerun_apsd_done_at_dcp, chg->pd_active);
+			workaround_rerun_apsd_done_at_phr,
+			workaround_rerun_apsd_done_at_dcp,
+			chg ? chg->pd_active : -1);
 		return;
 	}
-	pr_info("[W/A] RAA) Rerun apsd\n");
 
-	if (smblib_masked_write(chg, CMD_APSD_REG, APSD_RERUN_BIT, APSD_RERUN_BIT) < 0) {
-		pr_info("[W/A] RAA) Error for apsd rerun\n");
-	}
-	msleep(RERUN_APSD_DELAY_MS);
+	pr_info("[W/A] RAA) Rerun apsd\n");
+	workaround_command_apsd(chg);
 
 	if (workaround_raa_pd_disabled && !chg->typec_legacy_valid && !chg->pd_active
 		&& chg->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP)
@@ -295,7 +337,10 @@ static void workaround_recovering_abnormal_apsd_main(struct work_struct *unused)
 static DECLARE_DELAYED_WORK(workaround_recovering_abnormal_apsd_dwork, workaround_recovering_abnormal_apsd_main);
 
 void workaround_recovering_abnormal_apsd_dcp(struct smb_charger *chg) {
+	union power_supply_propval val = { 0, };
 	bool usb_type_dcp = chg->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP;
+	bool usb_vbus_high
+		= !power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_PRESENT, &val) ? !!val.intval : false;
 	u8 stat;
 
 	int rc = smblib_read(chg, APSD_STATUS_REG, &stat);
@@ -303,39 +348,43 @@ void workaround_recovering_abnormal_apsd_dcp(struct smb_charger *chg) {
 		pr_info("[W/A] RAA) Couldn't read APSD_STATUS_REG rc=%d\n", rc);
 		return;
 	}
-	pr_debug("[W/A] RAA) workaround_recovering_abnormal_apsd_dcp phr(%d), done(%d), TO(%d), DCP(%d)\n",
-		workaround_raa_pd_resetdone, workaround_rerun_apsd_done_at_dcp, stat, usb_type_dcp);
+	pr_debug("[W/A] RAA) workaround_recovering_abnormal_apsd_dcp phr(%d), done(%d), TO(%d), DCP(%d), Vbus(%d)\n",
+		workaround_raa_pd_resetdone, workaround_rerun_apsd_done_at_dcp, stat, usb_type_dcp, usb_vbus_high);
 
 	if (workaround_raa_pd_resetdone && !workaround_rerun_apsd_done_at_dcp
-		&& (stat & HVDCP_CHECK_TIMEOUT_BIT) && usb_type_dcp) {
+		&& (stat & HVDCP_CHECK_TIMEOUT_BIT) && usb_type_dcp && usb_vbus_high) {
 		workaround_rerun_apsd_done_at_dcp = true;
 		schedule_delayed_work(&workaround_recovering_abnormal_apsd_dwork,
-			round_jiffies_relative(msecs_to_jiffies(RERUN_APSD_DELAY_MS)));
+			round_jiffies_relative(msecs_to_jiffies(APSD_RERUN_DELAY_MS)));
 	}
 }
 
 void workaround_recovering_abnormal_apsd_pdreset(struct smb_charger *chg) {
-	if (!chg->pd_hard_reset) {
+	static int pre_pd_hard_reset = 0;
+
+	if (!chg->pd_hard_reset && pre_pd_hard_reset) {
 		union power_supply_propval val
 			= { 0, };
 		bool usb_vbus_high
-			= !smblib_get_prop_usb_present(chg, &val) ? !!val.intval : false;
+			= !power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_PRESENT, &val) ? !!val.intval : false;
 		bool ufp_mode
 			= !(chg->typec_status[3] & UFP_DFP_MODE_STATUS_BIT);
 		bool usb_type_unknown
 			= chg->real_charger_type == POWER_SUPPLY_TYPE_UNKNOWN;
-		pr_debug("[W/A] RAA) workaround_rerun_apsd_at_phr_func VBUS(%d), unknown(%d), DONE(%d) ufp_mode(%d)\n",
-			usb_vbus_high, usb_type_unknown , workaround_rerun_apsd_done_at_phr, ufp_mode);
+		pr_debug("[W/A] RAA) workaround_rerun_apsd_at_phr_func VBUS(%d), unknown(%d), ufp_mode(%d)\n",
+			usb_vbus_high, usb_type_unknown, ufp_mode);
 
-		if (usb_vbus_high && ufp_mode && usb_type_unknown && !workaround_rerun_apsd_done_at_phr) {
+		if (usb_vbus_high && ufp_mode && usb_type_unknown) {
 			workaround_rerun_apsd_done_at_phr = true;
 			schedule_delayed_work(&workaround_recovering_abnormal_apsd_dwork,
 				round_jiffies_relative(msecs_to_jiffies(0)));
 		}
-
-		workaround_raa_pd_resetdone = true;
 	}
 
+	if (!chg->pd_hard_reset)
+		workaround_raa_pd_resetdone = true;
+
+	pre_pd_hard_reset = chg->pd_hard_reset;
 	workaround_recovering_abnormal_apsd_dcp(chg);
 }
 
@@ -371,14 +420,15 @@ static inline bool workaround_charging_without_cc_required(struct smb_charger *c
 		union power_supply_propval val = { 0, };
 
 		bool	pd_hard_reset	= chg->pd_hard_reset;
-		bool	usb_vbus_high	= !smblib_get_prop_usb_present(chg, &val) ? !!val.intval : false;
+		bool	usb_vbus_high	= !power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_PRESENT, &val) ? !!val.intval : false;
 		bool	typec_mode_none	= chg->typec_mode == POWER_SUPPLY_TYPEC_NONE;
+		bool usb_type_unknown	= chg->real_charger_type == POWER_SUPPLY_TYPE_UNKNOWN;
 
-		bool	workaround_required = !pd_hard_reset && usb_vbus_high && typec_mode_none;
+		bool	workaround_required = !pd_hard_reset && usb_vbus_high && typec_mode_none && usb_type_unknown;
 		if (!workaround_required)
 			pr_info("[W/A] CWC) Don't need CWC in %s "
-				"(pd_hard_reset:%d, usb_vbus_high:%d, typec_mode_none:%d)\n",
-				__func__, pd_hard_reset, usb_vbus_high, typec_mode_none);
+				"(pd_hard_reset:%d, usb_vbus_high:%d, typec_mode_none:%d, usb_type_unknown:%d)\n",
+				__func__, pd_hard_reset, usb_vbus_high, typec_mode_none, usb_type_unknown);
 
 		return workaround_required;
 	}
@@ -391,7 +441,6 @@ static inline bool workaround_charging_without_cc_required(struct smb_charger *c
 static void workaround_charging_without_cc_apsd(struct work_struct *unused) {
 // Retriving smb_charger from air
 	struct smb_charger*  chg = workaround_helper_chg();
-	u8		     cmd = APSD_RERUN_BIT;
 
 // Check the recovery condition one more time
 	if (workaround_charging_without_cc_required(chg)) {
@@ -400,43 +449,15 @@ static void workaround_charging_without_cc_apsd(struct work_struct *unused) {
 		//	[ !pd_hard_reset && usb_vbus_high && typec_mode_none ]
 		// then start to charge without waiting for CC update
 		// (by 'cc-state-change' IRQ).
+
 		pr_info("[W/A] CWC) CC line is not recovered until now, Start W/A\n");
+		workaround_charging_without_cc_processed = true;
 
-		workaround_helper_regdump(4);
-	}
-	else
-		goto out;
-
-// Prepare cmd bits to set OVERRIDE for ICL
-	if (smblib_read(chg, APSD_RESULT_STATUS_REG,
-		&cmd) >= 0) { // Check the ICL_OVERRIDE_LATCH_BIT
-		bool overriden = !!(cmd & ICL_OVERRIDE_LATCH_BIT);
-		cmd = APSD_RERUN_BIT | (!overriden ? ICL_OVERRIDE_BIT : 0);
-	}
-	else {
-		pr_info("[W/A] CWC) Couldn't read APSD_RESULT_STATUS_REG\n");
-		goto failed;
+		if (!workaround_command_apsd(chg))
+			pr_info("[W/A] CWC) Error on trying APSD\n");
 	}
 
-// Make APSD to be triggered with VBUS only
-	if (smblib_masked_write(chg, TYPE_C_CFG_REG, APSD_START_ON_CC_BIT,
-		0) < 0) {
-		pr_info("[W/A] CWC) Couldn't disable APSD_START_ON_CC\n");
-		goto failed;
-	}
-
-// Rerun APSD
-	if (smblib_masked_write(chg, CMD_APSD_REG, ICL_OVERRIDE_BIT | APSD_RERUN_BIT,
-		cmd) < 0) { /* 0x1341 : SCHG8998_USB_CMD_APSD */
-		pr_info("[W/A] CWC) Failed to rerun APSD!\n");
-		goto failed;
-	}
-
-	workaround_charging_without_cc_processed = true;
-out:
 	return;
-failed:
-	pr_info("[W/A] CWC) Error on trying APSD\n");
 }
 static DECLARE_DELAYED_WORK(workaround_cwc_try_apsd, workaround_charging_without_cc_apsd);
 
@@ -444,7 +465,7 @@ static void workaround_charging_without_cc_hvdcp(struct work_struct *unused) {
 	struct smb_charger* chg = workaround_helper_chg();
 
 	if (workaround_charging_without_cc_processed) {
-		if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP
+		if (chg && chg->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP
 			&& chg->typec_mode == POWER_SUPPLY_TYPEC_NONE) {
 			pr_info("[W/A] CWC) Enable HVDCP\n");
 			vote(chg->hvdcp_disable_votable_indirect, VBUS_CC_SHORT_VOTER, false, 0);
@@ -456,12 +477,17 @@ static void workaround_charging_without_cc_hvdcp(struct work_struct *unused) {
 }
 static DECLARE_DELAYED_WORK(workaround_cwc_try_hvdcp, workaround_charging_without_cc_hvdcp);
 
-void workaround_charging_without_cc_reserve(struct smb_charger* chg) {
+void workaround_charging_without_cc_reserve(struct smb_charger* chg,
+	int (*smblib_request_dpdm)(struct smb_charger *chg, bool enable)) {
 	// This may be triggered in the IRQ context of the USBIN rising.
 	// So main function to start 'charging without cc', is deferred via delayed_work of kernel.
 	// Just check and register (if needed) the work in this call.
 
 	if (workaround_charging_without_cc_required(chg)) {
+		int rc = smblib_request_dpdm(chg, true);
+		if (rc < 0)
+			pr_info("[W/A] CWC) Couldn't to enable DPDM rc=%d\n", rc);
+
 		if (delayed_work_pending(&workaround_cwc_try_apsd)) {
 			pr_info("[W/A] CWC) Cancel the pended trying apsd . . .\n");
 			cancel_delayed_work(&workaround_cwc_try_apsd);
@@ -480,8 +506,8 @@ void workaround_charging_without_cc_reserve(struct smb_charger* chg) {
 
 void workaround_charging_without_cc_withdraw(struct smb_charger* chg,
 	void (*smblib_handle_typec_removal)(struct smb_charger *chg)) {
-	cancel_delayed_work_sync(&workaround_cwc_try_apsd);
-	cancel_delayed_work_sync(&workaround_cwc_try_hvdcp);
+	cancel_delayed_work(&workaround_cwc_try_apsd);
+	cancel_delayed_work(&workaround_cwc_try_hvdcp);
 	workaround_charging_without_cc_processed = false;
 
 	if (chg->typec_mode == POWER_SUPPLY_TYPEC_NONE
@@ -517,7 +543,7 @@ static bool workaround_charging_with_rd_running = false;
 
 void workaround_charging_with_rd_tigger(struct smb_charger *chg) {
 	union power_supply_propval val = { 0, };
-	bool vbus = !smblib_get_prop_usb_present(chg, &val) ? !!val.intval : false;
+	bool vbus = !power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_PRESENT, &val) ? !!val.intval : false;
 	bool sink = (chg->typec_mode == POWER_SUPPLY_TYPEC_SINK);
 
 	if (vbus && sink) {
@@ -685,18 +711,7 @@ static void workaround_force_incompatible_hvdcp_func(struct work_struct *unused)
 	if (workaround_force_incompatible_hvdcp_required && (stat & USBIN_PLUGIN_RT_STS_BIT)) {
 		pr_info("[W/A] FIH) Disable HVDCP.\n");
 		vote(chg->hvdcp_hw_inov_dis_votable, DISABLE_HVDCP_VOTER, true, 0);
-#ifdef CONFIG_LGE_PM_VENEER_PSY
-{		struct power_supply* veneer = power_supply_get_by_name("veneer");
-		union power_supply_propval dcp = { .intval = POWER_SUPPLY_TYPE_USB_DCP, };
-
-		if (veneer) {
-			power_supply_set_property(veneer, POWER_SUPPLY_PROP_REAL_TYPE, &dcp);
-			power_supply_changed(veneer);
-			power_supply_put(veneer);
-
-			pr_info("Setting dcp charger by force\n");
-}		}
-#endif
+		workaround_command_chgtype(POWER_SUPPLY_TYPE_USB_DCP);
 	}
 
 // 5. Force to 5V
@@ -735,40 +750,44 @@ void workaround_force_incompatible_hvdcp_require(void) {
 	workaround_force_incompatible_hvdcp_required = true;
 }
 
+bool workaround_force_incompatible_hvdcp_is_running(void) {
+	return workaround_force_incompatible_hvdcp_running;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////
 // LGE Workaround : Skip uevent for supplementary battery
 ////////////////////////////////////////////////////////////////////////////
 
-static bool workaround_skip_uevent_for_supplementary_battery_running = false;
+static bool workaround_skipping_vusb_delay_running = false;
 
-static void workaround_skip_uevent_for_supplementary_battery_func(struct work_struct *unused) {
-	workaround_skip_uevent_for_supplementary_battery_running = false;
-	pr_info("[W/A] SUS) Stop skip uevnt for supplementary battery\n");
+static void workaround_skipping_vusb_delay_func(struct work_struct *unused) {
+	workaround_skipping_vusb_delay_running = false;
+	pr_info("[W/A] SVD) Stop skip uevnt for supplementary battery\n");
 }
-static DECLARE_DELAYED_WORK(workaround_skip_uevent_for_supplementary_battery_dwork, workaround_skip_uevent_for_supplementary_battery_func);
+static DECLARE_DELAYED_WORK(workaround_skipping_vusb_delay_dwork, workaround_skipping_vusb_delay_func);
 
-void workaround_skip_uevent_for_supplementary_battery_trigger(struct smb_charger* chg) {
+void workaround_skipping_vusb_delay_trigger(struct smb_charger* chg) {
 	int rc = 0;
 	u8 stat;
 
 	rc = smblib_read(chg, APSD_STATUS_REG, &stat);
 	if (rc < 0) {
-		pr_info("[W/A] SUS) Couldn't read APSD_STATUS_REG rc=%d\n", rc);
+		pr_info("[W/A] SVD) Couldn't read APSD_STATUS_REG rc=%d\n", rc);
 		return;
 	}
 
 	if (!(stat & QC_AUTH_DONE_STATUS_BIT) && (stat & QC_CHARGER_BIT)) {
 		#define SKIP_UEVENT_DELAY_MS	100
-		workaround_skip_uevent_for_supplementary_battery_running = true;
-		pr_info("[W/A] SUS) Skip uevnt for supplementary battery\n");
-		schedule_delayed_work(&workaround_skip_uevent_for_supplementary_battery_dwork,
+		workaround_skipping_vusb_delay_running = true;
+		pr_info("[W/A] SVD) Skip uevnt for supplementary battery\n");
+		schedule_delayed_work(&workaround_skipping_vusb_delay_dwork,
 			msecs_to_jiffies(SKIP_UEVENT_DELAY_MS));
 	}
 }
 
-bool workaround_skip_uevent_for_supplementary_battery_enabled(void) {
-	return workaround_skip_uevent_for_supplementary_battery_running;
+bool workaround_skipping_vusb_delay_enabled(void) {
+	return workaround_skipping_vusb_delay_running;
 }
 
 
@@ -780,32 +799,29 @@ bool workaround_skip_uevent_for_supplementary_battery_enabled(void) {
 #include <linux/usb/fusb252.h>
 // Rather than accessing pointer directly, Referring it as a singleton instance
 static struct fusb252_instance* workaround_avoiding_mbg_fault_singleton(void) {
+
 	static struct fusb252_desc 	workaround_amf_description = {
 		.flags  = FUSB252_FLAG_SBU_AUX
 			| FUSB252_FLAG_SBU_USBID
 			| FUSB252_FLAG_SBU_FACTORY_ID,
 	};
 	static struct fusb252_instance*	workaround_amf_instance;
-	static		   DEFINE_MUTEX(workaround_amf_mutex);
+	static DEFINE_MUTEX(workaround_amf_mutex);
+	struct smb_charger* chg;
 
-	if (!workaround_amf_instance) {
+	if (IS_ERR_OR_NULL(workaround_amf_instance)) {
 		mutex_lock(&workaround_amf_mutex);
-		if (!workaround_amf_instance) {
-			struct smb_charger* chg = workaround_helper_chg();
-			if (chg) {
-				workaround_amf_instance
-					= devm_fusb252_instance_register(chg->dev, &workaround_amf_description);
-				if (IS_ERR_OR_NULL(workaround_amf_instance))
-					workaround_amf_instance = NULL;
-			}
+		chg = workaround_helper_chg();
+		if (IS_ERR_OR_NULL(workaround_amf_instance) && chg) {
+			workaround_amf_instance
+				= devm_fusb252_instance_register(chg->dev, &workaround_amf_description);
+			if (IS_ERR_OR_NULL(workaround_amf_instance))
+				devm_fusb252_instance_unregister(chg->dev, workaround_amf_instance);
 		}
-		// Still failed ?
-		if (!workaround_amf_instance)
-			pr_info("[W/A] AMF) Failed to get MBG instance\n");
 		mutex_unlock(&workaround_amf_mutex);
 	}
 
-	return workaround_amf_instance;
+	return IS_ERR_OR_NULL(workaround_amf_instance) ? NULL : workaround_amf_instance;
 }
 
 bool workaround_avoiding_mbg_fault_uart(bool enable) {
@@ -856,42 +872,21 @@ bool workaround_avoiding_mbg_fault_usbid(bool enable) {
 static atomic_t workaround_fdr_running = ATOMIC_INIT(0);
 static atomic_t workaround_fdr_ready = ATOMIC_INIT(0);
 
-static void workaround_fdr_toast(void) {
-	struct power_supply* veneer = power_supply_get_by_name("veneer");
-
-	if (veneer) {
-		union power_supply_propval floated = { .intval = POWER_SUPPLY_TYPE_USB_FLOAT, };
-		power_supply_set_property(veneer, POWER_SUPPLY_PROP_REAL_TYPE, &floated);
-		power_supply_changed(veneer);
-		power_supply_put(veneer);
-		pr_info("[W/A] FDR) Setting floated charger by force\n");
-	}
-	else
-		pr_info("[W/A] FDR) VENEER is not ready\n");
-}
-
-static void workaround_fdr_run(struct work_struct *unused) {
+static void workaround_floating_during_rerun_work(struct work_struct *unused) {
 // 1. Getting smb_charger
 	struct smb_charger* chg = workaround_helper_chg();
 	if (!chg) {
 		pr_info("[W/A] FDR) charger driver is not ready\n");
 		return;
 	}
-// 2. Rerunning APSD
-	if (smblib_masked_write(chg, CMD_APSD_REG, APSD_RERUN_BIT, APSD_RERUN_BIT) < 0)
-		pr_info("[W/A] FDR) Error for apsd rerun\n");
-	pr_info("[W/A] FDR) Waiting for %dms\n", RERUN_APSD_DELAY_MS);
-	msleep(RERUN_APSD_DELAY_MS);
-// 3. Toasting popup if required
-	if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB_FLOAT)
-		workaround_fdr_toast();
-	else
-		pr_info("[W/A] APSD is recovered to %d\n", chg->real_charger_type);
 
-// 4. Resetting this running flag
+// 2. Rerunning APSD
+	workaround_command_apsd(chg);
+
+// 3. Resetting this running flag
 	atomic_set(&workaround_fdr_running, 0);
 }
-static DECLARE_WORK(workaround_fdr_dwork, workaround_fdr_run);
+static DECLARE_WORK(workaround_fdr_dwork, workaround_floating_during_rerun_work);
 
 void workaround_floating_during_rerun_apsd(enum power_supply_type pst) {
 	bool charger_unknown = (pst == POWER_SUPPLY_TYPE_UNKNOWN);
@@ -974,5 +969,78 @@ void workaround_blocking_vddmin_chargerlogo(struct smb_charger *chg) {
 		pr_info("[W/A] BVC) enable vddcx_supply to MIN_SVS(%d) ~ MAX(%d) on chargerlogo\n",
 			vddcx_minlv, vddcx_maxlv);
 	}
+}
+
+
+////////////////////////////////////////////////////////////////////////////
+// LGE Workaround : Check if cable type is unknown or not
+////////////////////////////////////////////////////////////////////////////
+
+#define WA_CUC_VOTER	"WA_CUC_VOTER"
+static void workaround_check_unknown_cable_main(struct work_struct *unused) {
+	struct smb_charger*  chg = workaround_helper_chg();
+	int rc = 0;
+	bool	vbus_valid = false;
+	bool	vbus_present = false;
+	union power_supply_propval val = { 0, };
+
+	if (!chg) {
+		pr_info("[W/A] CUC) 'chg' is not ready\n");
+		return;
+	}
+	rc = smblib_write(chg, USBIN_ADAPTER_ALLOW_CFG_REG, USBIN_ADAPTER_ALLOW_5V);
+	if (rc < 0) {
+		pr_info("[W/A] CUC) Couldn't write 0x%02x to USBIN_ADAPTER_ALLOW_CFG rc=%d\n",
+			USBIN_ADAPTER_ALLOW_5V, rc);
+		return;
+	}
+	vbus_valid = !power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_PRESENT, &val) ? !!val.intval : false;
+	vbus_present = !smblib_get_prop_usb_present(chg, &val) ? !!val.intval : false;
+
+	pr_info("[W/A] CUC) workaround_check_unknown_cable is called vbus_valid(%d), vbus_present(%d)\n", vbus_valid, vbus_present);
+
+	if (vbus_valid) {
+		struct power_supply* veneer = power_supply_get_by_name("veneer");
+		union power_supply_propval floated
+			= { .intval = POWER_SUPPLY_TYPE_USB_FLOAT, };
+
+		if (veneer) {
+			power_supply_set_property(veneer,
+					POWER_SUPPLY_PROP_REAL_TYPE, &floated);
+			power_supply_changed(veneer);
+			power_supply_put(veneer);
+		}
+	} else if (vbus_present) {
+		vote(chg->apsd_disable_votable, WA_CUC_VOTER, true, 0);
+	}
+}
+
+static DECLARE_DELAYED_WORK (workaround_check_unknown_cable_dwork, workaround_check_unknown_cable_main);
+
+void workaround_check_unknown_cable(struct smb_charger *chg) {
+	union power_supply_propval val	= { 0, };
+	u8 stat;
+
+	if (!chg->pd_hard_reset
+		&& !smblib_get_prop_usb_present(chg, &val)
+		&& (val.intval != false)
+		&& !smblib_read(chg, APSD_STATUS_REG, &stat)
+		&& (stat & APSD_DTC_STATUS_DONE_BIT)
+		&& (chg->real_charger_type == POWER_SUPPLY_TYPE_UNKNOWN)
+		&& !(chg->typec_status[3] & UFP_DFP_MODE_STATUS_BIT)
+		&& !power_supply_get_property(chg->usb_psy, POWER_SUPPLY_PROP_MOISTURE_DETECTED, &val)
+		&& (val.intval != true)) {
+		pr_debug("[W/A] CUC) APSD: 0x%02x, real_charger_type: %d\n",
+				stat, chg->real_charger_type);
+		schedule_delayed_work(&workaround_check_unknown_cable_dwork,
+				round_jiffies_relative(0));
+	}
+	else {
+		pr_debug("[W/A] CUC) workaround_check_unknown_cable skip\n");
+	}
+}
+
+void workaround_check_unknown_cable_clear(struct smb_charger *chg) {
+	vote(chg->apsd_disable_votable, WA_CUC_VOTER, false, 0);
 }
 

@@ -41,7 +41,7 @@ static int figure_label_len(const unsigned char *label, int len)
 {
 	const unsigned char *end = label + len - 1;
 
-	while ((*end == ' ' || *end == 0) && end >= label)
+	while (end >= label && (*end == ' ' || *end == 0))
 		--end;
 	if (end >= label)
 		return end - label + 1;
@@ -1160,6 +1160,37 @@ static void unicode_16be_to_utf8(unsigned char *str, int out_len,
 	str[j] = '\0';
 }
 
+static void unicode_16le_to_utf8(unsigned char *str, int out_len,
+				 const unsigned char *buf, int in_len)
+{
+	int i, j;
+	unsigned int c;
+
+	for (i = j = 0; i + 2 <= in_len; i += 2) {
+		c = (buf[i+1] << 8) | buf[i];
+		if (c == 0) {
+			str[j] = '\0';
+			break;
+		} else if (c < 0x80) {
+			if (j+1 >= out_len)
+				break;
+			str[j++] = (unsigned char) c;
+		} else if (c < 0x800) {
+			if (j+2 >= out_len)
+				break;
+			str[j++] = (unsigned char) (0xc0 | (c >> 6));
+			str[j++] = (unsigned char) (0x80 | (c & 0x3f));
+		} else {
+			if (j+3 >= out_len)
+				break;
+			str[j++] = (unsigned char) (0xe0 | (c >> 12));
+			str[j++] = (unsigned char) (0x80 | ((c >> 6) & 0x3f));
+			str[j++] = (unsigned char) (0x80 | (c & 0x3f));
+		}
+	}
+	str[j] = '\0';
+}
+
 static int probe_hfs(struct blkid_probe *probe __BLKID_ATTR((unused)),
 			 struct blkid_magic *id __BLKID_ATTR((unused)),
 			 unsigned char *buf)
@@ -1472,11 +1503,8 @@ static int probe_exfat(struct blkid_probe *probe, struct blkid_magic *id,
 {
     struct exfat_super_block *sb;
     struct exfat_entry_label *label;
-#if 1
-    char serno[10];
-#else
     uuid_t uuid;
-#endif
+
     sb = (struct exfat_super_block *)buf;
     if (!sb || !CLUSTER_SIZE(sb)) {
         DBG(DEBUG_PROBE, printf("bad exfat superblock.\n"));
@@ -1485,24 +1513,18 @@ static int probe_exfat(struct blkid_probe *probe, struct blkid_magic *id,
 
     label = find_exfat_entry_label(probe, sb);
     if (label) {
-        blkid_set_tag(probe->dev, "LABEL", label->name, label->length);
+        char utf8_label[128];
+        unicode_16le_to_utf8(utf8_label, sizeof(utf8_label), label->name, label->length * 2);
+        blkid_set_tag(probe->dev, "LABEL", utf8_label, 0);
     } else {
         blkid_set_tag(probe->dev, "LABEL", "disk", 4);
     }
 
-#if 1
-    sprintf(serno, "%02X%02X-%02X%02X",
-            sb->volume_serial[3], sb->volume_serial[2],
-            sb->volume_serial[1], sb->volume_serial[0]);
-
-    blkid_set_tag(probe->dev, "UUID", serno, sizeof(serno)-1);
-#else
+    memset(uuid, 0, sizeof (uuid));
     snprintf(uuid, sizeof (uuid), "%02hhX%02hhX-%02hhX%02hhX",
              sb->volume_serial[3], sb->volume_serial[2],
              sb->volume_serial[1], sb->volume_serial[0]);
-
-    set_uuid(probe->dev, uuid, 0);
-#endif
+    blkid_set_tag(probe->dev, "UUID", uuid, strlen(uuid));
 
     return 0;
 }

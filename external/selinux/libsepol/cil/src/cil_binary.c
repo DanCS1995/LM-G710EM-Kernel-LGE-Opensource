@@ -567,7 +567,7 @@ int cil_typeattribute_to_policydb(policydb_t *pdb, struct cil_typeattribute *cil
 	char *key = NULL;
 	type_datum_t *sepol_attr = NULL;
 
-	if (!cil_attr->used) {
+	if (!cil_attr->keep) {
 		return SEPOL_OK;		
 	}
 
@@ -632,7 +632,7 @@ int cil_typeattribute_to_bitmap(policydb_t *pdb, const struct cil_db *db, struct
 	ebitmap_node_t *tnode;
 	unsigned int i;
 
-	if (!cil_attr->used) {
+	if (!cil_attr->keep) {
 		return SEPOL_OK;
 	}
 
@@ -1018,7 +1018,14 @@ int __cil_insert_type_rule(policydb_t *pdb, uint32_t kind, uint32_t src, uint32_
 		 * non-duplicate rule using the same key.
 		 */
 		if (existing->datum.data != res) {
-			cil_log(CIL_ERR, "Conflicting type rules (scontext=%s tcontext=%s tclass=%s result=%s)\n", cil_rule->src_str, cil_rule->tgt_str, cil_rule->obj_str, cil_rule->result_str);
+			cil_log(CIL_ERR, "Conflicting type rules (scontext=%s tcontext=%s tclass=%s result=%s), existing=%s\n",
+				pdb->p_type_val_to_name[src - 1],
+				pdb->p_type_val_to_name[tgt - 1],
+				pdb->p_class_val_to_name[obj - 1],
+				pdb->p_type_val_to_name[res - 1],
+				pdb->p_type_val_to_name[existing->datum.data - 1]);
+			cil_log(CIL_ERR, "Expanded from type rule (scontext=%s tcontext=%s tclass=%s result=%s)\n",
+				cil_rule->src_str, cil_rule->tgt_str, cil_rule->obj_str, cil_rule->result_str);
 			rc = SEPOL_ERR;
 		}
 		goto exit;
@@ -1044,7 +1051,14 @@ int __cil_insert_type_rule(policydb_t *pdb, uint32_t kind, uint32_t src, uint32_
 			search_datum = cil_cond_av_list_search(&avtab_key, other_list);
 			if (search_datum == NULL) {
 				if (existing->datum.data != res) {
-					cil_log(CIL_ERR, "Conflicting type rules (scontext=%s tcontext=%s tclass=%s result=%s)\n", cil_rule->src_str, cil_rule->tgt_str, cil_rule->obj_str, cil_rule->result_str);
+					cil_log(CIL_ERR, "Conflicting type rules (scontext=%s tcontext=%s tclass=%s result=%s), existing=%s\n",
+						pdb->p_type_val_to_name[src - 1],
+						pdb->p_type_val_to_name[tgt - 1],
+						pdb->p_class_val_to_name[obj - 1],
+						pdb->p_type_val_to_name[res - 1],
+						pdb->p_type_val_to_name[existing->datum.data - 1]);
+					cil_log(CIL_ERR, "Expanded from type rule (scontext=%s tcontext=%s tclass=%s result=%s)\n",
+						cil_rule->src_str, cil_rule->tgt_str, cil_rule->obj_str, cil_rule->result_str);
 					rc = SEPOL_ERR;
 					goto exit;
 				}
@@ -1146,6 +1160,10 @@ int __cil_typetransition_to_avtab(policydb_t *pdb, const struct cil_db *db, stru
 		trans.tgt = typetrans->tgt;
 		trans.obj = typetrans->obj;
 		trans.result = typetrans->result;
+		trans.src_str = typetrans->src_str;
+		trans.tgt_str = typetrans->tgt_str;
+		trans.obj_str = typetrans->obj_str;
+		trans.result_str = typetrans->result_str;
 		return __cil_type_rule_to_avtab(pdb, db, &trans, cond_node, cond_flavor);
 	}
 
@@ -1424,7 +1442,7 @@ static int __cil_should_expand_attribute( const struct cil_db *db, struct cil_sy
 
 	attr = (struct cil_typeattribute *)datum;
 
-	return !attr->used || (ebitmap_cardinality(attr->types) < db->attrs_expand_size);
+	return !attr->keep || (ebitmap_cardinality(attr->types) < db->attrs_expand_size);
 }
 
 int __cil_avrule_to_avtab(policydb_t *pdb, const struct cil_db *db, struct cil_avrule *cil_avrule, cond_node_t *cond_node, enum cil_flavor cond_flavor)
@@ -2507,7 +2525,7 @@ int __cil_constrain_expr_datum_to_sepol_expr(policydb_t *pdb, const struct cil_d
 			if (rc != SEPOL_OK) {
 				if (FLAVOR(item->data) == CIL_TYPEATTRIBUTE) {
 					struct cil_typeattribute *attr = item->data;
-					if (!attr->used) {
+					if (!attr->keep) {
 						rc = 0;
 					}
 				}
@@ -3200,6 +3218,40 @@ exit:
 	return rc;
 }
 
+int cil_ibpkeycon_to_policydb(policydb_t *pdb, struct cil_sort *ibpkeycons)
+{
+	int rc = SEPOL_ERR;
+	uint32_t i = 0;
+	ocontext_t *tail = NULL;
+	struct in6_addr subnet_prefix;
+
+	for (i = 0; i < ibpkeycons->count; i++) {
+		struct cil_ibpkeycon *cil_ibpkeycon = ibpkeycons->array[i];
+		ocontext_t *new_ocon = cil_add_ocontext(&pdb->ocontexts[OCON_IBPKEY], &tail);
+
+		rc = inet_pton(AF_INET6, cil_ibpkeycon->subnet_prefix_str, &subnet_prefix);
+		if (rc != 1) {
+			cil_log(CIL_ERR, "ibpkeycon subnet prefix not in valid IPV6 format\n");
+			rc = SEPOL_ERR;
+			goto exit;
+		}
+
+		memcpy(&new_ocon->u.ibpkey.subnet_prefix, &subnet_prefix.s6_addr[0],
+		       sizeof(new_ocon->u.ibpkey.subnet_prefix));
+		new_ocon->u.ibpkey.low_pkey = cil_ibpkeycon->pkey_low;
+		new_ocon->u.ibpkey.high_pkey = cil_ibpkeycon->pkey_high;
+
+		rc = __cil_context_to_sepol_context(pdb, cil_ibpkeycon->context, &new_ocon->context[0]);
+		if (rc != SEPOL_OK)
+			goto exit;
+	}
+
+	return SEPOL_OK;
+
+exit:
+	return rc;
+}
+
 int cil_portcon_to_policydb(policydb_t *pdb, struct cil_sort *portcons)
 {
 	int rc = SEPOL_ERR;
@@ -3263,6 +3315,30 @@ int cil_netifcon_to_policydb(policydb_t *pdb, struct cil_sort *netifcons)
 			context_destroy(&new_ocon->context[0]);
 			goto exit;
 		}
+	}
+
+	return SEPOL_OK;
+
+exit:
+	return rc;
+}
+
+int cil_ibendportcon_to_policydb(policydb_t *pdb, struct cil_sort *ibendportcons)
+{
+	int rc = SEPOL_ERR;
+	uint32_t i;
+	ocontext_t *tail = NULL;
+
+	for (i = 0; i < ibendportcons->count; i++) {
+		ocontext_t *new_ocon = cil_add_ocontext(&pdb->ocontexts[OCON_IBENDPORT], &tail);
+		struct cil_ibendportcon *cil_ibendportcon = ibendportcons->array[i];
+
+		new_ocon->u.ibendport.dev_name = cil_strdup(cil_ibendportcon->dev_name_str);
+		new_ocon->u.ibendport.port = cil_ibendportcon->port;
+
+		rc = __cil_context_to_sepol_context(pdb, cil_ibendportcon->context, &new_ocon->context[0]);
+		if (rc != SEPOL_OK)
+			goto exit;
 	}
 
 	return SEPOL_OK;
@@ -3826,6 +3902,16 @@ int __cil_contexts_to_policydb(policydb_t *pdb, const struct cil_db *db)
 	}
 
 	rc = cil_genfscon_to_policydb(pdb, db->genfscon);
+	if (rc != SEPOL_OK) {
+		goto exit;
+	}
+
+	rc = cil_ibpkeycon_to_policydb(pdb, db->ibpkeycon);
+	if (rc != SEPOL_OK) {
+		goto exit;
+	}
+
+	rc = cil_ibendportcon_to_policydb(pdb, db->ibendportcon);
 	if (rc != SEPOL_OK) {
 		goto exit;
 	}

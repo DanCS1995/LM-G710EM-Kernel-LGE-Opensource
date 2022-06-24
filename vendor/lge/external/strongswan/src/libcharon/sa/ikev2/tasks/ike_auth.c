@@ -28,6 +28,8 @@
 #include <processing/jobs/delete_ike_sa_job.h>
 #include <utils/cust_settings.h>
 
+#include <libpatchcodeid.h>
+
 typedef struct private_ike_auth_t private_ike_auth_t;
 
 /**
@@ -893,6 +895,7 @@ METHOD(task_t, build_r, status_t,
 	}
 #ifdef __ANDROID__
 		if (get_cust_setting_bool(LGP_DATA_DEBUG_ENABLE_PRIVACY_LOG)) {
+            patch_code_id("LPCP-2249@n@c@libcharon@ike_auth.c@1");
 			DBG1(DBG_IKE, "IKE_SA %s[%d] established between %H[%Y]...%H[%Y]",
 				 this->ike_sa->get_name(this->ike_sa),
 				 this->ike_sa->get_unique_id(this->ike_sa),
@@ -1154,6 +1157,7 @@ METHOD(task_t, process_i, status_t,
 
 #ifdef __ANDROID__
 		if (get_cust_setting_bool(LGP_DATA_DEBUG_ENABLE_PRIVACY_LOG)) {
+            patch_code_id("LPCP-2249@n@c@libcharon@ike_auth.c@2");
 			DBG1(DBG_IKE, "IKE_SA %s[%d] established between %H[%Y]...%H[%Y]",
 				 this->ike_sa->get_name(this->ike_sa),
 				 this->ike_sa->get_unique_id(this->ike_sa),

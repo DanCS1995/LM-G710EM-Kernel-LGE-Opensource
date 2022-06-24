@@ -1,5 +1,5 @@
 /*
- * Author : Stephen Smalley, <sds@epoch.ncsc.mil> 
+ * Author : Stephen Smalley, <sds@tycho.nsa.gov>
  */
 
 /*
@@ -20,6 +20,7 @@
  * Copyright (C) 2004-2005 Trusted Computer Solutions, Inc.
  * Copyright (C) 2003 - 2008 Tresys Technology, LLC
  * Copyright (C) 2007 Red Hat Inc.
+ * Copyright (C) 2017 Mellanox Techonologies Inc.
  *	This program is free software; you can redistribute it and/or modify
  *  	it under the terms of the GNU General Public License as published by
  *	the Free Software Foundation, version 2.
@@ -1139,6 +1140,90 @@ int define_attrib(void)
 	return 0;
 }
 
+int expand_attrib(void)
+{
+	char *id;
+	ebitmap_t attrs;
+	type_datum_t *attr;
+	ebitmap_node_t *node;
+	uint32_t i;
+	int rc = -1;
+	int flags = 0;
+
+	if (pass == 1) {
+		for (i = 0; i < 2; i++) {
+			while ((id = queue_remove(id_queue))) {
+				free(id);
+			}
+		}
+		return 0;
+	}
+
+	ebitmap_init(&attrs);
+	while ((id = queue_remove(id_queue))) {
+		if (!id) {
+			yyerror("No attribute name for expandattribute statement?");
+			goto exit;
+		}
+
+		if (!is_id_in_scope(SYM_TYPES, id)) {
+			yyerror2("attribute %s is not within scope", id);
+			goto exit;
+		}
+
+		attr = hashtab_search(policydbp->p_types.table, id);
+		if (!attr) {
+			yyerror2("attribute %s is not declared", id);
+			goto exit;
+		}
+
+		if (attr->flavor != TYPE_ATTRIB) {
+			yyerror2("%s is a type, not an attribute", id);
+			goto exit;
+		}
+
+		if (ebitmap_set_bit(&attrs, attr->s.value - 1, TRUE)) {
+			yyerror("Out of memory!");
+			goto exit;
+		}
+
+		free(id);
+	}
+
+	id = (char *) queue_remove(id_queue);
+	if (!id) {
+		yyerror("No option specified for attribute expansion.");
+		goto exit;
+	}
+
+	if (!strcmp(id, "T")) {
+		flags = TYPE_FLAGS_EXPAND_ATTR_TRUE;
+	} else {
+		flags = TYPE_FLAGS_EXPAND_ATTR_FALSE;
+	}
+
+	ebitmap_for_each_bit(&attrs, node, i) {
+		if (!ebitmap_node_get_bit(node, i)){
+			continue;
+		}
+		attr = hashtab_search(policydbp->p_types.table,
+				policydbp->sym_val_to_name[SYM_TYPES][i]);
+		attr->flags |= flags;
+		if ((attr->flags & TYPE_FLAGS_EXPAND_ATTR_TRUE) &&
+				(attr->flags & TYPE_FLAGS_EXPAND_ATTR_FALSE)) {
+			yywarn("Expandattribute option was set to both true and false. "
+				"Resolving to false.");
+			attr->flags &= ~TYPE_FLAGS_EXPAND_ATTR_TRUE;
+		}
+	}
+
+	rc = 0;
+exit:
+	ebitmap_destroy(&attrs);
+	free(id);
+	return rc;
+}
+
 static int add_aliases_to_type(type_datum_t * type)
 {
 	char *id;
@@ -1924,11 +2009,11 @@ int avrule_ioctl_ranges(struct av_ioctl_range_list **rangelist)
 	/* read in ranges to include and omit */
 	if (avrule_read_ioctls(&rangehead))
 		return -1;
-	omit = rangehead->omit;
 	if (rangehead == NULL) {
 		yyerror("error processing ioctl commands");
 		return -1;
 	}
+	omit = rangehead->omit;
 	/* sort and merge the input ioctls */
 	if (avrule_sort_ioctls(&rangehead))
 		return -1;
@@ -4975,6 +5060,192 @@ int define_port_context(unsigned int low, unsigned int high)
 	return -1;
 }
 
+int define_ibpkey_context(unsigned int low, unsigned int high)
+{
+	ocontext_t *newc, *c, *l, *head;
+	struct in6_addr subnet_prefix;
+	char *id;
+	int rc = 0;
+
+	if (policydbp->target_platform != SEPOL_TARGET_SELINUX) {
+		yyerror("ibpkeycon not supported for target");
+		return -1;
+	}
+
+	if (pass == 1) {
+		id = (char *)queue_remove(id_queue);
+		free(id);
+		parse_security_context(NULL);
+		return 0;
+	}
+
+	newc = malloc(sizeof(*newc));
+	if (!newc) {
+		yyerror("out of memory");
+		return -1;
+	}
+	memset(newc, 0, sizeof(*newc));
+
+	id = queue_remove(id_queue);
+	if (!id) {
+		yyerror("failed to read the subnet prefix");
+		rc = -1;
+		goto out;
+	}
+
+	rc = inet_pton(AF_INET6, id, &subnet_prefix);
+	free(id);
+	if (rc < 1) {
+		yyerror("failed to parse the subnet prefix");
+		if (rc == 0)
+			rc = -1;
+		goto out;
+	}
+
+	if (subnet_prefix.s6_addr[2] || subnet_prefix.s6_addr[3]) {
+		yyerror("subnet prefix should be 0's in the low order 64 bits.");
+		rc = -1;
+		goto out;
+	}
+
+	if (low > 0xffff || high > 0xffff) {
+		yyerror("pkey value too large, pkeys are 16 bits.");
+		rc = -1;
+		goto out;
+	}
+
+	memcpy(&newc->u.ibpkey.subnet_prefix, &subnet_prefix.s6_addr[0],
+	       sizeof(newc->u.ibpkey.subnet_prefix));
+
+	newc->u.ibpkey.low_pkey = low;
+	newc->u.ibpkey.high_pkey = high;
+
+	if (low > high) {
+		yyerror2("low pkey %d exceeds high pkey %d", low, high);
+		rc = -1;
+		goto out;
+	}
+
+	rc = parse_security_context(&newc->context[0]);
+	if (rc)
+		goto out;
+
+	/* Preserve the matching order specified in the configuration. */
+	head = policydbp->ocontexts[OCON_IBPKEY];
+	for (l = NULL, c = head; c; l = c, c = c->next) {
+		unsigned int low2, high2;
+
+		low2 = c->u.ibpkey.low_pkey;
+		high2 = c->u.ibpkey.high_pkey;
+
+		if (low == low2 && high == high2 &&
+		    c->u.ibpkey.subnet_prefix == newc->u.ibpkey.subnet_prefix) {
+			yyerror2("duplicate ibpkeycon entry for %d-%d ",
+				 low, high);
+			rc = -1;
+			goto out;
+		}
+		if (low2 <= low && high2 >= high &&
+		    c->u.ibpkey.subnet_prefix == newc->u.ibpkey.subnet_prefix) {
+			yyerror2("ibpkeycon entry for %d-%d hidden by earlier entry for %d-%d",
+				 low, high, low2, high2);
+			rc = -1;
+			goto out;
+		}
+	}
+
+	if (l)
+		l->next = newc;
+	else
+		policydbp->ocontexts[OCON_IBPKEY] = newc;
+
+	return 0;
+
+out:
+	free(newc);
+	return rc;
+}
+
+int define_ibendport_context(unsigned int port)
+{
+	ocontext_t *newc, *c, *l, *head;
+	char *id;
+	int rc = 0;
+
+	if (policydbp->target_platform != SEPOL_TARGET_SELINUX) {
+		yyerror("ibendportcon not supported for target");
+		return -1;
+	}
+
+	if (pass == 1) {
+		id = (char *)queue_remove(id_queue);
+		free(id);
+		parse_security_context(NULL);
+		return 0;
+	}
+
+	if (port > 0xff || port == 0) {
+		yyerror("Invalid ibendport port number, should be 0 < port < 256");
+		return -1;
+	}
+
+	newc = malloc(sizeof(*newc));
+	if (!newc) {
+		yyerror("out of memory");
+		return -1;
+	}
+	memset(newc, 0, sizeof(*newc));
+
+	newc->u.ibendport.dev_name = queue_remove(id_queue);
+	if (!newc->u.ibendport.dev_name) {
+		yyerror("failed to read infiniband device name.");
+		rc = -1;
+		goto out;
+	}
+
+	if (strlen(newc->u.ibendport.dev_name) > IB_DEVICE_NAME_MAX - 1) {
+		yyerror("infiniband device name exceeds max length of 63.");
+		rc = -1;
+		goto out;
+	}
+
+	newc->u.ibendport.port = port;
+
+	if (parse_security_context(&newc->context[0])) {
+		free(newc);
+		return -1;
+	}
+
+	/* Preserve the matching order specified in the configuration. */
+	head = policydbp->ocontexts[OCON_IBENDPORT];
+	for (l = NULL, c = head; c; l = c, c = c->next) {
+		unsigned int port2;
+
+		port2 = c->u.ibendport.port;
+
+		if (port == port2 &&
+		    !strcmp(c->u.ibendport.dev_name,
+			     newc->u.ibendport.dev_name)) {
+			yyerror2("duplicate ibendportcon entry for %s port %u",
+				 newc->u.ibendport.dev_name, port);
+			rc = -1;
+			goto out;
+		}
+	}
+
+	if (l)
+		l->next = newc;
+	else
+		policydbp->ocontexts[OCON_IBENDPORT] = newc;
+
+	return 0;
+
+out:
+	free(newc->u.ibendport.dev_name);
+	free(newc);
+	return rc;
+}
+
 int define_netif_context(void)
 {
 	ocontext_t *newc, *c, *head;
@@ -5178,14 +5449,8 @@ int define_ipv6_node_context(void)
 	}
 
 	memset(newc, 0, sizeof(ocontext_t));
-
-#ifdef __APPLE__
 	memcpy(&newc->u.node6.addr[0], &addr.s6_addr[0], 16);
 	memcpy(&newc->u.node6.mask[0], &mask.s6_addr[0], 16);
-#else
-	memcpy(&newc->u.node6.addr[0], &addr.s6_addr32[0], 16);
-	memcpy(&newc->u.node6.mask[0], &mask.s6_addr32[0], 16);
-#endif
 
 	if (parse_security_context(&newc->context[0])) {
 		free(newc);

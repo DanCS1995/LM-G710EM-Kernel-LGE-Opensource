@@ -253,6 +253,10 @@ struct ecryptfs_name_val_pair {
 	struct ecryptfs_name_val_pair *next;
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void dump_auth_tok( struct ecryptfs_auth_tok *auth_tok );
 extern void to_hex( char *dst, char *src, int src_size );
 extern void from_hex( char *dst, char *src, int dst_size );
@@ -605,4 +609,8 @@ int ecryptfs_run_daemon(struct ecryptfs_messaging_ctx *mctx);
 char *ecryptfs_fetch_private_mnt(char *pw_dir);
 int ecryptfs_private_is_mounted(char *dev, char *mnt, char *sig, int mounting);
 
+#endif
+
+#ifdef __cplusplus
+}
 #endif

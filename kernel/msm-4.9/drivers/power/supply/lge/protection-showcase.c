@@ -2,6 +2,7 @@
 #define pr_showcase(fmt, ...) pr_err(fmt, ##__VA_ARGS__)
 
 #include <linux/of.h>
+#include <linux/ctype.h>
 #include <linux/power_supply.h>
 
 #include "veneer-primitives.h"
@@ -80,15 +81,28 @@ static enum showcase_status showcase_charging_transit(bool enabled, bool chargin
 }
 
 static bool showcase_create_parsedt(struct device_node* dnode) {
-	int rc = 0;
+	int i;
+	char property [32];
+	struct { u32 min; u32 max; } range;
 
-	OF_PROP_READ_S32(dnode, showcase.soc_max, "soc-max", rc);
-	OF_PROP_READ_S32(dnode, showcase.soc_min, "soc-min", rc);
+	// Building property name
+	strncpy(property, "lge,soc-range-", 32);
+	strncat(property, unified_bootmode_operator(), 32);
+	for (i=0; i<strlen(property); ++i)
+		property[i] = tolower(property[i]);
+	if (!of_find_property(dnode, property, NULL))
+		strncpy(property, "lge,soc-range-default", 32);
 
-	pr_showcase("soc-max : %d, soc-min : %d\n",
-		showcase.soc_max, showcase.soc_min);
-
-	return !rc;
+	// Finding soc range
+	if (!of_property_read_u32_array(dnode, property, (u32*)(&range), 2)) {
+		showcase.soc_min = range.min;
+		showcase.soc_max = range.max;
+		pr_showcase("soc-min : %d, soc-max : %d of %s\n", showcase.soc_min, showcase.soc_max, property);
+		return true;
+	}
+	else {	pr_showcase("Couldn't find %s\n", property);
+		return false;
+	}
 }
 
 static bool showcase_create_voters(void) {
@@ -142,17 +156,17 @@ bool protection_showcase_create(struct device_node* dnode,
 	void (*back_protection_showcase)(const char* status)) {
 
 	if (!showcase_create_preset(feed_protection_showcase, back_protection_showcase)) {
-		pr_showcase("error on showcase_create_preset");
+		pr_showcase("error on showcase_create_preset\n");
 		goto destroy;
 	}
 
 	if (!showcase_create_parsedt(dnode)) {
-		pr_showcase("error on showcase_create_devicetree");
+		pr_showcase("error on showcase_create_devicetree\n");
 		goto destroy;
 	}
 
 	if (!showcase_create_voters()) {
-		pr_showcase("error on showcase_create_voters");
+		pr_showcase("error on showcase_create_voters\n");
 		goto destroy;
 	}
 

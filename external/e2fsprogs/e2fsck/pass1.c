@@ -1312,6 +1312,34 @@ void e2fsck_pass1(e2fsck_t ctx)
 		}
 		failed_csum = pctx.errcode != 0;
 
+		/*
+		 * Check for inodes who might have been part of the
+		 * orphaned list linked list.  They should have gotten
+		 * dealt with by now, unless the list had somehow been
+		 * corrupted.
+		 *
+		 * FIXME: In the future, inodes which are still in use
+		 * (and which are therefore) pending truncation should
+		 * be handled specially.  Right now we just clear the
+		 * dtime field, and the normal e2fsck handling of
+		 * inodes where i_size and the inode blocks are
+		 * inconsistent is to fix i_size, instead of releasing
+		 * the extra blocks.  This won't catch the inodes that
+		 * was at the end of the orphan list, but it's better
+		 * than nothing.  The right answer is that there
+		 * shouldn't be any bugs in the orphan list handling.  :-)
+		 */
+		if (inode->i_dtime && low_dtime_check &&
+		    inode->i_dtime < ctx->fs->super->s_inodes_count) {
+			if (fix_problem(ctx, PR_1_LOW_DTIME, &pctx)) {
+				inode->i_dtime = inode->i_links_count ?
+					0 : ctx->now;
+				e2fsck_write_inode(ctx, ino, inode,
+						   "pass1");
+				failed_csum = 0;
+			}
+		}
+
 		if (inode->i_links_count) {
 			pctx.errcode = ext2fs_icount_store(ctx->inode_link_info,
 					   ino, inode->i_links_count);
@@ -1321,6 +1349,19 @@ void e2fsck_pass1(e2fsck_t ctx)
 				ctx->flags |= E2F_FLAG_ABORT;
 				goto endit;
 			}
+		} else if ((ino >= EXT2_FIRST_INODE(fs->super)) &&
+			   !quota_inum_is_reserved(fs, ino)) {
+			if (!inode->i_dtime && inode->i_mode) {
+				if (fix_problem(ctx,
+					    PR_1_ZERO_DTIME, &pctx)) {
+					inode->i_dtime = ctx->now;
+					e2fsck_write_inode(ctx, ino, inode,
+							   "pass1");
+					failed_csum = 0;
+				}
+			}
+			FINISH_INODE_LOOP(ctx, ino, &pctx, failed_csum);
+			continue;
 		}
 
 		/* Conflicting inlinedata/extents inode flags? */
@@ -1355,7 +1396,6 @@ void e2fsck_pass1(e2fsck_t ctx)
 
 		/* Test for inline data flag but no attr */
 		if ((inode->i_flags & EXT4_INLINE_DATA_FL) && inlinedata_fs &&
-		    EXT2_I_SIZE(inode) > EXT4_MIN_INLINE_DATA_SIZE &&
 		    (ino >= EXT2_FIRST_INODE(fs->super))) {
 			size_t size = 0;
 			errcode_t err;
@@ -1389,15 +1429,15 @@ void e2fsck_pass1(e2fsck_t ctx)
 				/* broken EA or no system.data EA; truncate */
 				if (fix_problem(ctx, PR_1_INLINE_DATA_NO_ATTR,
 						&pctx)) {
-					err = ext2fs_inode_size_set(fs, inode,
-							sizeof(inode->i_block));
+					err = ext2fs_inode_size_set(fs, inode, 0);
 					if (err) {
 						pctx.errcode = err;
 						ctx->flags |= E2F_FLAG_ABORT;
 						goto endit;
 					}
-					if (LINUX_S_ISLNK(inode->i_mode))
-						inode->i_flags &= ~EXT4_INLINE_DATA_FL;
+					inode->i_flags &= ~EXT4_INLINE_DATA_FL;
+					memset(&inode->i_block, 0,
+					       sizeof(inode->i_block));
 					e2fsck_write_inode(ctx, ino, inode,
 							   "pass1");
 					failed_csum = 0;
@@ -1638,48 +1678,7 @@ void e2fsck_pass1(e2fsck_t ctx)
 			continue;
 		}
 
-		/*
-		 * Check for inodes who might have been part of the
-		 * orphaned list linked list.  They should have gotten
-		 * dealt with by now, unless the list had somehow been
-		 * corrupted.
-		 *
-		 * FIXME: In the future, inodes which are still in use
-		 * (and which are therefore) pending truncation should
-		 * be handled specially.  Right now we just clear the
-		 * dtime field, and the normal e2fsck handling of
-		 * inodes where i_size and the inode blocks are
-		 * inconsistent is to fix i_size, instead of releasing
-		 * the extra blocks.  This won't catch the inodes that
-		 * was at the end of the orphan list, but it's better
-		 * than nothing.  The right answer is that there
-		 * shouldn't be any bugs in the orphan list handling.  :-)
-		 */
-		if (inode->i_dtime && low_dtime_check &&
-		    inode->i_dtime < ctx->fs->super->s_inodes_count) {
-			if (fix_problem(ctx, PR_1_LOW_DTIME, &pctx)) {
-				inode->i_dtime = inode->i_links_count ?
-					0 : ctx->now;
-				e2fsck_write_inode(ctx, ino, inode,
-						   "pass1");
-				failed_csum = 0;
-			}
-		}
-
-		/*
-		 * This code assumes that deleted inodes have
-		 * i_links_count set to 0.
-		 */
 		if (!inode->i_links_count) {
-			if (!inode->i_dtime && inode->i_mode) {
-				if (fix_problem(ctx,
-					    PR_1_ZERO_DTIME, &pctx)) {
-					inode->i_dtime = ctx->now;
-					e2fsck_write_inode(ctx, ino, inode,
-							   "pass1");
-					failed_csum = 0;
-				}
-			}
 			FINISH_INODE_LOOP(ctx, ino, &pctx, failed_csum);
 			continue;
 		}
@@ -1819,9 +1818,14 @@ void e2fsck_pass1(e2fsck_t ctx)
 		     inode->i_block[EXT2_DIND_BLOCK] ||
 		     inode->i_block[EXT2_TIND_BLOCK] ||
 		     ext2fs_file_acl_block(fs, inode))) {
+			struct ext2_inode_large *ip;
+
 			inodes_to_process[process_inode_count].ino = ino;
-			inodes_to_process[process_inode_count].inode =
-				       *(struct ext2_inode_large *)inode;
+			ip = &inodes_to_process[process_inode_count].inode;
+			if (inode_size < sizeof(struct ext2_inode_large))
+				memcpy(ip, inode, inode_size);
+			else
+				memcpy(ip, inode, sizeof(*ip));
 			process_inode_count++;
 		} else
 			check_blocks(ctx, &pctx, block_buf);

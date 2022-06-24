@@ -186,14 +186,31 @@ inline static void lge_set_key_crash_cnt(int key, int* clear)
 #define VOLUP_KEY_PRESSED 0x1
 #define POW_KEY_PRESSED 0x2
 int uart_key_press_status=0;
-#endif 
+extern int debug_accessory_status;
+#endif
 void lge_gen_key_panic(int key, int status)
 {
 	int clear = 1;
 	int order = key_crash_cnt % 3;
 	static int valid = 0;
-	if(lge_get_download_mode() != 1)
+
+	int ret = -1;
+	bool power_supply_present = false;
+	if (debug_accessory_status) {
+		extern bool unified_nodes_show(const char* key, char* value);
+		char buff [16] = { 0, };
+		ret = unified_nodes_show("charger_name", buff);
+		if (ret == 1 && strcmp(buff, "NONE")) {
+			power_supply_present = true;
+		} else {
+			power_supply_present = false;
+		}
+	}
+
+	if(!lge_get_download_mode()
+		&& !(debug_accessory_status && !power_supply_present))
 		return;
+
 #ifdef CONFIG_LGE_USB_DEBUGGER
 	if(key == KEY_VOLUMEUP) {
 		uart_key_press_status = status ? (uart_key_press_status | VOLUP_KEY_PRESSED) : 0;
@@ -228,82 +245,84 @@ void lge_gen_key_panic(int key, int status)
 	}
 
 	if (key_crash_cnt >= 7) {
+		if (debug_accessory_status)
+			lge_set_download_mode(1);
 		gen_key_panic = 1;
 		panic("%s: Generate panic by key!\n", __func__);
 	}
 }
 
-static int gen_bug(const char *val, struct kernel_param *kp)
+static int gen_bug(const char *val, const struct kernel_param *kp)
 {
 	BUG();
 	return 0;
 }
 module_param_call(gen_bug, gen_bug, param_get_bool, &dummy_arg,
-		S_IWUSR | S_IRUGO);
+		S_IWUSR | S_IRUGO | S_IWGRP);
 
-static int gen_panic(const char *val, struct kernel_param *kp)
+static int gen_panic(const char *val, const struct kernel_param *kp)
 {
 	panic("generate test-panic");
 	return 0;
 }
 module_param_call(gen_panic, gen_panic, param_get_bool, &dummy_arg,
-		S_IWUSR | S_IRUGO);
+		S_IWUSR | S_IRUGO | S_IWGRP);
 
-static int gen_adsp_panic(const char *val, struct kernel_param *kp)
+static int gen_adsp_panic(const char *val, const struct kernel_param *kp)
 {
 	subsystem_restart("adsp");
 	return 0;
 }
 module_param_call(gen_adsp_panic, gen_adsp_panic, param_get_bool,
-		&dummy_arg, S_IWUSR | S_IRUGO);
+		&dummy_arg, S_IWUSR | S_IRUGO | S_IWGRP);
 
-static int gen_mba_panic(const char *val, struct kernel_param *kp)
+static int gen_mba_panic(const char *val, const struct kernel_param *kp)
 {
 	subsystem_restart("mba");
 	return 0;
 }
 module_param_call(gen_mba_panic, gen_mba_panic, param_get_bool,
-		&dummy_arg, S_IWUSR | S_IRUGO);
+		&dummy_arg, S_IWUSR | S_IRUGO | S_IWGRP);
 
-static int gen_modem_panic(const char *val, struct kernel_param *kp)
+static int gen_modem_panic(const char *val, const struct kernel_param *kp)
 {
 	subsystem_restart("modem");
 	return 0;
 }
 module_param_call(gen_modem_panic, gen_modem_panic, param_get_bool,
-		&dummy_arg, S_IWUSR | S_IRUGO);
+		&dummy_arg, S_IWUSR | S_IRUGO | S_IWGRP);
 
-static int gen_wcnss_panic(const char *val, struct kernel_param *kp)
+static int gen_wcnss_panic(const char *val, const struct kernel_param *kp)
 {
 	subsystem_restart("wcnss");
 	return 0;
 }
 module_param_call(gen_wcnss_panic, gen_wcnss_panic, param_get_bool,
-		&dummy_arg, S_IWUSR | S_IRUGO);
+		&dummy_arg, S_IWUSR | S_IRUGO | S_IWGRP);
 
-static int gen_slpi_panic(const char *val, struct kernel_param *kp)
+static int gen_slpi_panic(const char *val, const struct kernel_param *kp)
 {
 	subsystem_restart("slpi");
 	return 0;
 }
 module_param_call(gen_slpi_panic, gen_slpi_panic, param_get_bool,
-		&dummy_arg, S_IWUSR | S_IRUGO);
+		&dummy_arg, S_IWUSR | S_IRUGO | S_IWGRP);
 
-static int gen_venus_panic(const char *val, struct kernel_param *kp)
+static int gen_venus_panic(const char *val, const struct kernel_param *kp)
 {
 	subsystem_restart("venus");
 	return 0;
 }
 module_param_call(gen_venus_panic, gen_venus_panic, param_get_bool,
-		&dummy_arg, S_IWUSR | S_IRUGO);
+		&dummy_arg, S_IWUSR | S_IRUGO | S_IWGRP);
 
-static int gen_cdsp_panic(const char *val, struct kernel_param *kp)
+static int gen_cdsp_panic(const char *val, const struct kernel_param *kp)
 {
 	subsystem_restart("cdsp");
 	return 0;
 }
 module_param_call(gen_cdsp_panic, gen_cdsp_panic, param_get_bool,
-		&dummy_arg, S_IWUSR | S_IRUGO);
+		&dummy_arg, S_IWUSR | S_IRUGO | S_IWGRP);
 
 #define WDT0_RST        0x04
 #define WDT0_EN         0x08
@@ -312,7 +331,7 @@ module_param_call(gen_cdsp_panic, gen_cdsp_panic, param_get_bool,
 
 extern void __iomem *wdt_timer_get_timer0_base(void);
 
-static int gen_wdt_bark(const char *val, struct kernel_param *kp)
+static int gen_wdt_bark(const char *val, const struct kernel_param *kp)
 {
 	void __iomem *msm_tmr0_base;
 	msm_tmr0_base = wdt_timer_get_timer0_base();
@@ -331,9 +350,9 @@ static int gen_wdt_bark(const char *val, struct kernel_param *kp)
 	return -1;
 }
 module_param_call(gen_wdt_bark, gen_wdt_bark, param_get_bool,
-		&dummy_arg, S_IWUSR | S_IRUGO);
+		&dummy_arg, S_IWUSR | S_IRUGO | S_IWGRP);
 
-static int gen_wdt_bite(const char *val, struct kernel_param *kp)
+static int gen_wdt_bite(const char *val, const struct kernel_param *kp)
 {
 	void __iomem *msm_tmr0_base;
 	msm_tmr0_base = wdt_timer_get_timer0_base();
@@ -352,7 +371,7 @@ static int gen_wdt_bite(const char *val, struct kernel_param *kp)
 	return -1;
 }
 module_param_call(gen_wdt_bite, gen_wdt_bite, param_get_bool,
-		&dummy_arg, S_IWUSR | S_IRUGO);
+		&dummy_arg, S_IWUSR | S_IRUGO | S_IWGRP);
 
 //FIXME
 #define REG_MPM2_WDOG_BASE             0xFC4AA000
@@ -362,7 +381,7 @@ module_param_call(gen_wdt_bite, gen_wdt_bite, param_get_bool,
 #define REG_VAL_WDOG_BITE_VAL          0x400
 
 /* forced sec wdt bite can cause unexpected bus hang */
-static int gen_sec_wdt_bite(const char *val, struct kernel_param *kp)
+static int gen_sec_wdt_bite(const char *val, const struct kernel_param *kp)
 {
 	void *sec_wdog_virt;
 	sec_wdog_virt = ioremap(REG_MPM2_WDOG_BASE, SZ_4K);
@@ -386,11 +405,11 @@ static int gen_sec_wdt_bite(const char *val, struct kernel_param *kp)
 	return -1;
 }
 module_param_call(gen_sec_wdt_bite, gen_sec_wdt_bite, param_get_bool,
-		&dummy_arg, S_IWUSR | S_IRUGO);
+		&dummy_arg, S_IWUSR | S_IRUGO | S_IWGRP);
 
 #define SCM_SVC_SEC_WDOG_TRIG  0x08
 
-static int gen_sec_wdt_scm(const char *val, struct kernel_param *kp)
+static int gen_sec_wdt_scm(const char *val, const struct kernel_param *kp)
 {
 	struct scm_desc desc;
 	desc.args[0] = 0;
@@ -407,7 +426,7 @@ static int gen_sec_wdt_scm(const char *val, struct kernel_param *kp)
 	return -1;
 }
 module_param_call(gen_sec_wdt_scm, gen_sec_wdt_scm, param_get_bool,
-		&dummy_arg, S_IWUSR | S_IRUGO);
+		&dummy_arg, S_IWUSR | S_IRUGO | S_IWGRP);
 
 void lge_disable_watchdog(void)
 {

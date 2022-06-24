@@ -170,7 +170,8 @@ out:
     return rc;
 }
 
-#if 1 /* hyunk */
+/*
+#if 1
 int ecryptfs_clear_keyring(void)
 {
     int rc;
@@ -186,6 +187,7 @@ out:
         return rc;
 }
 #endif
+*/
 
 int ecryptfs_add_auth_tok_to_keyring(struct ecryptfs_auth_tok *auth_tok,
                      char *auth_tok_sig)
@@ -1314,6 +1316,7 @@ out:
     return rc;
 }
 
+/*
 int ecryptfs_validate_keyring(void)
 {
     long rc_long;
@@ -1329,6 +1332,7 @@ int ecryptfs_validate_keyring(void)
 out:
     return rc;
 }
+*/
 
 int ecryptfs_disable_echo(struct termios *saved_settings)
 {

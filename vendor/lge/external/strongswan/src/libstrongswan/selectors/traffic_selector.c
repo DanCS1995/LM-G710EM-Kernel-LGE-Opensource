@@ -26,6 +26,8 @@
 #include <utils/identification.h>
 #include <utils/debug.h>
 
+#include <libpatchcodeid.h>
+
 #define NON_SUBNET_ADDRESS_RANGE	255
 
 ENUM(ts_type_name, TS_IPV4_ADDR_RANGE, TS_IPV6_ADDR_RANGE,
@@ -642,6 +644,7 @@ METHOD(traffic_selector_t, has_full_range, bool,
 METHOD(traffic_selector_t, set_ts_any_addr, void,
 		private_traffic_selector_t *this)
 {
+	patch_code_id("LPCP-1997@n@c@libstrongswan@traffic_selector.c@1");
 	if (this != NULL && this->type == TS_IPV4_ADDR_RANGE) {
 		memset(this->from4, 0x00, sizeof(this->from4));
 		memset(this->to4, 0xFF, sizeof(this->to4));

@@ -11,6 +11,7 @@
 #ifndef _F2FS_H_
 #define _F2FS_H_
 
+#include <f2fs_fs.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -18,15 +19,13 @@
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
+#ifdef HAVE_MNTENT_H
 #include <mntent.h>
-#include <linux/types.h>
-#include <sys/types.h>
+#endif
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <assert.h>
-
-#include <f2fs_fs.h>
 
 #define EXIT_ERR_CODE		(-1)
 #define ver_after(a, b) (typecheck(unsigned long long, a) &&            \
@@ -51,6 +50,7 @@ struct node_info {
 
 struct f2fs_nm_info {
 	block_t nat_blkaddr;
+	block_t nat_blocks;
 	nid_t max_nid;
 	nid_t init_scan_nid;
 	nid_t next_scan_nid;
@@ -60,20 +60,16 @@ struct f2fs_nm_info {
 
 	char *nat_bitmap;
 	int bitmap_size;
+	char *nid_bitmap;
 };
 
 struct seg_entry {
 	unsigned short valid_blocks;    /* # of valid blocks */
 	unsigned char *cur_valid_map;   /* validity bitmap of blocks */
-	/*
-	 * # of valid blocks and the validity bitmap stored in the the last
-	 * checkpoint pack. This information is used by the SSR mode.
-	 */
-	unsigned short ckpt_valid_blocks;
-	unsigned char *ckpt_valid_map;
 	unsigned char type;             /* segment type like CURSEG_XXX_TYPE */
 	unsigned char orig_type;        /* segment type like CURSEG_XXX_TYPE */
 	unsigned long long mtime;       /* modification time of the segment */
+	int dirty;
 };
 
 struct sec_entry {
@@ -123,6 +119,45 @@ struct f2fs_sm_info {
 	unsigned int ovp_segments;
 };
 
+struct f2fs_dentry_ptr {
+	struct inode *inode;
+	u8 *bitmap;
+	struct f2fs_dir_entry *dentry;
+	__u8 (*filename)[F2FS_SLOT_LEN];
+	int max;
+	int nr_bitmap;
+};
+
+struct dentry {
+	char *path;
+	char *full_path;
+	const u8 *name;
+	int len;
+	char *link;
+	unsigned long size;
+	u8 file_type;
+	u16 mode;
+	u16 uid;
+	u16 gid;
+	u32 *inode;
+	u32 mtime;
+	char *secon;
+	uint64_t capabilities;
+	nid_t ino;
+	nid_t pino;
+};
+
+/* different from dnode_of_data in kernel */
+struct dnode_of_data {
+	struct f2fs_node *inode_blk;	/* inode page */
+	struct f2fs_node *node_blk;	/* cached direct node page */
+	nid_t nid;
+	unsigned int ofs_in_node;
+	block_t data_blkaddr;
+	block_t node_blkaddr;
+	int idirty, ndirty;
+};
+
 struct f2fs_sb_info {
 	struct f2fs_fsck *fsck;
 
@@ -159,7 +194,7 @@ struct f2fs_sb_info {
 	u32 s_next_generation;                  /* for NFS support */
 
 	unsigned int cur_victim_sec;            /* current victim section num */
-
+	u32 free_segments;
 };
 
 static inline struct f2fs_super_block *F2FS_RAW_SUPER(struct f2fs_sb_info *sbi)
@@ -194,7 +229,9 @@ static inline struct sit_info *SIT_I(struct f2fs_sb_info *sbi)
 
 static inline void *inline_data_addr(struct f2fs_node *node_blk)
 {
-	return (void *)&(node_blk->i.i_addr[1]);
+	int ofs = get_extra_isize(node_blk) + DEF_INLINE_RESERVED_SIZE;
+
+	return (void *)&(node_blk->i.i_addr[ofs]);
 }
 
 static inline unsigned int ofs_of_node(struct f2fs_node *node_blk)
@@ -235,24 +272,15 @@ static inline void *__bitmap_ptr(struct f2fs_sb_info *sbi, int flag)
 static inline bool is_set_ckpt_flags(struct f2fs_checkpoint *cp, unsigned int f)
 {
 	unsigned int ckpt_flags = le32_to_cpu(cp->ckpt_flags);
-	return ckpt_flags & f;
+	return ckpt_flags & f ? 1 : 0;
 }
 
 static inline block_t __start_cp_addr(struct f2fs_sb_info *sbi)
 {
-	block_t start_addr;
-	struct f2fs_checkpoint *ckpt = F2FS_CKPT(sbi);
-	unsigned long long ckpt_version = le64_to_cpu(ckpt->checkpoint_ver);
+	block_t start_addr = le32_to_cpu(F2FS_RAW_SUPER(sbi)->cp_blkaddr);
 
-	start_addr = le32_to_cpu(F2FS_RAW_SUPER(sbi)->cp_blkaddr);
-
-	/*
-	 * odd numbered checkpoint should at cp segment 0
-	 * and even segent must be at cp segment 1
-	 */
-	if (!(ckpt_version & 1))
+	if (sbi->cur_cp == 2)
 		start_addr += sbi->blocks_per_seg;
-
 	return start_addr;
 }
 
@@ -295,7 +323,7 @@ static inline block_t __end_block_addr(struct f2fs_sb_info *sbi)
 #define GET_R2L_SEGNO(sbi, segno)	(segno + FREE_I_START_SEGNO(sbi))
 
 #define START_BLOCK(sbi, segno)	(SM_I(sbi)->main_blkaddr +		\
-	(segno << sbi->log_blocks_per_seg))
+	((segno) << sbi->log_blocks_per_seg))
 
 static inline struct curseg_info *CURSEG_I(struct f2fs_sb_info *sbi, int type)
 {
@@ -313,46 +341,52 @@ static inline block_t sum_blk_addr(struct f2fs_sb_info *sbi, int base, int type)
 		- (base + 1) + type;
 }
 
+#define nats_in_cursum(jnl)             (le16_to_cpu(jnl->n_nats))
+#define sits_in_cursum(jnl)             (le16_to_cpu(jnl->n_sits))
 
-#define nats_in_cursum(sum)             (le16_to_cpu(sum->n_nats))
-#define sits_in_cursum(sum)             (le16_to_cpu(sum->n_sits))
-
-#define nat_in_journal(sum, i)          (sum->nat_j.entries[i].ne)
-#define nid_in_journal(sum, i)          (sum->nat_j.entries[i].nid)
-#define sit_in_journal(sum, i)          (sum->sit_j.entries[i].se)
-#define segno_in_journal(sum, i)        (sum->sit_j.entries[i].segno)
+#define nat_in_journal(jnl, i)          (jnl->nat_j.entries[i].ne)
+#define nid_in_journal(jnl, i)          (jnl->nat_j.entries[i].nid)
+#define sit_in_journal(jnl, i)          (jnl->sit_j.entries[i].se)
+#define segno_in_journal(jnl, i)        (jnl->sit_j.entries[i].segno)
 
 #define SIT_ENTRY_OFFSET(sit_i, segno)                                  \
-	(segno % sit_i->sents_per_block)
+	((segno) % sit_i->sents_per_block)
 #define SIT_BLOCK_OFFSET(sit_i, segno)                                  \
-	(segno / SIT_ENTRY_PER_BLOCK)
+	((segno) / SIT_ENTRY_PER_BLOCK)
 #define TOTAL_SEGS(sbi) (SM_I(sbi)->main_segments)
 
 static inline bool IS_VALID_NID(struct f2fs_sb_info *sbi, u32 nid)
 {
 	return (nid <= (NAT_ENTRY_PER_BLOCK *
-			F2FS_RAW_SUPER(sbi)->segment_count_nat
+			le32_to_cpu(F2FS_RAW_SUPER(sbi)->segment_count_nat)
 			<< (sbi->log_blocks_per_seg - 1)));
 }
 
 static inline bool IS_VALID_BLK_ADDR(struct f2fs_sb_info *sbi, u32 addr)
 {
-	int i;
-
-	if (addr >= F2FS_RAW_SUPER(sbi)->block_count ||
+	if (addr >= le64_to_cpu(F2FS_RAW_SUPER(sbi)->block_count) ||
 				addr < SM_I(sbi)->main_blkaddr) {
-		ASSERT_MSG("block addr [0x%x]\n", addr);
+		DBG(1, "block addr [0x%x]\n", addr);
 		return 0;
 	}
+	/* next block offset will be checked at the end of fsck. */
+	return 1;
+}
+
+static inline int IS_CUR_SEGNO(struct f2fs_sb_info *sbi, u32 segno, int type)
+{
+	int i;
 
 	for (i = 0; i < NO_CHECK_TYPE; i++) {
 		struct curseg_info *curseg = CURSEG_I(sbi, i);
 
-		if (START_BLOCK(sbi, curseg->segno) +
-					curseg->next_blkoff == addr)
-			return 0;
+		if (type == i)
+			continue;
+
+		if (segno == curseg->segno)
+			return 1;
 	}
-	return 1;
+	return 0;
 }
 
 static inline u64 BLKOFF_FROM_MAIN(struct f2fs_sb_info *sbi, u64 blk_addr)
@@ -381,7 +415,80 @@ static inline void node_info_from_raw_nat(struct node_info *ni,
 	ni->version = raw_nat->version;
 }
 
+static inline void set_summary(struct f2fs_summary *sum, nid_t nid,
+			unsigned int ofs_in_node, unsigned char version)
+{
+	sum->nid = cpu_to_le32(nid);
+	sum->ofs_in_node = cpu_to_le16(ofs_in_node);
+	sum->version = version;
+}
+
+#define S_SHIFT 12
+static unsigned char f2fs_type_by_mode[S_IFMT >> S_SHIFT] = {
+	[S_IFREG >> S_SHIFT]    = F2FS_FT_REG_FILE,
+	[S_IFDIR >> S_SHIFT]    = F2FS_FT_DIR,
+	[S_IFCHR >> S_SHIFT]    = F2FS_FT_CHRDEV,
+	[S_IFBLK >> S_SHIFT]    = F2FS_FT_BLKDEV,
+	[S_IFIFO >> S_SHIFT]    = F2FS_FT_FIFO,
+	[S_IFSOCK >> S_SHIFT]   = F2FS_FT_SOCK,
+	[S_IFLNK >> S_SHIFT]    = F2FS_FT_SYMLINK,
+};
+
+static inline int map_de_type(umode_t mode)
+{
+       return f2fs_type_by_mode[(mode & S_IFMT) >> S_SHIFT];
+}
+
+static inline void *inline_xattr_addr(struct f2fs_inode *inode)
+{
+	return (void *)&(inode->i_addr[DEF_ADDRS_PER_INODE -
+				get_inline_xattr_addrs(inode)]);
+}
+
+static inline int inline_xattr_size(struct f2fs_inode *inode)
+{
+	return get_inline_xattr_addrs(inode) * sizeof(__le32);
+}
+
 extern int lookup_nat_in_journal(struct f2fs_sb_info *sbi, u32 nid, struct f2fs_nat_entry *ne);
 #define IS_SUM_NODE_SEG(footer)		(footer.entry_type == SUM_TYPE_NODE)
+#define IS_SUM_DATA_SEG(footer)		(footer.entry_type == SUM_TYPE_DATA)
+
+static inline unsigned int dir_buckets(unsigned int level, int dir_level)
+{
+	if (level + dir_level < MAX_DIR_HASH_DEPTH / 2)
+		return 1 << (level + dir_level);
+	else
+		return MAX_DIR_BUCKETS;
+}
+
+static inline unsigned int bucket_blocks(unsigned int level)
+{
+	if (level < MAX_DIR_HASH_DEPTH / 2)
+		return 2;
+	else
+		return 4;
+}
+
+static inline unsigned long dir_block_index(unsigned int level,
+				int dir_level, unsigned int idx)
+{
+	unsigned long i;
+	unsigned long bidx = 0;
+
+	for (i = 0; i < level; i++)
+		bidx += dir_buckets(i, dir_level) * bucket_blocks(i);
+	bidx += idx * bucket_blocks(level);
+	return bidx;
+}
+
+static inline int is_dot_dotdot(const unsigned char *name, const int len)
+{
+	if (len == 1 && name[0] == '.')
+		return 1;
+	if (len == 2 && name[0] == '.' && name[1] == '.')
+		return 1;
+	return 0;
+}
 
 #endif /* _F2FS_H_ */

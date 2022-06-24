@@ -190,7 +190,7 @@ static int CalData[6][SZ_CALDATA_UNIT];
 
 #define ON_controller                   1
 #define OFF_controller                  2
-#define PATH_SAR_CONTROLLER_CAL  "/vendor/sns/sar_controller_cal.dat"
+#define PATH_SAR_CONTROLLER_CAL  "/mnt/vendor/sns/sar_controller_cal.dat"
 
 #define CH_1                        1
 #define CH_2                        2
@@ -816,19 +816,20 @@ static unsigned char load_firmware(struct atmf04_data *data, struct i2c_client *
   PINFO("###########ic version : %d.%d, ic_fw_version : %d###########", main_version, sub_version, ic_fw_version);
 
   //============================================================//
-  //[20180320] ADS Add
-  //[START]=====================================================//
-  mdelay(800);
-  check_firmware_ready(client); //just for test
-  sys_status = atmf04_i2c_smbus_read_byte_data(client, I2C_ADDR_SYS_STAT);
-  //[END]=======================================================//
-
-  //============================================================//
   //[20180320] ADS Change
   //[START]=====================================================//
   //if (fw_version > ic_fw_version || fw->data[version_addr] > main_version) {
   if( (fw->data[version_addr] != main_version) || (fw->data[version_addr+1] != sub_version)) {
   //[END]=======================================================//
+
+    //============================================================//
+    //[20180320] ADS Add
+    //[START]=====================================================//
+    mdelay(300);
+    check_firmware_ready(client); //just for test
+    sys_status = atmf04_i2c_smbus_read_byte_data(client, I2C_ADDR_SYS_STAT);
+    //[END]=======================================================//
+
 
     //mdelay(200);
 #if defined(CONFIG_LGE_SAR_CONTROLLER_NEW_ALGORITHM)
@@ -1047,7 +1048,7 @@ static void check_firmware_ready(struct i2c_client *client)
   int i;
 
   sys_status = atmf04_i2c_smbus_read_byte_data(client, I2C_ADDR_SYS_STAT);
-  for(i = 0 ; i < 50 ; i++) {
+  for(i = 0 ; i < 100 ; i++) {
     if (get_bit(sys_status, 0) == 1) {
       PINFO("%s: Firmware is busy now.....[%d] sys_status = [0x%x]", __FUNCTION__, i, sys_status);
       mdelay(10);
@@ -2557,11 +2558,20 @@ static struct i2c_driver atmf04_driver = {
   .id_table = atmf04_id,
 };
 
+static void atmf04_async_init(void *data, async_cookie_t cookie)
+{
+  int ret;
+  PINFO("ATMF04 async init start.\n");
+  atmf04_workqueue = create_workqueue("sar_controller");
+  ret = i2c_add_driver(&atmf04_driver);
+  if (ret)
+     PINFO("ATMF04 init failed");
+  PINFO("ATMF04 async init end.\n");
+}
 static int __init atmf04_init(void)
 {
-  PINFO("ATMF04 init Proximity driver: release.\n");
-  atmf04_workqueue = create_workqueue("sar_controller");
-  i2c_add_driver(&atmf04_driver);
+  PINFO("ATMF04 init Proximity driver: init.\n");
+  async_schedule(atmf04_async_init, NULL);
   return 0;
 }
 

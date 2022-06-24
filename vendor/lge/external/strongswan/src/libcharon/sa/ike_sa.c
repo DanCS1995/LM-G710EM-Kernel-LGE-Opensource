@@ -51,6 +51,10 @@
 //changhwan.lee
 #include "wod_channel.h"
 //changhwan.lee
+
+#include <lgpcas.h>
+#include <libpatchcodeid.h>
+
 ENUM(ike_sa_state_names, IKE_CREATED, IKE_DESTROYING,
 	"CREATED",
 	"CONNECTING",
@@ -1332,6 +1336,7 @@ static void set_dscp(private_ike_sa_t *this, packet_t *packet)
 		//packet->set_dscp(packet, ike_cfg->get_dscp(ike_cfg));
 		/* 2017-01-02 sy.yun@lge.com LGP_DATA_IWLAN_SET_DSCP_ORG [START] */
 		int slotid = get_slotid(get_name(this));
+        patch_code_id("LPCP-2083@n@c@libcharon@ike_sa.c@1");
 		uint8_t dscp_value = get_cust_setting_int_by_slotid(slotid, DSCP);
 		if (dscp_value == (uint8_t)0) {
 			dscp_value = ike_cfg->get_dscp(ike_cfg);
@@ -2071,6 +2076,7 @@ METHOD(ike_sa_t, reauth, status_t,
 
 	/* 2017-02-16 protocol-iwlan@lge.com LGP_DATA_IWLAN_REAUTH_DELETE_ONLY [START] */
 	int slotid = get_slotid(get_name(this));
+	patch_code_id("LPCP-2151@n@c@libcharon@ike_sa.c@1");
 #ifdef ANDROID
 	if (get_cust_setting_bool_by_slotid(slotid, REAUTH_DELETE_ONLY)) {
 		DBG1(DBG_IKE, "reauthenticating IKE_SA %s[%d] skip set_condition(COND_REAUTHENTICATING)",
@@ -2628,6 +2634,17 @@ METHOD(ike_sa_t, set_auth_lifetime, status_t,
 	hard = now + lifetime;
 	soft = hard - diff;
 
+	/* 2017-02-16 protocol-iwlan@lge.com LGP_DATA_IWLAN_REAUTH_DELETE_ONLY [START] */
+	int slotid = get_slotid(get_name(this));
+	patch_code_id("LPCP-2151@n@c@libcharon@ike_sa.c@2");
+	#ifdef ANDROID
+
+	DBG1(DBG_IKE, "Funtion: set_auth_lifetime ENTRY ");
+	if (get_cust_setting_bool_by_slotid(slotid, REAUTH_DELETE_ONLY)) {
+		DBG1(DBG_IKE, "Skip Scheduling Reauthentication: net.wo.reauth.delete is 1 ");
+	}
+	else{
+	/* 2017-02-16 protocol-iwlan@lge.com LGP_DATA_IWLAN_REAUTH_DELETE_ONLY [END] */
 	/* check if we have to send an AUTH_LIFETIME to enforce the new lifetime.
 	 * We send the notify in IKE_AUTH if not yet ESTABLISHED. */
 	send_update = this->state == IKE_ESTABLISHED && this->version == IKEV2 &&
@@ -2679,6 +2696,8 @@ METHOD(ike_sa_t, set_auth_lifetime, status_t,
 		this->task_manager->queue_task(this->task_manager, &task->task);
 		return this->task_manager->initiate(this->task_manager);
 	}
+#endif
+}
 #endif
 	return SUCCESS;
 }
@@ -2772,7 +2791,10 @@ METHOD(ike_sa_t, roam, status_t,
 		DBG2(DBG_IKE, "keeping connection path %H - %H",
 			 this->my_host, this->other_host);
 		/* 2016-07-05 protocol-iwlan@lge.com LGP_DATA_IWLAN_CONNECTION_SYNC [START] */
-		if (has_condition(this, COND_STALE)) do_dpd(this);
+		if (has_condition(this, COND_STALE)) {
+			patch_code_id("LPCP-2149@n@c@libcharon@ike_sa.c@1");
+			do_dpd(this);
+		}
 		/* 2016-07-05 protocol-iwlan@lge.com LGP_DATA_IWLAN_CONNECTION_SYNC [END] */
 		set_condition(this, COND_STALE, FALSE);
 

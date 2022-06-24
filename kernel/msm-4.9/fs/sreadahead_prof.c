@@ -12,7 +12,7 @@
 
 static struct sreadahead_prof prof_buf;
 
-#ifdef CONFIG_VM_EVENT_COUNTERS
+#ifndef CONFIG_VM_EVENT_COUNTERS
 static unsigned long vm_chk_jiffies;
 #endif
 
@@ -240,7 +240,7 @@ static int is_system_partition(unsigned char *fn) {
 	return strncmp((const char*)fn, "/system/", 8) == 0 ? 1 : 0;
 }
 
-#ifdef CONFIG_VM_EVENT_COUNTERS
+#ifndef CONFIG_VM_EVENT_COUNTERS
 static int check_vm_pgsteal_events(void)
 {
 	int cpu;
@@ -333,7 +333,7 @@ static int sreadahead_prof_RUN(struct file *filp, size_t len, loff_t pos)
 		del_timer(&prof_buf.timer);
 	}
 
-#ifdef CONFIG_VM_EVENT_COUNTERS
+#ifndef CONFIG_VM_EVENT_COUNTERS
 	if (time_after(jiffies, vm_chk_jiffies + VM_CHK_INTERVAL)) {
 		vm_chk_jiffies = jiffies;
 		if (check_vm_events()) {
@@ -368,7 +368,7 @@ static int sreadahead_profdata_init(void)
 		sizeof(struct sreadahead_profdata) * PROF_BUF_SIZE);
 	prof_buf.state = PROF_RUN;
 
-#ifdef CONFIG_VM_EVENT_COUNTERS
+#ifndef CONFIG_VM_EVENT_COUNTERS
 	vm_chk_jiffies = jiffies;
 #endif
 	mutex_unlock(&prof_buf.ulock);

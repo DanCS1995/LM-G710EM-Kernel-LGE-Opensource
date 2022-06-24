@@ -27,8 +27,8 @@ struct device;
  */
 enum fusb252_modes {
 	FUSB252_MODE_SBU_DISABLE = 0,
-	FUSB252_MODE_SBU_FACTORY_ID,
 	FUSB252_MODE_SBU_MD,
+	FUSB252_MODE_SBU_FACTORY_ID,
 	FUSB252_MODE_SBU_MD_ING,
 	FUSB252_MODE_EDGE_MD,
 	FUSB252_MODE_SBU_AUX,
@@ -39,8 +39,8 @@ enum fusb252_modes {
 };
 
 #define FUSB252_FLAG_SBU_DISABLE	BIT(FUSB252_MODE_SBU_DISABLE)
-#define FUSB252_FLAG_SBU_FACTORY_ID     BIT(FUSB252_MODE_SBU_FACTORY_ID)
 #define FUSB252_FLAG_SBU_MD		BIT(FUSB252_MODE_SBU_MD)
+#define FUSB252_FLAG_SBU_FACTORY_ID     BIT(FUSB252_MODE_SBU_FACTORY_ID)
 #define FUSB252_FLAG_SBU_MD_ING		BIT(FUSB252_MODE_SBU_MD_ING)
 #define FUSB252_FLAG_EDGE_MD		BIT(FUSB252_MODE_EDGE_MD)
 #define FUSB252_FLAG_SBU_AUX		BIT(FUSB252_MODE_SBU_AUX)
@@ -53,7 +53,7 @@ struct fusb252_instance;
 
 struct fusb252_desc {
 	unsigned long flags;
-	int (*ovp_callback)(struct fusb252_instance *inst);
+	void (*ovp_callback)(struct fusb252_instance *inst, int ovp);
 };
 
 struct fusb252_instance {
@@ -69,6 +69,7 @@ struct fusb252_instance {
 int fusb252_get(struct fusb252_instance *inst, unsigned long flag);
 int fusb252_put(struct fusb252_instance *inst, unsigned long flag);
 unsigned long fusb252_get_current_flag(struct fusb252_instance *inst);
+int fusb252_get_ovp_state(struct fusb252_instance *inst);
 
 struct fusb252_instance *__must_check
 devm_fusb252_instance_register(struct device *dev,

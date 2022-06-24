@@ -1,5 +1,10 @@
-ifeq ($(USE_LGE_DATA_IWLAN_6), true)
-ifeq ($(call is-vendor-board-platform,QCOM),true)
+ifeq ($(USE_LGE_DATA_IWLAN), true)
+#ifeq ($(call is-vendor-board-platform,QCOM),true)
+#ifeq ($(call is-board-platform-in-list,sm8150),true)
+ifeq ($(TARGET_DEVICE), $(filter $(TARGET_DEVICE), alpha alphaplus beta flash))
+CUR_PATH := $(call my-dir)
+include $(CUR_PATH)/ver5.7.1/Android.mk
+else
 LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
@@ -142,17 +147,6 @@ endif
 include $(addprefix $(LOCAL_PATH)/src/,$(addsuffix /Android.mk, \
          $(strongswan_BUILD)))
         #$(sort $(strongswan_BUILD))))
-else
-ifeq (sss,aaa)
-#ifeq ($(call is-vendor-board-platform,QCOM),true)
-CUR_PATH := $(call my-dir)
-include $(CUR_PATH)/ver5.5.1/Android.mk
 endif
-endif
-
-else
-ifeq ($(USE_LGE_DATA_IWLAN), true)
-CUR_PATH := $(call my-dir)
-include $(CUR_PATH)/iwlan_5/Android.mk
-endif
+#endif
 endif

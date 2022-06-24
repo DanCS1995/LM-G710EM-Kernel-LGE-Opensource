@@ -173,13 +173,11 @@ static ssize_t read_command(struct device *dev,
 	}
 
 	sscanf(buf, "%x %d", &cmd, &cnt);
-	if ((cmd <= 0) || (cnt <= 0)) {
+	if ((cmd <= 0) || (cnt <= 0) || (cnt > 256)) {
 		pr_err("invalid input, cmd:%x, cnt:%d\n", cmd, cnt);
 		return -EINVAL;
 	}
 
-	if (panel->lge.use_ddic_reg_lock)
-		lge_ddic_dsi_panel_tx_cmd_set(panel, LGE_DDIC_DSI_REGISTER_UNLOCK);
 	lge_mdss_dsi_panel_cmd_read(panel, (u8)cmd, cnt, &reg[0]);
 	if (panel->lge.use_ddic_reg_lock)
 		lge_ddic_dsi_panel_tx_cmd_set(panel, LGE_DDIC_DSI_REGISTER_LOCK);

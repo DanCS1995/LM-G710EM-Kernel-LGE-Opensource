@@ -353,11 +353,11 @@ static ssize_t hl_mode_store(struct device *dev,
 	}
 	mutex_unlock(&panel->panel_lock);
 
-	addr = (unsigned int **)kallsyms_lookup_name("main_display");
+	addr = (unsigned int **)kallsyms_lookup_name("primary_display");
 	if (addr) {
 		display = (struct dsi_display *)*addr;
 	} else {
-		pr_err("main_display not founded.\n");
+		pr_err("primary_display not founded.\n");
 		return -EINVAL;
 	}
 
@@ -382,6 +382,109 @@ static ssize_t hl_mode_store(struct device *dev,
 static DEVICE_ATTR(hl_mode, S_IRUGO | S_IWUSR | S_IWGRP,
 		hl_mode_show, hl_mode_store);
 
+static ssize_t irc_brighter_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct dsi_panel *panel;
+	int ret = 0;
+
+	panel = dev_get_drvdata(dev);
+	if (!panel) {
+		pr_err("panel is NULL\n");
+		return ret;
+	}
+
+	if (panel->lge.ddic_ops && panel->lge.ddic_ops->get_irc_state)
+		ret = (int)panel->lge.ddic_ops->get_irc_state(panel);
+	else
+		pr_info("Not support\n");
+
+	return sprintf(buf, "%d\n", ret);
+}
+
+static ssize_t irc_brighter_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	ssize_t ret = strnlen(buf, PAGE_SIZE);
+	unsigned int **addr;
+	struct dsi_panel *panel;
+	struct dsi_display *display;
+	int input;
+
+	panel = dev_get_drvdata(dev);
+	if (!panel) {
+		pr_err("panel is NULL\n");
+		return -EINVAL;
+	}
+
+	sscanf(buf, "%d", &input);
+	pr_info("input data %d\n", input);
+
+	mutex_lock(&panel->panel_lock);
+	if(!dsi_panel_initialized(panel) && panel->lge.use_irc_ctrl) {
+		panel->lge.irc_pending = true;
+		panel->lge.irc_request_state = ((input == 1) ? LGE_IRC_OFF : LGE_IRC_ON);
+		pr_err("panel not yet initialized. irc_ctrl is stored.\n");
+		mutex_unlock(&panel->panel_lock);
+		return -EINVAL;
+	}
+	mutex_unlock(&panel->panel_lock);
+
+	addr = (unsigned int **)kallsyms_lookup_name("main_display");
+	if (addr) {
+		display = (struct dsi_display *)*addr;
+	} else {
+		pr_err("main_display not founded.\n");
+		return -EINVAL;
+	}
+
+	if (!display) {
+		pr_err("display is null\n");
+		return -EINVAL;
+	}
+
+	if (display->is_cont_splash_enabled) {
+		pr_err("cont_splash enabled\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	if (panel->lge.use_irc_ctrl &&
+			panel->lge.ddic_ops && panel->lge.ddic_ops->set_irc_state) {
+		panel->lge.irc_pending = true;
+		panel->lge.irc_request_state = ((input == 1) ? LGE_IRC_OFF : LGE_IRC_ON);
+		mutex_unlock(&panel->panel_lock);
+		panel->lge.ddic_ops->set_irc_state(panel, LGE_GLOBAL_IRC_HBM,
+						panel->lge.irc_request_state);
+	} else {
+		mutex_unlock(&panel->panel_lock);
+		pr_info("Not support\n");
+	}
+
+	return ret;
+}
+static DEVICE_ATTR(irc_brighter, S_IRUGO | S_IWUSR | S_IWGRP, irc_brighter_show, irc_brighter_store);
+
+static ssize_t irc_support_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct dsi_panel *panel;
+	int ret = 0;
+
+	panel = dev_get_drvdata(dev);
+	if (!panel) {
+		pr_err("panel is NULL\n");
+		return ret;
+	}
+
+	if (!panel->lge.use_irc_ctrl) {
+		pr_err("irc control is not supported\n");
+	}
+
+	return sprintf(buf, "%d\n", (int)panel->lge.use_irc_ctrl);
+}
+static DEVICE_ATTR(irc_support, S_IRUGO, irc_support_show, NULL);
+
 int lge_brightness_create_sysfs(struct dsi_panel *panel,
 		struct class *class_panel)
 {
@@ -393,8 +496,21 @@ int lge_brightness_create_sysfs(struct dsi_panel *panel,
 		if(IS_ERR(brightness_sysfs_dev)) {
 			pr_err("Failed to create dev(brightness_sysfs_dev)!\n");
 		} else {
-			if ((rc = device_create_file(brightness_sysfs_dev, &dev_attr_hl_mode)) < 0)
-				pr_err("add hl_mode set node fail!");
+			if (panel->lge.use_hl_mode) {
+				if ((rc = device_create_file(brightness_sysfs_dev,
+								&dev_attr_hl_mode)) < 0)
+					pr_err("add hl_mode set node fail!");
+			}
+
+			if (panel->lge.use_irc_ctrl) {
+				if ((rc = device_create_file(brightness_sysfs_dev,
+								&dev_attr_irc_brighter)) < 0)
+					pr_err("add irc_mode set node fail!");
+
+				if ((rc = device_create_file(brightness_sysfs_dev,
+								&dev_attr_irc_support)) < 0)
+					pr_err("add irc_status set node fail!");
+			}
 		}
 	}
 	return rc;

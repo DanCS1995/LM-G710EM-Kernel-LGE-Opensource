@@ -3,27 +3,26 @@ PREFIX ?= $(DESTDIR)/usr
 SBINDIR ?= $(DESTDIR)/sbin
 MANDIR = $(PREFIX)/share/man
 LIBDIR ?= $(PREFIX)/lib
-AUDITH = $(shell ls /usr/include/libaudit.h 2>/dev/null)
+AUDITH ?= $(shell test -f /usr/include/libaudit.h && echo y)
 
 ABORT_ON_ERRORS=$(shell grep "^\#define ABORT_ON_ERRORS" setfiles.c | awk -S '{ print $$3 }')
 
 CFLAGS ?= -g -Werror -Wall -W
-override CFLAGS += -I$(PREFIX)/include
-LDLIBS = -lselinux -lsepol -L$(LIBDIR)
+override LDLIBS += -lselinux -lsepol
 
-ifeq ($(AUDITH), /usr/include/libaudit.h)
+ifeq ($(AUDITH), y)
 	override CFLAGS += -DUSE_AUDIT
-	LDLIBS += -laudit
+	override LDLIBS += -laudit
 endif
 
 all: setfiles restorecon restorecon_xattr man
 
-setfiles:  setfiles.o restore.o
+setfiles: setfiles.o restore.o
 
 restorecon: setfiles
 	ln -sf setfiles restorecon
 
-restorecon_xattr:  restorecon_xattr.o restore.o
+restorecon_xattr: restorecon_xattr.o restore.o
 
 man:
 	@cp -af setfiles.8 setfiles.8.man

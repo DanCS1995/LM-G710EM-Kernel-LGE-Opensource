@@ -7,9 +7,9 @@
 #endif
 
 #ifdef __LP64__
-#define ECRYPTFS_DEFAULT_KEY_MOD_DIR "/system/lib64"
+#define ECRYPTFS_DEFAULT_KEY_MOD_DIR "/product/lib64"
 #else
-#define ECRYPTFS_DEFAULT_KEY_MOD_DIR "/system/lib"
+#define ECRYPTFS_DEFAULT_KEY_MOD_DIR "/product/lib"
 #endif
 
 /* always defined to indicate that i18n is enabled */

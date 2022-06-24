@@ -212,11 +212,11 @@ int charging_time_remains(int rawsoc) {
 }
 
 bool charging_time_update(enum charging_supplier charger) {
-	static enum charging_supplier type = CHARGING_SUPPLY_NONE;
+	static enum charging_supplier type = CHARGING_SUPPLY_TYPE_NONE;
 
 	if (type != charger) {
-		bool charging = charger != CHARGING_SUPPLY_UNKNOWN
-			&& charger != CHARGING_SUPPLY_NONE;
+		bool charging = charger != CHARGING_SUPPLY_TYPE_UNKNOWN
+			&& charger != CHARGING_SUPPLY_TYPE_NONE;
 
 		if (charging) {
 			pr_chgtime(UPDATE, "Charging started, Start sampling\n");

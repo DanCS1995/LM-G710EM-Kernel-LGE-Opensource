@@ -258,6 +258,20 @@ config MACH_SDM845_JUDYP_SPR
 	help
 	  Support for the Qualcomm SDM845 JUDYP_SPR device.
 
+config MACH_SDM845_BETA
+	bool "SDM845 BETA"
+	depends on ARCH_SDM845
+	select MACH_LGE
+	help
+	  Support for the Qualcomm SDM845 BETA device.
+
+config MACH_SDM845_BETA_LAO_COM
+	bool "SDM845 bETA_LAO_COM"
+	depends on ARCH_SDM845
+	select MACH_LGE
+	help
+	  Support for the Qualcomm SDM845 BETA_LAO_COM device.
+
 config LGE_BOOTLOADER_LOG
 	tristate "Support LGE bootloader log"
 	default n
@@ -357,6 +371,20 @@ config LGE_MME_BUS
         help
           Say 'y' here to include support for the clock booster
           of msm bus to support LGE MME.
+
+config LGE_PAY_MME
+        tristate "Support WMC driver"
+        depends on MACH_LGE
+        default y
+        help
+          Say 'y' here to enable Wireless Magnetic Communication driver for LG pay
+
+config LGE_PAY_MME_TEST
+        tristate "Support WMC test"
+        depends on MACH_LGE
+        default n
+        help
+          Say 'y' here to enable Wireless Magnetic Communication test
 
 config LGE_DM_VERITY_RECOVERY
 	tristate "Support dm verity corrupt recovery"

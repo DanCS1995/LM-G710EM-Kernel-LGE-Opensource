@@ -20,6 +20,13 @@
 
 #include "internal.h"
 
+#ifdef CONFIG_CMA_PINPAGE_MIGRATION
+#include <linux/migrate.h>
+#include <linux/mm_inline.h>
+#include <linux/mmu_notifier.h>
+#include <asm/tlbflush.h>
+#endif
+
 static struct page *no_page_table(struct vm_area_struct *vma,
 		unsigned int flags)
 {
@@ -59,6 +66,78 @@ static int follow_pfn_pte(struct vm_area_struct *vma, unsigned long address,
 	/* Proper page table entry exists, but no corresponding struct page */
 	return -EEXIST;
 }
+
+#ifdef CONFIG_CMA_PINPAGE_MIGRATION
+static struct page *__alloc_nonmovable_userpage(struct page *page,
+				unsigned long private, int **result)
+{
+	return alloc_page(GFP_HIGHUSER);
+}
+
+static bool __need_migrate_cma_page(struct page *page,
+				struct vm_area_struct *vma,
+				unsigned long start, unsigned int flags)
+{
+	if (!(flags & FOLL_GET))
+		return false;
+
+	if (!is_cma_pageblock(page))
+		return false;
+
+	if ((vma->vm_flags & VM_STACK_INCOMPLETE_SETUP) ==
+					VM_STACK_INCOMPLETE_SETUP)
+		return false;
+
+	if (!(flags & FOLL_CMA))
+		return false;
+
+	migrate_prep_local();
+
+	if (!PageLRU(page))
+		return false;
+
+	return true;
+}
+
+static int __migrate_cma_pinpage(struct page *page, struct vm_area_struct *vma)
+{
+	struct zone *zone = page_zone(page);
+	struct list_head migratepages;
+	struct lruvec *lruvec;
+	int tries = 0;
+	int ret = 0;
+
+	INIT_LIST_HEAD(&migratepages);
+
+	if (__isolate_lru_page(page, 0) != 0) {
+		pr_warn("%s: failed to isolate lru page\n", __func__);
+		dump_page(page, "failed to isolate lru page");
+		return -EFAULT;
+	} else {
+		spin_lock_irq(&zone->zone_pgdat->lru_lock);
+		lruvec = mem_cgroup_page_lruvec(page, zone->zone_pgdat);
+		del_page_from_lru_list(page, lruvec, page_lru(page));
+		spin_unlock_irq(&zone->zone_pgdat->lru_lock);
+	}
+
+	list_add(&page->lru, &migratepages);
+	inc_zone_page_state(page, NR_ISOLATED_ANON + page_is_file_cache(page));
+
+	while (!list_empty(&migratepages) && tries++ < 5) {
+		ret = migrate_pages(&migratepages,
+			__alloc_nonmovable_userpage, NULL, 0, MIGRATE_SYNC, MR_CMA);
+	}
+
+	if (ret < 0) {
+		putback_movable_pages(&migratepages);
+		pr_err("%s: migration failed %p[%#lx]\n", __func__,
+					page, page_to_pfn(page));
+		return -EFAULT;
+	}
+
+	return 0;
+}
+#endif
 
 /*
  * FOLL_FORCE can write to even unwritable pte's, but only
@@ -151,6 +230,30 @@ retry:
 			return ERR_PTR(ret);
 		goto retry;
 	}
+
+#ifdef CONFIG_CMA_PINPAGE_MIGRATION
+	if (__need_migrate_cma_page(page, vma, address, flags)) {
+		pte_unmap_unlock(ptep, ptl);
+		if (__migrate_cma_pinpage(page, vma)) {
+			ptep = pte_offset_map_lock(mm, pmd, address, &ptl);
+		} else {
+			struct page *old_page = page;
+
+			migration_entry_wait(mm, pmd, address);
+			ptep = pte_offset_map_lock(mm, pmd, address, &ptl);
+			update_mmu_cache(vma, address, ptep);
+			pte = *ptep;
+			set_pte_at_notify(mm, address, ptep, pte);
+			page = vm_normal_page(vma, address, pte);
+			BUG_ON(!page);
+
+			pr_debug("cma: cma page %p[%#lx] migrated to new "
+					"page %p[%#lx]\n", old_page,
+					page_to_pfn(old_page),
+					page, page_to_pfn(page));
+		}
+	}
+#endif
 
 	if (flags & FOLL_GET) {
 		get_page(page);
@@ -428,6 +531,9 @@ static int check_vma_flags(struct vm_area_struct *vma, unsigned long gup_flags)
 	int foreign = (gup_flags & FOLL_REMOTE);
 
 	if (vm_flags & (VM_IO | VM_PFNMAP))
+		return -EFAULT;
+
+	if (gup_flags & FOLL_ANON && !vma_is_anonymous(vma))
 		return -EFAULT;
 
 	if (write) {
@@ -820,6 +926,25 @@ static __always_inline long __get_user_pages_locked(struct task_struct *tsk,
 	return pages_done;
 }
 
+#ifdef CONFIG_CMA_PINPAGE_MIGRATION
+long get_user_pages_foll_cma(struct task_struct *tsk, struct mm_struct *mm,
+		unsigned long start, unsigned long nr_pages,
+		int write, int force, struct page **pages,
+		struct vm_area_struct **vmas)
+{
+   unsigned int flags = FOLL_TOUCH;
+
+   if (write)
+       flags |= FOLL_WRITE;
+   if (force)
+       flags |= FOLL_FORCE;
+
+	return __get_user_pages_locked(tsk, mm, start, nr_pages,
+			pages, vmas, NULL, false, flags|FOLL_CMA);
+}
+#endif
+
+
 /*
  * We can leverage the VM_FAULT_RETRY functionality in the page fault
  * paths better by using either get_user_pages_locked() or
@@ -981,6 +1106,70 @@ long get_user_pages(unsigned long start, unsigned long nr_pages,
 				       gup_flags | FOLL_TOUCH);
 }
 EXPORT_SYMBOL(get_user_pages);
+
+#ifdef CONFIG_FS_DAX
+/*
+ * This is the same as get_user_pages() in that it assumes we are
+ * operating on the current task's mm, but it goes further to validate
+ * that the vmas associated with the address range are suitable for
+ * longterm elevated page reference counts. For example, filesystem-dax
+ * mappings are subject to the lifetime enforced by the filesystem and
+ * we need guarantees that longterm users like RDMA and V4L2 only
+ * establish mappings that have a kernel enforced revocation mechanism.
+ *
+ * "longterm" == userspace controlled elevated page count lifetime.
+ * Contrast this to iov_iter_get_pages() usages which are transient.
+ */
+long get_user_pages_longterm(unsigned long start, unsigned long nr_pages,
+		unsigned int gup_flags, struct page **pages,
+		struct vm_area_struct **vmas_arg)
+{
+	struct vm_area_struct **vmas = vmas_arg;
+	struct vm_area_struct *vma_prev = NULL;
+	long rc, i;
+
+	if (!pages)
+		return -EINVAL;
+
+	if (!vmas) {
+		vmas = kcalloc(nr_pages, sizeof(struct vm_area_struct *),
+			       GFP_KERNEL);
+		if (!vmas)
+			return -ENOMEM;
+	}
+
+	rc = get_user_pages(start, nr_pages, gup_flags, pages, vmas);
+
+	for (i = 0; i < rc; i++) {
+		struct vm_area_struct *vma = vmas[i];
+
+		if (vma == vma_prev)
+			continue;
+
+		vma_prev = vma;
+
+		if (vma_is_fsdax(vma))
+			break;
+	}
+
+	/*
+	 * Either get_user_pages() failed, or the vma validation
+	 * succeeded, in either case we don't need to put_page() before
+	 * returning.
+	 */
+	if (i >= rc)
+		goto out;
+
+	for (i = 0; i < rc; i++)
+		put_page(pages[i]);
+	rc = -EOPNOTSUPP;
+out:
+	if (vmas != vmas_arg)
+		kfree(vmas);
+	return rc;
+}
+EXPORT_SYMBOL(get_user_pages_longterm);
+#endif /* CONFIG_FS_DAX */
 
 /**
  * populate_vma_page_range() -  populate a range of pages in the vma.

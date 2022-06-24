@@ -122,6 +122,7 @@ static void VibeOSKernelLinuxStartTimer(void)
 {
     /* Reset watchdog counter */
     g_nWatchdogCounter = 0;
+
     if (!g_bTimerStarted)
     {
         __pm_stay_awake(&g_tspWakelock);
@@ -135,32 +136,27 @@ static void VibeOSKernelLinuxStartTimer(void)
         hrtimer_cancel(&g_tspTimer);
         hrtimer_start(&g_tspTimer, g_ktTimerPeriod, HRTIMER_MODE_REL);
     }
-
-    if (skip_fifo_check) {
-        skip_fifo_check = false;
-    } else {
 #ifdef IMMVIBESPI_USE_BUFFERFULL
-        if (ImmVibeSPI_ForceOut_BufferFull()) do
+    if (ImmVibeSPI_ForceOut_BufferFull()) do
 #else
-        else
+    else
 #endif
+    {
+        int res;  
+        /* 
+        ** Use interruptible version of down to be safe 
+        ** (try to not being stuck here if the semaphore is not freed for any reason)
+        */
+        res = down_interruptible(&g_hSemaphore);  /* wait for the semaphore to be freed by the timer */
+        if (res != 0)
         {
-            int res;
-            /*
-            ** Use interruptible version of down to be safe
-            ** (try to not being stuck here if the semaphore is not freed for any reason)
-            */
-            res = down_interruptible(&g_hSemaphore);  /* wait for the semaphore to be freed by the timer */
-            if (res != 0)
-            {
-                DbgOutInfo(("VibeOSKernelLinuxStartTimer: down_interruptible interrupted by a signal.\n"));
-            }
+            DbgOutInfo(("VibeOSKernelLinuxStartTimer: down_interruptible interrupted by a signal.\n"));
         }
-#ifdef IMMVIBESPI_USE_BUFFERFULL
-        /* wait if amplifier buffer is full or emptying buffer to realign silence with real time */
-	    while (ImmVibeSPI_ForceOut_BufferFull() > 0);
-#endif
     }
+#ifdef IMMVIBESPI_USE_BUFFERFULL
+    /* wait if amplifier buffer is full or emptying buffer to realign silence with real time */
+    while (ImmVibeSPI_ForceOut_BufferFull() > 0);
+#endif
 
     VibeOSKernelProcessData(NULL);
 

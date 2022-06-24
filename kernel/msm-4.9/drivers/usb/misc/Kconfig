@@ -298,3 +298,5 @@ config LGE_USB_SWITCH_FUSB252
 	help
 	  The FUSB252 is an integrated port protection switch for USB Type-C
 	  applications.
+
+source "drivers/usb/misc/lgmd/Kconfig"

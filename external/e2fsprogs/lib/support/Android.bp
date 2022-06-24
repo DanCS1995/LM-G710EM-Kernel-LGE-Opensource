@@ -4,6 +4,7 @@ cc_library {
     name: "libext2_quota",
     host_supported: true,
     unique_host_soname: true,
+    defaults: ["e2fsprogs-defaults"],
     srcs: [
         "dict.c",
         "mkquota.c",
@@ -18,15 +19,14 @@ cc_library {
     ],
     shared_libs: [
         "libext2fs",
-        "libext2_com_err",
         "libext2_blkid",
     ],
 
-    cflags: [
-        "-W",
-        "-Wall",
-        "-Wno-macro-redefined",
-    ],
+    target: {
+        windows: {
+            enabled: true
+        },
+    },
 
     header_libs: ["libext2-headers"],
     export_include_dirs: ["."],
@@ -37,14 +37,11 @@ cc_library_shared {
     name: "libext2_profile",
     host_supported: true,
     unique_host_soname: true,
+    defaults: ["e2fsprogs-defaults"],
 
     srcs: [
         "prof_err.c",
         "profile.c",
-    ],
-    cflags = [
-        "-W",
-        "-Wall",
     ],
     shared_libs: ["libext2_com_err"],
 

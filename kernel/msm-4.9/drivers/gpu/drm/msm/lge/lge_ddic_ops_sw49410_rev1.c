@@ -241,20 +241,29 @@ static void prepare_scroll_cmd(struct dsi_panel *panel, struct dsi_cmd_desc *cmd
 	}
 }
 
-static int prepare_aod_cmds_sw49410_rev1(struct dsi_panel *panel, struct dsi_cmd_desc *cmds, int cmds_count)
+static void prepare_aod_area_sw49410_rev1(struct dsi_panel *panel, struct dsi_cmd_desc *cmds, int cmds_count)
 {
-	int rc = 0, sr = 0, er = 0;
+	int sr = 0, er = 0;
 
 	if (panel == NULL || cmds == NULL || cmds_count == 0)
-		return -EINVAL;
+		return;
 
 	adjust_roi(panel, &sr, &er);
 	prepare_cmd(cmds, cmds_count, ADDR_PTLAR, sr, er);
 	prepare_scroll_cmd(panel, cmds, cmds_count, ADDR_U2CTRL, panel->lge.aod_area.y-1);
 
-	return rc;
+	return;
 }
 
+static int prepare_aod_cmds_sw49410_rev1(struct dsi_panel *panel, struct dsi_cmd_desc *cmds, int cmds_count)
+{
+	int rc = 0;
+
+	if (panel == NULL || cmds == NULL || cmds_count == 0)
+		return -EINVAL;
+
+	return rc;
+}
 
 void sharpness_set_send_sw49410_rev1(struct dsi_panel *panel)
 {
@@ -793,6 +802,7 @@ void sharpness_set_sw49410_rev1(struct dsi_panel *panel, int mode)
 struct lge_ddic_ops sw49410_rev1_ops = {
 	.store_aod_area = store_aod_area,
 	.prepare_aod_cmds = prepare_aod_cmds_sw49410_rev1,
+	.prepare_aod_area = prepare_aod_area_sw49410_rev1,
 	.bist_ctrl = NULL,
 	.release_bist = NULL,
 	.lge_set_screen_mode = lge_set_screen_mode_sw49410_rev1,

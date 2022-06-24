@@ -174,6 +174,7 @@ char *CIL_KEY_SELINUXUSER;
 char *CIL_KEY_SELINUXUSERDEFAULT;
 char *CIL_KEY_TYPEATTRIBUTE;
 char *CIL_KEY_TYPEATTRIBUTESET;
+char *CIL_KEY_EXPANDTYPEATTRIBUTE;
 char *CIL_KEY_TYPEALIAS;
 char *CIL_KEY_TYPEALIASACTUAL;
 char *CIL_KEY_TYPEBOUNDS;
@@ -202,6 +203,8 @@ char *CIL_KEY_VALIDATETRANS;
 char *CIL_KEY_MLSVALIDATETRANS;
 char *CIL_KEY_CONTEXT;
 char *CIL_KEY_FILECON;
+char *CIL_KEY_IBPKEYCON;
+char *CIL_KEY_IBENDPORTCON;
 char *CIL_KEY_PORTCON;
 char *CIL_KEY_NODECON;
 char *CIL_KEY_GENFSCON;
@@ -285,6 +288,8 @@ struct cil_db {
 	struct cil_sort *genfscon;
 	struct cil_sort *filecon;
 	struct cil_sort *nodecon;
+	struct cil_sort *ibpkeycon;
+	struct cil_sort *ibendportcon;
 	struct cil_sort *portcon;
 	struct cil_sort *pirqcon;
 	struct cil_sort *iomemcon;
@@ -311,6 +316,7 @@ struct cil_db {
 	int preserve_tunables;
 	int handle_unknown;
 	int mls;
+	int multiple_decls;
 	int target_platform;
 	int policy_version;
 };
@@ -515,20 +521,29 @@ struct cil_type	{
 	int value;
 };
 
-#define CIL_ATTR_AVRULE     0x01
-#define CIL_ATTR_NEVERALLOW 0x02
-#define CIL_ATTR_CONSTRAINT 0x04
+#define CIL_ATTR_AVRULE		(1 << 0)
+#define CIL_ATTR_NEVERALLOW	(1 << 1)
+#define CIL_ATTR_CONSTRAINT	(1 << 2)
+#define CIL_ATTR_EXPAND_TRUE	(1 << 3)
+#define CIL_ATTR_EXPAND_FALSE	(1 << 4)
 struct cil_typeattribute {
 	struct cil_symtab_datum datum;
 	struct cil_list *expr_list;
 	ebitmap_t *types;
 	int used;	// whether or not this attribute was used in a binary policy rule
+	int keep;
 };
 
 struct cil_typeattributeset {
 	char *attr_str;
 	struct cil_list *str_expr;
 	struct cil_list *datum_expr;
+};
+
+struct cil_expandtypeattribute {
+	struct cil_list *attr_strs;
+	struct cil_list *attr_datums;
+	int expand;
 };
 
 struct cil_typepermissive {
@@ -728,6 +743,14 @@ enum cil_protocol {
 	CIL_PROTOCOL_DCCP
 };
 
+struct cil_ibpkeycon {
+	char *subnet_prefix_str;
+	uint32_t pkey_low;
+	uint32_t pkey_high;
+	char *context_str;
+	struct cil_context *context;
+};
+
 struct cil_portcon {
 	enum cil_protocol proto;
 	uint32_t port_low;
@@ -770,6 +793,12 @@ struct cil_netifcon {
 	char *context_str;
 };
 
+struct cil_ibendportcon {
+	char *dev_name_str;
+	uint32_t port;
+	char *context_str;
+	struct cil_context *context;
+};
 struct cil_pirqcon {
 	uint32_t pirq;
 	char *context_str;
@@ -955,6 +984,7 @@ int cil_get_symtab(struct cil_tree_node *ast_node, symtab_t **symtab, enum cil_s
 void cil_sort_init(struct cil_sort **sort);
 void cil_sort_destroy(struct cil_sort **sort);
 void cil_netifcon_init(struct cil_netifcon **netifcon);
+void cil_ibendportcon_init(struct cil_ibendportcon **ibendportcon);
 void cil_context_init(struct cil_context **context);
 void cil_level_init(struct cil_level **level);
 void cil_levelrange_init(struct cil_levelrange **lvlrange);
@@ -977,6 +1007,7 @@ void cil_roleattributeset_init(struct cil_roleattributeset **attrset);
 void cil_roletype_init(struct cil_roletype **roletype);
 void cil_typeattribute_init(struct cil_typeattribute **attribute);
 void cil_typeattributeset_init(struct cil_typeattributeset **attrset);
+void cil_expandtypeattribute_init(struct cil_expandtypeattribute **expandattr);
 void cil_alias_init(struct cil_alias **alias);
 void cil_aliasactual_init(struct cil_aliasactual **aliasactual);
 void cil_typepermissive_init(struct cil_typepermissive **typeperm);
@@ -997,6 +1028,7 @@ void cil_catset_init(struct cil_catset **catset);
 void cil_cats_init(struct cil_cats **cats);
 void cil_senscat_init(struct cil_senscat **senscat);
 void cil_filecon_init(struct cil_filecon **filecon);
+void cil_ibpkeycon_init(struct cil_ibpkeycon **ibpkeycon);
 void cil_portcon_init(struct cil_portcon **portcon);
 void cil_nodecon_init(struct cil_nodecon **nodecon);
 void cil_genfscon_init(struct cil_genfscon **genfscon);

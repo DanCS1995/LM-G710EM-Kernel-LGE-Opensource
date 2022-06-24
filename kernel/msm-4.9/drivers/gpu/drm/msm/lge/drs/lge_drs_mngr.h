@@ -20,6 +20,7 @@ enum lge_drs_result {
 };
 
 enum lge_drs_request {
+	DRS_NOT_READY = -1,
 	DRS_UNFREEZE = 0,
 	DRS_FREEZE,
 	DRS_TIMEDOUT,
@@ -44,6 +45,7 @@ struct lge_drs_mngr {
 	int num_res;
 	u32 request_res;
 	u32 current_res;
+	int current_freeze_state;
 	struct drs_res_info supported_res[3];
 	struct mutex drs_lock;
 	struct workqueue_struct *drs_workq;
@@ -56,4 +58,6 @@ extern bool lge_drs_mngr_is_enabled(struct dsi_panel *panel);
 extern int lge_drs_mngr_begin(struct dsi_panel *panel);
 extern int lge_drs_mngr_finish(struct dsi_panel *panel);
 extern int lge_drs_mngr_get_state(struct dsi_panel *panel);
+extern int lge_drs_mngr_set_freeze_state(enum lge_drs_request state);
+extern int lge_drs_mngr_get_freeze_state(void);
 #endif // _LGE_DRS_MNGR_H_

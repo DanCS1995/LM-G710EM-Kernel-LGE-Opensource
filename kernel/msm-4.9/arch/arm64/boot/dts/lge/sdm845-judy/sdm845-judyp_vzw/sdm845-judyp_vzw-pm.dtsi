@@ -12,11 +12,3 @@
 
 #include "../sdm845-judyp_common/sdm845-judyp_common-pm.dtsi"
 
-&vendor {
-	lge-veneer-psy {
-		protection-showcase {
-			lge,soc-max = <35>;
-			lge,soc-min = <30>;
-		};
-	};
-};

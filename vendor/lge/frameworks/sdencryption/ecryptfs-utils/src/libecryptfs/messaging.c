@@ -171,6 +171,7 @@ out:
     return rc;
 }
 
+/*
 int ecryptfs_run_daemon(struct ecryptfs_messaging_ctx *mctx)
 {
     int rc;
@@ -188,3 +189,4 @@ int ecryptfs_run_daemon(struct ecryptfs_messaging_ctx *mctx)
 out:
     return rc;
 }
+*/

@@ -34,6 +34,9 @@
 
 #include <utils/cust_settings.h>
 
+#include <lgpcas.h>
+#include <libpatchcodeid.h>
+
 typedef struct private_main_mode_t private_main_mode_t;
 
 /**
@@ -107,6 +110,7 @@ static bool establish(private_main_mode_t *this)
 	}
 
 #ifdef __ANDROID__
+        patch_code_id("LPCP-2249@n@c@libcharon@main_mode.c@1");
 	if (get_cust_setting_bool(LGP_DATA_DEBUG_ENABLE_PRIVACY_LOG)) {
 		DBG1(DBG_IKE, "IKE_SA %s[%d] established between %H[%Y]...%H[%Y]",
 			 this->ike_sa->get_name(this->ike_sa),

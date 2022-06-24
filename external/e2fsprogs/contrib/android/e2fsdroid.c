@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <getopt.h>
 #include <string.h>
@@ -19,7 +21,8 @@ static char *basefs_in;
 static char *mountpoint = "";
 static time_t fixed_time = -1;
 static char *fs_config_file;
-static char *file_contexts;
+static struct selinux_opt seopt_file[8];
+static int max_nr_opt = (int)sizeof(seopt_file) / sizeof(seopt_file[0]);
 static char *product_out;
 static char *src_dir;
 static int android_configure;
@@ -29,7 +32,7 @@ static void usage(int ret)
 {
 	fprintf(stderr, "%s [-B block_list] [-D basefs_out] [-T timestamp]\n"
 			"\t[-C fs_config] [-S file_contexts] [-p product_out]\n"
-			"\t[-a mountpoint] [-d basefs_in] [-f src_dir] [-e] image\n",
+			"\t[-a mountpoint] [-d basefs_in] [-f src_dir] [-e] [-s] image\n",
                 prog_name);
 	exit(ret);
 }
@@ -40,7 +43,10 @@ static char *absolute_path(const char *file)
 	char cwd[PATH_MAX];
 
 	if (file[0] != '/') {
-		getcwd(cwd, PATH_MAX);
+		if (getcwd(cwd, PATH_MAX) == NULL) {
+			fprintf(stderr, "Failed to getcwd\n");
+			exit(EXIT_FAILURE);
+		}
 		ret = malloc(strlen(cwd) + 1 + strlen(file) + 1);
 		if (ret)
 			sprintf(ret, "%s/%s", cwd, file);
@@ -58,10 +64,16 @@ int main(int argc, char *argv[])
 	io_manager io_mgr;
 	ext2_filsys fs = NULL;
 	struct fs_ops_callbacks fs_callbacks = { NULL, NULL };
+	char *token;
+	int nr_opt = 0;
+	ext2_ino_t inodes_count;
+	ext2_ino_t free_inodes_count;
+	blk64_t blocks_count;
+	blk64_t free_blocks_count;
 
 	add_error_table(&et_ext2_error_table);
 
-	while ((c = getopt (argc, argv, "T:C:S:p:a:D:d:B:f:e")) != EOF) {
+	while ((c = getopt (argc, argv, "T:C:S:p:a:D:d:B:f:es")) != EOF) {
 		switch (c) {
 		case 'T':
 			fixed_time = strtoul(optarg, &p, 0);
@@ -72,7 +84,18 @@ int main(int argc, char *argv[])
 			android_configure = 1;
 			break;
 		case 'S':
-			file_contexts = absolute_path(optarg);
+			token = strtok(optarg, ",");
+			while (token) {
+				if (nr_opt == max_nr_opt) {
+					fprintf(stderr, "Expected at most %d selinux opts\n",
+						max_nr_opt);
+					exit(EXIT_FAILURE);
+				}
+				seopt_file[nr_opt].type = SELABEL_OPT_PATH;
+				seopt_file[nr_opt].value = absolute_path(token);
+				nr_opt++;
+				token = strtok(NULL, ",");
+			}
 			android_configure = 1;
 			break;
 		case 'p':
@@ -96,6 +119,9 @@ int main(int argc, char *argv[])
 		case 'e':
 			android_sparse_file = 0;
 			break;
+		case 's':
+			flags |= EXT2_FLAG_SHARE_DUP;
+			break;
 		default:
 			usage(EXIT_FAILURE);
 		}
@@ -104,9 +130,17 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Expected filename after options\n");
 		exit(EXIT_FAILURE);
 	}
-	in_file = strdup(argv[optind]);
 
-	io_mgr = android_sparse_file ? sparse_io_manager: unix_io_manager;
+	if (android_sparse_file) {
+		io_mgr = sparse_io_manager;
+		if (asprintf(&in_file, "(%s)", argv[optind]) == -1) {
+			fprintf(stderr, "Failed to allocate file name\n");
+			exit(EXIT_FAILURE);
+		}
+	} else {
+		io_mgr = unix_io_manager;
+		in_file = strdup(argv[optind]);
+	}
 	retval = ext2fs_open(in_file, flags, 0, 0, io_mgr, &fs);
 	if (retval) {
 		com_err(prog_name, retval, "while opening file %s\n", in_file);
@@ -140,7 +174,7 @@ int main(int argc, char *argv[])
 
 	if (android_configure) {
 		retval = android_configure_fs(fs, src_dir, product_out, mountpoint,
-			file_contexts, fs_config_file, fixed_time);
+			seopt_file, nr_opt, fs_config_file, fixed_time);
 		if (retval) {
 			com_err(prog_name, retval, "%s",
 				"while configuring the file system");
@@ -168,12 +202,21 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	inodes_count = fs->super->s_inodes_count;
+	free_inodes_count = fs->super->s_free_inodes_count;
+	blocks_count = ext2fs_blocks_count(fs->super);
+	free_blocks_count = ext2fs_free_blocks_count(fs->super);
+
 	retval = ext2fs_close_free(&fs);
 	if (retval) {
 		com_err(prog_name, retval, "%s",
 				"while writing superblocks");
 		exit(1);
 	}
+
+	printf("Created filesystem with %u/%u inodes and %llu/%llu blocks\n",
+			inodes_count - free_inodes_count, inodes_count,
+			blocks_count - free_blocks_count, blocks_count);
 
 	remove_error_table(&et_ext2_error_table);
 	return 0;

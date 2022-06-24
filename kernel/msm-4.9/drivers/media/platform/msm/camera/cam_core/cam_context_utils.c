@@ -91,10 +91,19 @@ int cam_context_buf_done_from_hw(struct cam_context *ctx,
 	 */
 	list_del_init(&req->list);
 	spin_unlock(&ctx->lock);
-	if (!bubble_state)
+	if (!bubble_state) {
 		result = CAM_SYNC_STATE_SIGNALED_SUCCESS;
-	else
+	} else {
+		CAM_DBG(CAM_REQ,
+			"[%s][ctx_id %d] : req[%llu] is done with error",
+			ctx->dev_name, ctx->ctx_id, req->request_id);
+
+		for (j = 0; j < req->num_out_map_entries; j++)
+			CAM_DBG(CAM_REQ, "fence %d signaled with error",
+				req->out_map_entries[j].sync_id);
+
 		result = CAM_SYNC_STATE_SIGNALED_ERROR;
+	}
 
 	for (j = 0; j < req->num_out_map_entries; j++) {
 		cam_sync_signal(req->out_map_entries[j].sync_id, result);
@@ -266,7 +275,7 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 	uint64_t packet_addr;
 	struct cam_packet *packet;
 	size_t len = 0;
-	int32_t i = 0;
+	int32_t i = 0, j = 0;
 
 	if (!ctx || !cmd) {
 		CAM_ERR(CAM_CTXT, "Invalid input params %pK %pK", ctx, cmd);
@@ -328,6 +337,7 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 	cfg.out_map_entries = req->out_map_entries;
 	cfg.max_in_map_entries = CAM_CTX_CFG_MAX;
 	cfg.in_map_entries = req->in_map_entries;
+	cfg.pf_data = &(req->pf_data);
 
 	rc = ctx->hw_mgr_intf->hw_prepare_update(
 		ctx->hw_mgr_intf->hw_mgr_priv, &cfg);
@@ -346,6 +356,15 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 	req->status = 1;
 	req->req_priv = cfg.priv;
 
+	for (i = 0; i < req->num_out_map_entries; i++) {
+		rc = cam_sync_get_obj_ref(req->out_map_entries[i].sync_id);
+		if (rc) {
+			CAM_ERR(CAM_CTXT, "Can't get ref for sync %d",
+				req->out_map_entries[i].sync_id);
+			goto put_ref;
+		}
+	}
+
 	if (req->num_in_map_entries > 0) {
 		spin_lock(&ctx->lock);
 		list_add_tail(&req->list, &ctx->pending_req_list);
@@ -356,17 +375,17 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 				"[%s][%d] : Moving req[%llu] from free_list to pending_list",
 				ctx->dev_name, ctx->ctx_id, req->request_id);
 
-		for (i = 0; i < req->num_in_map_entries; i++) {
+		for (j = 0; j < req->num_in_map_entries; j++) {
 			cam_context_getref(ctx);
 			rc = cam_sync_register_callback(
 					cam_context_sync_callback,
 					(void *)req,
-					req->in_map_entries[i].sync_id);
+					req->in_map_entries[j].sync_id);
 			if (rc) {
 				CAM_ERR(CAM_CTXT,
 					"[%s][%d] Failed register fence cb: %d ret = %d",
 					ctx->dev_name, ctx->ctx_id,
-					req->in_map_entries[i].sync_id, rc);
+					req->in_map_entries[j].sync_id, rc);
 				spin_lock(&ctx->lock);
 				list_del_init(&req->list);
 				spin_unlock(&ctx->lock);
@@ -379,16 +398,23 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 
 				cam_context_putref(ctx);
 
-				goto free_req;
+				goto put_ref;
 			}
 			CAM_DBG(CAM_CTXT, "register in fence cb: %d ret = %d",
-				req->in_map_entries[i].sync_id, rc);
+				req->in_map_entries[j].sync_id, rc);
 		}
 		goto end;
 	}
 
 	return rc;
 
+put_ref:
+	for (--i; i >= 0; i--) {
+		rc = cam_sync_put_obj_ref(req->out_map_entries[i].sync_id);
+		if (rc)
+			CAM_ERR(CAM_CTXT, "Failed to put ref of fence %d",
+				req->out_map_entries[i].sync_id);
+	}
 free_req:
 	spin_lock(&ctx->lock);
 	list_add_tail(&req->list, &ctx->free_req_list);
@@ -481,6 +507,7 @@ free_hw:
 	release.ctxt_to_hw_map = ctx->ctxt_to_hw_map;
 	ctx->hw_mgr_intf->hw_release(ctx->hw_mgr_intf->hw_mgr_priv, &release);
 	ctx->ctxt_to_hw_map = NULL;
+	ctx->dev_hdl = -1;
 end:
 	return rc;
 }
@@ -495,6 +522,7 @@ int32_t cam_context_flush_ctx_to_hw(struct cam_context *ctx)
 	bool free_req;
 
 	CAM_DBG(CAM_CTXT, "[%s] E: NRT flush ctx", ctx->dev_name);
+	memset(&flush_args, 0, sizeof(flush_args));
 
 	/*
 	 * flush pending requests, take the sync lock to synchronize with the
@@ -551,10 +579,9 @@ int32_t cam_context_flush_ctx_to_hw(struct cam_context *ctx)
 					CAM_SYNC_STATE_SIGNALED_ERROR);
 				if (rc == -EALREADY) {
 					CAM_ERR(CAM_CTXT,
-						"Req: %llu already signalled, sync_id:%d",
-						req->request_id,
-						req->out_map_entries[i].
-						sync_id);
+					"Req: %llu already signalled, sync_id:%d",
+					req->request_id,
+					req->out_map_entries[i].sync_id);
 					break;
 				}
 			}
@@ -656,11 +683,13 @@ int32_t cam_context_flush_req_to_hw(struct cam_context *ctx,
 	struct cam_ctx_request *req = NULL;
 	struct cam_hw_flush_args flush_args;
 	uint32_t i;
+	int32_t sync_id = 0;
 	int rc = 0;
 	bool free_req = false;
 
 	CAM_DBG(CAM_CTXT, "[%s] E: NRT flush req", ctx->dev_name);
 
+	memset(&flush_args, 0, sizeof(flush_args));
 	flush_args.num_req_pending = 0;
 	flush_args.num_req_active = 0;
 	mutex_lock(&ctx->sync_mutex);
@@ -727,20 +756,20 @@ int32_t cam_context_flush_req_to_hw(struct cam_context *ctx,
 		}
 
 		if (flush_args.num_req_pending || flush_args.num_req_active) {
-			for (i = 0; i < req->num_out_map_entries; i++)
-				if (req->out_map_entries[i].sync_id != -1) {
-					rc = cam_sync_signal(
-						req->out_map_entries[i].sync_id,
+			for (i = 0; i < req->num_out_map_entries; i++) {
+				sync_id =
+					req->out_map_entries[i].sync_id;
+				if (sync_id != -1) {
+					rc = cam_sync_signal(sync_id,
 						CAM_SYNC_STATE_SIGNALED_ERROR);
 					if (rc == -EALREADY) {
 						CAM_ERR(CAM_CTXT,
-							"Req: %llu already signalled, sync_id:%d",
-							req->request_id,
-							req->out_map_entries[i].
-							sync_id);
+						"Req: %llu already signalled, sync_id:%d",
+						req->request_id, sync_id);
 						break;
 					}
 				}
+			}
 			if (flush_args.num_req_active || free_req) {
 				req->ctx = NULL;
 				spin_lock(&ctx->lock);
@@ -749,12 +778,12 @@ int32_t cam_context_flush_req_to_hw(struct cam_context *ctx,
 
 				if (cam_debug_ctx_req_list & ctx->dev_id)
 					CAM_INFO(CAM_CTXT,
-						 "[%s][%d] : Moving req[%llu] from %s to free_list",
+						"[%s][%d] : Moving req[%llu] from %s to free_list",
 						ctx->dev_name, ctx->ctx_id,
 						req->request_id,
 						flush_args.num_req_active ?
-						"active_list" :
-						"pending_list");
+							"active_list" :
+							"pending_list");
 			}
 		}
 	}
@@ -872,6 +901,41 @@ int32_t cam_context_stop_dev_to_hw(struct cam_context *ctx)
 		stop.ctxt_to_hw_map = ctx->ctxt_to_hw_map;
 		ctx->hw_mgr_intf->hw_stop(ctx->hw_mgr_intf->hw_mgr_priv,
 			&stop);
+	}
+
+end:
+	return rc;
+}
+
+int32_t cam_context_dump_pf_info_to_hw(struct cam_context *ctx,
+	struct cam_packet *packet, unsigned long iova, uint32_t buf_info,
+	bool *mem_found)
+{
+	int rc = 0;
+	struct cam_hw_cmd_args cmd_args;
+
+	if (!ctx) {
+		CAM_ERR(CAM_CTXT, "Invalid input params %pK ", ctx);
+		rc = -EINVAL;
+		goto end;
+	}
+
+	if (!ctx->hw_mgr_intf) {
+		CAM_ERR(CAM_CTXT, "[%s][%d] HW interface is not ready",
+			ctx->dev_name, ctx->ctx_id);
+		rc = -EFAULT;
+		goto end;
+	}
+
+	if (ctx->hw_mgr_intf->hw_cmd) {
+		cmd_args.ctxt_to_hw_map = ctx->ctxt_to_hw_map;
+		cmd_args.cmd_type = CAM_HW_MGR_CMD_DUMP_PF_INFO;
+		cmd_args.u.pf_args.pf_data.packet = packet;
+		cmd_args.u.pf_args.iova = iova;
+		cmd_args.u.pf_args.buf_info = buf_info;
+		cmd_args.u.pf_args.mem_found = mem_found;
+		ctx->hw_mgr_intf->hw_cmd(ctx->hw_mgr_intf->hw_mgr_priv,
+			&cmd_args);
 	}
 
 end:

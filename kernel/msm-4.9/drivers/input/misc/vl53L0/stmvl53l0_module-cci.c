@@ -591,7 +591,7 @@ int stmvl53l0_power_down_cci(void)
 		return -EINVAL;
 	}
 
-	rc = msm_camera_power_down(power_info, soc_info);
+	rc = cam_sensor_util_power_down(power_info, soc_info);
 	if (rc) {
 		vl53l0_dbgmsg( "power down the core is failed:%d", rc);
 		return rc;
@@ -708,6 +708,7 @@ int32_t ldaf_i2c_read_seq(uint32_t addr, uint8_t *data, uint16_t num_byte)
 		&(local_cam_ldaf_t->io_master_info),
 		addr,
 		&data[0],
+		CAMERA_SENSOR_I2C_TYPE_BYTE,
 		CAMERA_SENSOR_I2C_TYPE_BYTE,
 		num_byte);
 

@@ -22,24 +22,27 @@ static int pr_debugmask;
 
 #include "veneer-primitives.h"
 
-#define BATTEMP_NOTREADY INT_MAX
-#define BATTEMP_WAKELOCK "lge-btp-scenario"
+#define BATTEMP_NOTREADY	INT_MAX
+#define BATTEMP_WAKELOCK	"lge-btp-scenario"
 
-#define VOTER_NAME_ICHARGE "BTP"
-#define VOTER_NAME_VFLOAT "BTP"
+#define VOTER_NAME_ICHARGE	"BTP"
+#define VOTER_NAME_VFLOAT	"BTP"
+#define VOTER_NAME_CHILLY	"BTP(CHILLY)"
 
 static struct protection_battemp {
 	struct delayed_work	battemp_dwork;
 	struct wakeup_source	battemp_wakelock;
-	bool			battemp_charging;
-	int			battemp_health;
 
 	// processed in external
 	bool (*get_protection_battemp)(bool* charging, int* temperature, int* mvoltage);
 	void (*set_protection_battemp)(int health, int micharge, int mvfloat);
 
+	struct voter_entry voter_ichilly;
 	struct voter_entry voter_icharge;
 	struct voter_entry voter_vfloat;
+
+	bool health_chilly;
+	int  health_jeita;
 
 // below fields are set in device tree
 	int threshold_degc_upto_cool;	//  30 by default
@@ -63,111 +66,145 @@ const	int period_ms_unknown;
 	int warm_ma_charge;
 	int warm_mv_float;
 
-} battemp_me  = {
-	.battemp_health = POWER_SUPPLY_HEALTH_UNKNOWN,
-	.battemp_charging = false,
+	// below fileds are for battery protection in chilly
+	bool chilly_is_supported;
+	int  chilly_degc_lowerbound;
+	int  chilly_degc_upperbound;
+	int  chilly_mv_alert;
+	int  chilly_ma_alert;
+	int  chilly_ma_normal;
 
+} battemp_me = {
+	.voter_ichilly = { .type = VOTER_TYPE_INVALID },
 	.voter_icharge = { .type = VOTER_TYPE_INVALID },
-	.voter_vfloat = { .type = VOTER_TYPE_INVALID },
+	.voter_vfloat  = { .type = VOTER_TYPE_INVALID },
 
-	.threshold_degc_upto_cool = BATTEMP_NOTREADY,
-	.threshold_degc_upto_good = BATTEMP_NOTREADY,
-	.threshold_degc_upto_warm = BATTEMP_NOTREADY,
-	.threshold_degc_upto_hot = BATTEMP_NOTREADY,
+	.health_jeita  = POWER_SUPPLY_HEALTH_UNKNOWN,
+	.health_chilly = false,
+
+	.threshold_degc_upto_cool  = BATTEMP_NOTREADY,
+	.threshold_degc_upto_good  = BATTEMP_NOTREADY,
+	.threshold_degc_upto_warm  = BATTEMP_NOTREADY,
+	.threshold_degc_upto_hot   = BATTEMP_NOTREADY,
 	.threshold_degc_downto_warm = BATTEMP_NOTREADY,
 	.threshold_degc_downto_good = BATTEMP_NOTREADY,
 	.threshold_degc_downto_cool = BATTEMP_NOTREADY,
 	.threshold_degc_downto_cold = BATTEMP_NOTREADY,
 
 	.period_ms_emergency = BATTEMP_NOTREADY,
-	.period_ms_warning = BATTEMP_NOTREADY,
-	.period_ms_normal = BATTEMP_NOTREADY,
-	.period_ms_unknown = 1000,
+	.period_ms_warning   = BATTEMP_NOTREADY,
+	.period_ms_normal    = BATTEMP_NOTREADY,
+	.period_ms_unknown   = 1000,
 
 	.cool_mv_alert	= BATTEMP_NOTREADY,
 	.cool_ma_alert	= BATTEMP_NOTREADY,
 	.cool_ma_normal	= BATTEMP_NOTREADY,
 	.warm_ma_charge	= BATTEMP_NOTREADY,
 	.warm_mv_float	= BATTEMP_NOTREADY,
+
+	.chilly_is_supported    = false,
+	.chilly_degc_upperbound = BATTEMP_NOTREADY,
+	.chilly_degc_lowerbound = BATTEMP_NOTREADY,
+	.chilly_mv_alert	= BATTEMP_NOTREADY,
+	.chilly_ma_alert	= BATTEMP_NOTREADY,
+	.chilly_ma_normal       = BATTEMP_NOTREADY,
 };
 
-static const char* health_to_string(int health) {
-
-	switch (health) {
-	case POWER_SUPPLY_HEALTH_UNKNOWN :
-		return "HEALTH_UNKNOWN";
-	case POWER_SUPPLY_HEALTH_COLD :
-		return "HEALTH_COLD";
-	case POWER_SUPPLY_HEALTH_COOL :
-		return "HEALTH_COOL";
-	case POWER_SUPPLY_HEALTH_GOOD :;
-		return "HEALTH_GOOD";
-	case POWER_SUPPLY_HEALTH_WARM :
-		return "HEALTH_WARM";
-	case POWER_SUPPLY_HEALTH_HOT :
-		return "HEALTH_HOT";
-	default :
-		return "Undefined health";
+static const char* health_to_string(bool chilly, int jhealth) {
+	if (!chilly) {
+		switch (jhealth) {
+		case POWER_SUPPLY_HEALTH_UNKNOWN :
+			return "HEALTH_UNKNOWN";
+		case POWER_SUPPLY_HEALTH_COLD :
+			return "HEALTH_COLD";
+		case POWER_SUPPLY_HEALTH_COOL :
+			return "HEALTH_COOL";
+		case POWER_SUPPLY_HEALTH_GOOD :;
+			return "HEALTH_GOOD";
+		case POWER_SUPPLY_HEALTH_WARM :
+			return "HEALTH_WARM";
+		case POWER_SUPPLY_HEALTH_HOT :
+			return "HEALTH_HOT";
+		default :
+			return "Undefined health";
+		}
 	}
+	else
+		return "HEALTH_CHILLY";
 }
 
-static int health_to_index(int health) {
-
-	switch (health) {
-	case POWER_SUPPLY_HEALTH_UNKNOWN :
-		return 0;
-	case POWER_SUPPLY_HEALTH_COLD :
-		return 1;
-	case POWER_SUPPLY_HEALTH_COOL :
-		return 2;
-	case POWER_SUPPLY_HEALTH_GOOD :;
+static int health_to_index(bool chilly, int jhealth) {
+	if (!chilly) {
+		switch (jhealth) {
+		case POWER_SUPPLY_HEALTH_UNKNOWN :
+			return 0;
+		case POWER_SUPPLY_HEALTH_COLD :
+			return 1;
+		case POWER_SUPPLY_HEALTH_COOL :
+			return 2;
+		case POWER_SUPPLY_HEALTH_GOOD :;
+			return 3 + battemp_me.chilly_is_supported;
+		case POWER_SUPPLY_HEALTH_WARM :
+			return 4 + battemp_me.chilly_is_supported;
+		case POWER_SUPPLY_HEALTH_HOT :
+			return 5 + battemp_me.chilly_is_supported;
+		default :
+			return -1;
+		}
+	}
+	else
 		return 3;
-	case POWER_SUPPLY_HEALTH_WARM :
-		return 4;
-	case POWER_SUPPLY_HEALTH_HOT :
-		return 5;
-	default :
-		return -1;
-	}
 }
 
-static long health_to_period(int health) {
+static long health_to_period(bool chilly, int jhealth) {
 	int msecs = 0;
 
-	switch (health) {
-	case POWER_SUPPLY_HEALTH_HOT :
-	case POWER_SUPPLY_HEALTH_COLD :
-		msecs = battemp_me.period_ms_emergency;
-		break;
-	case POWER_SUPPLY_HEALTH_WARM :
-	case POWER_SUPPLY_HEALTH_COOL :
-		msecs = battemp_me.period_ms_warning;
-		break;
-	case POWER_SUPPLY_HEALTH_GOOD :
-		msecs = battemp_me.period_ms_normal;
-		break;
-	case POWER_SUPPLY_HEALTH_UNKNOWN :
-		msecs = battemp_me.period_ms_unknown;
-		break;
-	default :
-		pr_battemp(ERROR, "Check the battemp_health\n");
-		break;
+	if (!chilly) {
+		switch (jhealth) {
+		case POWER_SUPPLY_HEALTH_HOT :
+		case POWER_SUPPLY_HEALTH_COLD :
+			msecs = battemp_me.period_ms_emergency;
+			break;
+		case POWER_SUPPLY_HEALTH_WARM :
+		case POWER_SUPPLY_HEALTH_COOL :
+			msecs = battemp_me.period_ms_warning;
+			break;
+		case POWER_SUPPLY_HEALTH_GOOD :
+			msecs = battemp_me.period_ms_normal;
+			break;
+		case POWER_SUPPLY_HEALTH_UNKNOWN :
+			msecs = battemp_me.period_ms_unknown;
+			break;
+		default :
+			pr_battemp(ERROR, "Check the 'health'\n");
+			break;
+		}
 	}
+	else
+		msecs = battemp_me.period_ms_warning;
 
 	return msecs_to_jiffies(msecs);
 }
 
-static int health_to_icharge(int health, int batvol) {
+static int icharge_by_chilly(bool chilly, int batvol) {
+	if (chilly)
+		return battemp_me.chilly_mv_alert <= batvol ?
+			battemp_me.chilly_ma_alert : battemp_me.chilly_ma_normal;
+	else
+		return VOTE_TOTALLY_RELEASED;
+}
 
-	switch (health) {
+static int icharge_by_jhealth(int jhealth, int batvol) {
+
+	switch (jhealth) {
 	case POWER_SUPPLY_HEALTH_COOL :
-		return (batvol >= battemp_me.cool_mv_alert)
+		return (battemp_me.cool_mv_alert <= batvol)
 			? battemp_me.cool_ma_alert : battemp_me.cool_ma_normal;
 	case POWER_SUPPLY_HEALTH_WARM :
 		return battemp_me.warm_ma_charge;
 
-	case POWER_SUPPLY_HEALTH_HOT :
 	case POWER_SUPPLY_HEALTH_COLD :
+	case POWER_SUPPLY_HEALTH_HOT :
 		return VOTE_TOTALLY_BLOCKED;
 
 	case POWER_SUPPLY_HEALTH_GOOD :
@@ -179,9 +216,9 @@ static int health_to_icharge(int health, int batvol) {
 	}
 }
 
-static int health_to_vfloat(int health) {
+static int vfloat_by_jhealth(int jhealth) {
 
-	switch (health) {
+	switch (jhealth) {
 	case POWER_SUPPLY_HEALTH_GOOD :
 	case POWER_SUPPLY_HEALTH_COOL :
 	case POWER_SUPPLY_HEALTH_COLD :
@@ -197,7 +234,7 @@ static int health_to_vfloat(int health) {
 	}
 }
 
-static int polling_health(int health_now, int battemp_now) {
+static int polling_status_jeita(int health_now, int battemp_now) {
 	int health_new;
 
 	#define STAT_NOW (health_now)
@@ -298,23 +335,37 @@ static int polling_health(int health_now, int battemp_now) {
 	return health_new;
 }
 
-static void polling_work(struct work_struct* work) {
+static bool polling_status_chilly(int battemp_now){
+	#define CHILLY_TEMP_LOWERBOUND (battemp_me.chilly_degc_lowerbound)
+	#define CHILLY_TEMP_UPPERBOUND (battemp_me.chilly_degc_upperbound)
+
+	return battemp_me.chilly_is_supported
+		&& CHILLY_TEMP_LOWERBOUND <= battemp_now && battemp_now <= CHILLY_TEMP_UPPERBOUND;
+}
+
+static void polling_status_work(struct work_struct* work) {
 	bool charging;
 	int  temperature;
 	int  mvoltage;
 
 	if (battemp_me.get_protection_battemp(&charging, &temperature, &mvoltage)) {
-		// calculating data
-		int updated_health =
-			polling_health(battemp_me.battemp_health, temperature);
+		// Calculates icharge and vfloat from the jeita health
+		int health_jeita =
+			polling_status_jeita(battemp_me.health_jeita, temperature);
 		int updated_icharge = charging ?
-			health_to_icharge(updated_health, mvoltage) : VOTE_TOTALLY_RELEASED;
+			icharge_by_jhealth(health_jeita, mvoltage) : VOTE_TOTALLY_RELEASED;
 		int updated_vfloat = charging ?
-			health_to_vfloat(updated_health) : VOTE_TOTALLY_RELEASED;
+			vfloat_by_jhealth(health_jeita) : VOTE_TOTALLY_RELEASED;
+		// And ichilly from the boolean 'chilly' status
+		bool health_chilly =
+			polling_status_chilly(temperature);
+		int updated_ichilly = charging ?
+			icharge_by_chilly(health_chilly, mvoltage) : VOTE_TOTALLY_RELEASED;
 
 		// configure wakelock
-		if ((updated_health != POWER_SUPPLY_HEALTH_GOOD && charging)
-			|| (updated_health == POWER_SUPPLY_HEALTH_HOT)) {
+		bool warning_at_charging = charging && (health_jeita != POWER_SUPPLY_HEALTH_GOOD);
+		bool warning_wo_charging = health_jeita == POWER_SUPPLY_HEALTH_HOT;
+		if (warning_at_charging || warning_wo_charging) {
 			if (!battemp_me.battemp_wakelock.active) {
 				pr_battemp(UPDATE, "Acquiring wake lock\n");
 				__pm_stay_awake(&battemp_me.battemp_wakelock);
@@ -328,35 +379,42 @@ static void polling_work(struct work_struct* work) {
 		}
 
 		// logging for changes
-		if (battemp_me.battemp_health != updated_health)
+		if (battemp_me.health_chilly != health_chilly || battemp_me.health_jeita != health_jeita)
 			pr_battemp(UPDATE, "%s(%d) -> %s(%d), temperature=%d\n",
-				health_to_string(battemp_me.battemp_health),
-					health_to_index(battemp_me.battemp_health),
-				health_to_string(updated_health),
-					health_to_index(updated_health),
+				health_to_string(battemp_me.health_chilly, battemp_me.health_jeita),
+					health_to_index(battemp_me.health_chilly, battemp_me.health_jeita),
+				health_to_string(health_chilly, health_jeita),
+					health_to_index(health_chilly, health_jeita),
 				temperature);
 
 		// Voting for icharge and vfloat
+		veneer_voter_set(&battemp_me.voter_ichilly, updated_ichilly);
 		veneer_voter_set(&battemp_me.voter_icharge, updated_icharge);
 		veneer_voter_set(&battemp_me.voter_vfloat, updated_vfloat);
+		if (updated_vfloat != VOTE_TOTALLY_RELEASED)
+			veneer_voter_rerun(&battemp_me.voter_vfloat);
 
 		// update member status in 'battemp_me'
-		battemp_me.battemp_health = updated_health;
-		battemp_me.battemp_charging = charging;
+		battemp_me.health_chilly = health_chilly;
+		battemp_me.health_jeita = health_jeita;
 
-		// finallly, notify results to client
-		battemp_me.set_protection_battemp(battemp_me.battemp_health, updated_icharge, updated_vfloat);
+		// finallly, notify the psy-type health to client
+		battemp_me.set_protection_battemp(battemp_me.health_jeita,
+			min(updated_ichilly, updated_icharge), updated_vfloat);
 	}
 	else
 		pr_battemp(UPDATE, "temperature is not valid.\n");
 
-	schedule_delayed_work(to_delayed_work(work), health_to_period(battemp_me.battemp_health));
+	schedule_delayed_work(to_delayed_work(work),
+		health_to_period(battemp_me.health_chilly, battemp_me.health_jeita));
 	return;
 }
 
 static bool battemp_create_parsedt(struct device_node* dnode, int mincap) {
 	int rc = 0;
 	int cool_ma_pct = 0, warm_ma_pct = 0;
+	int chilly_ma_pct = 0;
+	#define SCALE_UNIT_MA	50
 
 	OF_PROP_READ_S32(dnode, battemp_me.threshold_degc_upto_cool,
 		"threshold-degc-upto-cool", rc);
@@ -387,18 +445,34 @@ static bool battemp_create_parsedt(struct device_node* dnode, int mincap) {
 	OF_PROP_READ_S32(dnode, battemp_me.cool_ma_alert,
 		"cool-ma-alert", rc);
 	OF_PROP_READ_S32(dnode, cool_ma_pct, "cool-ma-pct", rc);
-		battemp_me.cool_ma_normal = mincap * cool_ma_pct / 100;
+		battemp_me.cool_ma_normal = (mincap * cool_ma_pct / 100) / SCALE_UNIT_MA * SCALE_UNIT_MA;
 
 	OF_PROP_READ_S32(dnode, battemp_me.warm_mv_float,
 		"warm-mv-float", rc);
 	OF_PROP_READ_S32(dnode, warm_ma_pct, "warm-ma-pct", rc);
-		battemp_me.warm_ma_charge = mincap * warm_ma_pct / 100;
+		battemp_me.warm_ma_charge = (mincap * warm_ma_pct / 100) / SCALE_UNIT_MA * SCALE_UNIT_MA;
+
+	battemp_me.chilly_is_supported = of_property_read_bool(dnode, "lge,chilly-status-support");
+	if (battemp_me.chilly_is_supported) {
+		OF_PROP_READ_S32(dnode, battemp_me.chilly_degc_lowerbound,
+			"chilly-degc-lowerbound", rc);
+		OF_PROP_READ_S32(dnode, battemp_me.chilly_degc_upperbound,
+			"chilly-degc-upperbound", rc);
+		OF_PROP_READ_S32(dnode, battemp_me.chilly_mv_alert,
+			"chilly-mv-alert", rc);
+		OF_PROP_READ_S32(dnode, battemp_me.chilly_ma_alert,
+			"chilly-ma-alert", rc);
+		OF_PROP_READ_S32(dnode, chilly_ma_pct, "chilly-ma-pct", rc);
+			battemp_me.chilly_ma_normal =
+				(mincap * chilly_ma_pct / 100) / SCALE_UNIT_MA * SCALE_UNIT_MA;
+	}
 
 	return !rc;
 }
 
 static bool battemp_create_voters(void) {
-	return veneer_voter_register(&battemp_me.voter_icharge, VOTER_NAME_ICHARGE, VOTER_TYPE_IBAT, false)
+	return veneer_voter_register(&battemp_me.voter_ichilly, VOTER_NAME_CHILLY, VOTER_TYPE_IBAT, false)
+		&& veneer_voter_register(&battemp_me.voter_icharge, VOTER_NAME_ICHARGE, VOTER_TYPE_IBAT, false)
 		&& veneer_voter_register(&battemp_me.voter_vfloat, VOTER_NAME_VFLOAT, VOTER_TYPE_VFLOAT, false);
 }
 
@@ -418,7 +492,7 @@ static bool battemp_create_preset(bool (*feed_protection_battemp)(bool* charging
 		BATTEMP_WAKELOCK);
 
 	INIT_DELAYED_WORK(&battemp_me.battemp_dwork,
-		polling_work);
+		polling_status_work);
 
 	return true;
 }
@@ -458,18 +532,18 @@ destroy:
 }
 
 void protection_battemp_destroy(void) {
-
 	wakeup_source_trash(&battemp_me.battemp_wakelock);
 	cancel_delayed_work_sync(&battemp_me.battemp_dwork);
 
-	battemp_me.battemp_health = POWER_SUPPLY_HEALTH_UNKNOWN;
-	battemp_me.battemp_charging = false;
+	veneer_voter_unregister(&battemp_me.voter_ichilly);
+	veneer_voter_unregister(&battemp_me.voter_icharge);
+	veneer_voter_unregister(&battemp_me.voter_vfloat);
 
 	battemp_me.get_protection_battemp = NULL;
 	battemp_me.set_protection_battemp = NULL;
 
-	veneer_voter_unregister(&battemp_me.voter_icharge);
-	veneer_voter_unregister(&battemp_me.voter_vfloat);
+	battemp_me.health_chilly = false;
+	battemp_me.health_jeita = POWER_SUPPLY_HEALTH_UNKNOWN;
 
 	battemp_me.threshold_degc_upto_cool   = BATTEMP_NOTREADY;
 	battemp_me.threshold_degc_upto_good   = BATTEMP_NOTREADY;
@@ -489,6 +563,13 @@ void protection_battemp_destroy(void) {
 	battemp_me.cool_ma_normal = BATTEMP_NOTREADY,
 	battemp_me.warm_ma_charge = BATTEMP_NOTREADY;
 	battemp_me.warm_mv_float  = BATTEMP_NOTREADY;
+
+	battemp_me.chilly_is_supported    = false;
+	battemp_me.chilly_degc_upperbound = BATTEMP_NOTREADY;
+	battemp_me.chilly_degc_lowerbound = BATTEMP_NOTREADY;
+	battemp_me.chilly_mv_alert	  = BATTEMP_NOTREADY;
+	battemp_me.chilly_ma_alert	  = BATTEMP_NOTREADY;
+	battemp_me.chilly_ma_normal       = BATTEMP_NOTREADY;
 }
 
 

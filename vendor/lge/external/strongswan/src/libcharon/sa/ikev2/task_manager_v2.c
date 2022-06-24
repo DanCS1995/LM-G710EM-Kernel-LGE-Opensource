@@ -59,7 +59,7 @@
 /* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
 
 #include <lgpcas.h>
-
+#include <libpatchcodeid.h>
 
 typedef struct exchange_t exchange_t;
 
@@ -370,7 +370,9 @@ METHOD(task_manager_t, retransmit, status_t,
 		{
 			/* 2017-01-02 sy.yun@lge.com LGP_DATA_IWLAN_RETRY_CONFIG_ORG [START] */
 			int slotid = get_slotid(this->ike_sa->get_name(this->ike_sa));
-			if (pcas_is_operator("ORG", slotid) && this->initiating.retransmitted < 3 && is_dpd) {
+			if ((pcas_is_operator("ORG", slotid) || (pcas_is_operator("TMO", slotid) && !pcas_is_country("US",slotid)))
+				&& this->initiating.retransmitted < 3 && is_dpd) {
+				patch_code_id("LPCP-1995@n@c@libcharon@task_manager_v2.c@1");
 				DBG1(DBG_IKE, "[LGE][IWLAN] Use 3 retransmit_tries DPD request for ORG");
 				timeout = (u_int32_t)(this->retransmit_timeout * 1000.0 * pow(this->retransmit_base, this->initiating.retransmitted));
 			}
@@ -400,7 +402,7 @@ METHOD(task_manager_t, retransmit, status_t,
 				// Usually, LGE uses 2 seconds retx timer, this make kernel awake in 2 seconds more.
 				// Hence, if the retx timer is less than 2 seconds, we use 1 second for the 1st retry.
 				char operator[PROP_VALUE_MAX] = "";
-				property_get("ro.build.target_operator", operator, "NONE");
+				property_get("ro.vendor.lge.build.target_operator", operator, "NONE");
 				if ((this->initiating.retransmitted == 0) &&
 						(this->retransmit_timeout < 3) &&
 						is_dpd) {
@@ -1399,6 +1401,7 @@ static status_t parse_message(private_task_manager_t *this, message_t *msg)
 				{
 #ifdef __ANDROID__
 					/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_SUPPORT_BACKOFF_TIMER [START] */
+					patch_code_id("LPCP-2147@n@c@libcharon@task_manager_v2.c@1");
 					errortype = notify->get_notify_type(notify);
 					snprintf(key, PROP_NAME_MAX, "net.wo.recev_error_%s",
 						this->ike_sa->get_name(this->ike_sa));
@@ -1413,6 +1416,7 @@ static status_t parse_message(private_task_manager_t *this, message_t *msg)
 				/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_SUPPORT_BACKOFF_TIMER [START] */
 #ifdef __ANDROID__
 				else {
+					patch_code_id("LPCP-2147@n@c@libcharon@task_manager_v2.c@2");
 					notify_payload_t *notify = (notify_payload_t*)payload;
 					if (notify->get_notify_type(notify) == BACKOFF_TIMER) {
 						chunk_t data;
@@ -1454,6 +1458,7 @@ static status_t parse_message(private_task_manager_t *this, message_t *msg)
 		/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_SUPPORT_BACKOFF_TIMER [START] */
 #ifdef __ANDROID__
 		if (errortype != 0) {
+			patch_code_id("LPCP-2147@n@c@libcharon@task_manager_v2.c@3");
 			int len = strlen(this->ike_sa->get_name(this->ike_sa));
 			int slotid = get_slotid(this->ike_sa->get_name(this->ike_sa));
 			if (len >= sizeof(conn_name)) {
@@ -1462,7 +1467,7 @@ static status_t parse_message(private_task_manager_t *this, message_t *msg)
 			}
 			strncpy(conn_name, (this->ike_sa->get_name(this->ike_sa)), len);
 			if (errortype == NETWORK_FAILURE ||
-					(pcas_is_operator("VDF", slotid) && errortype == NO_APN_SUBSCRIPTION)) {
+					((pcas_is_operator("VDF", slotid) || pcas_is_operator("TLF", slotid)) && errortype == NO_APN_SUBSCRIPTION)) {
 				char key2[PROP_NAME_MAX];
 				char value2[PROP_VALUE_MAX];
 				snprintf(key2, PROP_NAME_MAX, "net.wo.epdg.bo_timer_%s", conn_name);
@@ -1478,6 +1483,7 @@ static status_t parse_message(private_task_manager_t *this, message_t *msg)
 				(errortype == INVALID_KE_PAYLOAD))
 			{
 				/* 2017-01-02 sy.yun@lge.com LGP_DATA_IWLAN_ALLOW_ESP_DHGROUP_WHILE_REKEY_ORG [START] */
+				patch_code_id("LPCP-1996@n@c@libcharon@task_manager_v2.c@1");
 				if (pcas_is_operator("ORG", slotid) && this->retransmit_tries == 0)
 				{
 					DBG1(DBG_IKE, "ORG: Do not notify error to daemon attemped:[%d] before giving up [%d]",

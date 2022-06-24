@@ -46,6 +46,12 @@ int touch_i2c_read(struct i2c_client *client, struct touch_bus_msg *msg)
 			.buf = msg->rx_buf,
 		},
 	};
+
+	if (msg->rx_size > I2C_BUF_SIZE) {
+		TOUCH_E("i2c buffer overflow!\n");
+		return -1;
+	}
+
 #ifdef USE_I2C_MTK_EXT
 	{
 		struct touch_core_data *ts =
@@ -102,6 +108,11 @@ int touch_i2c_write(struct i2c_client *client, struct touch_bus_msg *msg)
 		},
 	};
 
+	if (msg->tx_size > I2C_BUF_SIZE) {
+		TOUCH_E("i2c buffer overflow!\n");
+		return -1;
+	}
+
 #ifdef USE_I2C_MTK_EXT
 	{
 		struct touch_core_data *ts =
@@ -118,6 +129,7 @@ int touch_i2c_write(struct i2c_client *client, struct touch_bus_msg *msg)
 		}
 	}
 #endif
+
 	return i2c_transfer(client->adapter, msgs, 1);
 }
 
@@ -250,6 +262,7 @@ static const struct dev_pm_ops touch_pm_ops = {
 
 static struct i2c_device_id touch_id[] = {
 	{ LGE_TOUCH_NAME, 0 },
+	{},
 };
 
 #if defined(CONFIG_SECURE_TOUCH)

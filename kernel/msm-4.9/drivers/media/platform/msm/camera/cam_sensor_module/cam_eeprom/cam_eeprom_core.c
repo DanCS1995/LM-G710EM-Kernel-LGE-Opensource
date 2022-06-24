@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -109,6 +109,7 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 			rc = camera_io_dev_read_seq(&e_ctrl->io_master_info,
 				emap[j].mem.addr, memptr,
 				emap[j].mem.addr_type,
+				emap[j].mem.data_type,
 				emap[j].mem.valid_size);
             /*LGE_CHANGE_S, I2C_Camera eeprom enable, hyunuk.park@lge.com*/
             #ifdef QCT_ORIGINAL
@@ -238,7 +239,7 @@ static int cam_eeprom_power_down(struct cam_eeprom_ctrl_t *e_ctrl)
 		CAM_ERR(CAM_EEPROM, "failed: power_info %pK", power_info);
 		return -EINVAL;
 	}
-	rc = msm_camera_power_down(power_info, soc_info);
+	rc = cam_sensor_util_power_down(power_info, soc_info);
 	if (rc) {
 		CAM_ERR(CAM_EEPROM, "power down the core is failed:%d", rc);
 		return rc;
@@ -575,7 +576,7 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 		(struct cam_eeprom_soc_private *)e_ctrl->soc_info.soc_private;
 	struct cam_sensor_power_ctrl_t *power_info = &soc_private->power_info;
 
-	e_ctrl->cal_data.map = vmalloc((MSM_EEPROM_MEMORY_MAP_MAX_SIZE *
+	e_ctrl->cal_data.map = vzalloc((MSM_EEPROM_MEMORY_MAP_MAX_SIZE *
 		MSM_EEPROM_MAX_MEM_MAP_CNT) *
 		(sizeof(struct cam_eeprom_memory_map_t)));
 	if (!e_ctrl->cal_data.map) {
@@ -746,11 +747,6 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 
 	ioctl_ctrl = (struct cam_control *)arg;
 
-	if (ioctl_ctrl->handle_type != CAM_HANDLE_USER_POINTER) {
-		CAM_ERR(CAM_EEPROM, "Invalid Handle Type");
-		return -EINVAL;
-	}
-
 	if (copy_from_user(&dev_config, (void __user *) ioctl_ctrl->handle,
 		sizeof(dev_config)))
 		return -EFAULT;
@@ -797,7 +793,7 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 		}
 
 		e_ctrl->cal_data.mapdata =
-			vmalloc(e_ctrl->cal_data.num_data);
+			vzalloc(e_ctrl->cal_data.num_data);
 		if (!e_ctrl->cal_data.mapdata) {
 			rc = -ENOMEM;
 			CAM_ERR(CAM_EEPROM, "failed");
@@ -842,6 +838,12 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 		e_ctrl->cam_eeprom_state = CAM_EEPROM_ACQUIRE;
 		vfree(e_ctrl->cal_data.mapdata);
 		vfree(e_ctrl->cal_data.map);
+		kfree(power_info->power_setting);
+		kfree(power_info->power_down_setting);
+		power_info->power_setting = NULL;
+		power_info->power_down_setting = NULL;
+		power_info->power_setting_size = 0;
+		power_info->power_down_setting_size = 0;
 		e_ctrl->cal_data.num_data = 0;
 		e_ctrl->cal_data.num_map = 0;
 		break;
@@ -856,6 +858,8 @@ memdata_free:
 error:
 	kfree(power_info->power_setting);
 	kfree(power_info->power_down_setting);
+	power_info->power_setting = NULL;
+	power_info->power_down_setting = NULL;
 	vfree(e_ctrl->cal_data.map);
 	e_ctrl->cal_data.num_data = 0;
 	e_ctrl->cal_data.num_map = 0;
@@ -891,6 +895,10 @@ void cam_eeprom_shutdown(struct cam_eeprom_ctrl_t *e_ctrl)
 
 		kfree(power_info->power_setting);
 		kfree(power_info->power_down_setting);
+		power_info->power_setting = NULL;
+		power_info->power_down_setting = NULL;
+		power_info->power_setting_size = 0;
+		power_info->power_down_setting_size = 0;
 	}
 
 	e_ctrl->cam_eeprom_state = CAM_EEPROM_INIT;
@@ -909,8 +917,14 @@ int32_t cam_eeprom_driver_cmd(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 	struct cam_eeprom_query_cap_t  eeprom_cap = {0};
 	struct cam_control            *cmd = (struct cam_control *)arg;
 
-	if (!e_ctrl) {
-		CAM_ERR(CAM_EEPROM, "e_ctrl is NULL");
+	if (!e_ctrl || !cmd) {
+		CAM_ERR(CAM_EEPROM, "Invalid Arguments");
+		return -EINVAL;
+	}
+
+	if (cmd->handle_type != CAM_HANDLE_USER_POINTER) {
+		CAM_ERR(CAM_EEPROM, "Invalid handle type: %d",
+			cmd->handle_type);
 		return -EINVAL;
 	}
 

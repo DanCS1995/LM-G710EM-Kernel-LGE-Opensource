@@ -2,13 +2,12 @@
 # Makefile for building the dispol program
 #
 PREFIX ?= $(DESTDIR)/usr
-BINDIR=$(PREFIX)/bin
+BINDIR ?= $(PREFIX)/bin
 LIBDIR ?= $(PREFIX)/lib
 INCLUDEDIR ?= $(PREFIX)/include
 LIBSEPOLA ?= $(LIBDIR)/libsepol.a
 
 CFLAGS ?= -g -Wall -W -Werror -O2 -pipe
-override CFLAGS += -I$(INCLUDEDIR)
 
 all: dispol dismod
 

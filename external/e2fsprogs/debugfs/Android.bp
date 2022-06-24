@@ -5,6 +5,7 @@
 
 cc_defaults {
     name: "debugfs-defaults",
+    defaults: ["e2fsprogs-defaults"],
     srcs: [
         "debug_cmds.c",
         "debugfs.c",
@@ -23,7 +24,6 @@ cc_defaults {
         "extent_cmds.c",
         "extent_inode.c",
         "zap.c",
-        "create_inode.c",
         "quota.c",
         "xattrs.c",
         "journal.c",
@@ -32,9 +32,7 @@ cc_defaults {
         "do_journal.c",
     ],
     cflags: [
-        "-W",
-        "-Wall",
-        "-Wno-macro-redefined",
+        "-Wno-unused-variable",
         "-fno-strict-aliasing",
         "-DDEBUGFS",
     ],
@@ -45,6 +43,7 @@ cc_defaults {
 }
 
 debugfs_libs = [
+    "libext2_misc",
     "libext2fs",
     "libext2_blkid",
     "libext2_uuid",
@@ -60,7 +59,7 @@ cc_binary {
     defaults: ["debugfs-defaults"],
 
     shared_libs: debugfs_libs,
-    system_shared_libs: ["libc"],
+    system_shared_libs: ["libc", "libdl"],
 }
 
 cc_binary {

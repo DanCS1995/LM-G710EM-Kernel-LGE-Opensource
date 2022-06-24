@@ -17,8 +17,8 @@
 #ifndef _CUPS_CONFIG_H_
 #define _CUPS_CONFIG_H_
 
-#define CUPS_SVERSION "CUPS v2.2.3"
-#define CUPS_MINIMAL "CUPS/2.2.3"
+#define CUPS_SVERSION "CUPS v2.2.9"
+#define CUPS_MINIMAL "CUPS/2.2.9"
 #define CUPS_DEFAULT_PRINTOPERATOR_AUTH "@SYSTEM"
 #define CUPS_DEFAULT_LOG_LEVEL "warn"
 #define CUPS_DEFAULT_BROWSE_LOCAL_PROTOCOLS "dnssd"
@@ -58,5 +58,6 @@
 #define HAVE_POLL 1
 #define CUPS_RAND() random()
 #define CUPS_SRAND(v) srandom(v)
+#define HAVE_SSL 1
 
 #endif /* !_CUPS_CONFIG_H_ */

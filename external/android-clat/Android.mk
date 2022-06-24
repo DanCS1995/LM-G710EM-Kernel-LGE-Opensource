@@ -7,9 +7,11 @@ LOCAL_SRC_FILES:=clatd.c dump.c checksum.c translate.c icmp.c ipv4.c ipv6.c conf
 LOCAL_CFLAGS := -Wall -Werror -Wunused-parameter
 # Bug: http://b/33566695
 LOCAL_CFLAGS += -Wno-address-of-packed-member
-LOCAL_C_INCLUDES := external/libnl/include bionic/libc/dns/include
+LOCAL_C_INCLUDES := external/libnl/include bionic/libc/dns/include system/netd/include
+LOCAL_C_INCLUDES += vendor/lge/frameworks/base/libs/data_patchcodeid/
 LOCAL_STATIC_LIBRARIES := libnl
 LOCAL_SHARED_LIBRARIES := libcutils liblog libnetutils
+LOCAL_SHARED_LIBRARIES += libpatchcodeid
 
 # The clat daemon.
 LOCAL_MODULE := clatd

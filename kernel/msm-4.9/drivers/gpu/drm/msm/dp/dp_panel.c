@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,6 +23,10 @@
 #define VSC_SDP_EXTENSION_FOR_COLORIMETRY_SUPPORTED BIT(3)
 #define VSC_EXT_VESA_SDP_SUPPORTED BIT(4)
 #define VSC_EXT_VESA_SDP_CHAINING_SUPPORTED BIT(5)
+
+#ifdef CONFIG_LGE_DISPLAY_SUPPORT_DP_KOPIN
+extern bool is_kopin;
+#endif
 
 enum dp_panel_hdr_pixel_encoding {
 	RGB,
@@ -103,8 +107,26 @@ static const u8 vendor_name[8] = {81, 117, 97, 108, 99, 111, 109, 109};
 /* MODEL NAME */
 static const u8 product_desc[16] = {83, 110, 97, 112, 100, 114, 97, 103,
 	111, 110, 0, 0, 0, 0, 0, 0};
-
-static int dp_panel_read_dpcd(struct dp_panel *dp_panel)
+#ifdef CONFIG_LGE_DISPLAY_SUPPORT_DP_KOPIN
+static u8 kopin_edid[256] = {
+	0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x31, 0xd8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x05, 0x16, 0x01, 0x03, 0x6d, 0x11, 0x0a, 0x78, 0xea, 0x5e, 0xc0, 0xa4, 0x59, 0x4a, 0x98, 0x25,
+	0x20, 0x50, 0x54, 0x00, 0x00, 0x00, 0x4b, 0xc0, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
+	0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x2f, 0x0d, 0x50, 0xf0, 0x30, 0xe0, 0x25, 0x10, 0x10, 0x70,
+	0x68, 0x00, 0xb0, 0x64, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x00, 0x00, 0xff, 0x00, 0x4c, 0x69, 0x6e,
+	0x75, 0x78, 0x20, 0x23, 0x30, 0x0a, 0x20, 0x20, 0x20, 0x20, 0x00, 0x00, 0x00, 0xfd, 0x00, 0x3b,
+	0x3d, 0x1e, 0x20, 0x04, 0x00, 0x0a, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x00, 0x00, 0x00, 0xfc,
+	0x00, 0x4b, 0x6f, 0x70, 0x69, 0x6e, 0x20, 0x4b, 0x43, 0x44, 0x0a, 0x20, 0x20, 0x20, 0x00, 0x34,
+	0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x31, 0xd8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x05, 0x16, 0x01, 0x03, 0x6d, 0x11, 0x0a, 0x78, 0xea, 0x5e, 0xc0, 0xa4, 0x59, 0x4a, 0x98, 0x25,
+	0x20, 0x50, 0x54, 0x00, 0x00, 0x00, 0x4b, 0xc0, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
+	0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x2f, 0x0d, 0x50, 0xf0, 0x30, 0xe0, 0x25, 0x10, 0x10, 0x70,
+	0x68, 0x00, 0xb0, 0x64, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x00, 0x00, 0xff, 0x00, 0x4c, 0x69, 0x6e,
+	0x75, 0x78, 0x20, 0x23, 0x30, 0x0a, 0x20, 0x20, 0x20, 0x20, 0x00, 0x00, 0x00, 0xfd, 0x00, 0x3b,
+	0x3d, 0x1e, 0x20, 0x04, 0x00, 0x0a, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x00, 0x00, 0x00, 0xfc,
+	0x00, 0x4b, 0x6f, 0x70, 0x69, 0x6e, 0x20, 0x4b, 0x43, 0x44, 0x0a, 0x20, 0x20, 0x20, 0x00, 0x34};
+#endif
+static int dp_panel_read_dpcd(struct dp_panel *dp_panel, bool multi_func)
 {
 	int rlen, rc = 0;
 	struct dp_panel_private *panel;
@@ -125,6 +147,12 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel)
 	link_info = &dp_panel->link_info;
 
 	if (!panel->custom_dpcd) {
+#ifdef CONFIG_LGE_DISPLAY_SUPPORT_DP_KOPIN
+		if (is_kopin) {
+			u8 edp_config = 0x1;
+			drm_dp_dpcd_write(panel->aux->drm_aux, 0x10a, &edp_config, 1);
+		}
+#endif
 		rlen = drm_dp_dpcd_read(panel->aux->drm_aux, DP_DPCD_REV,
 			dp_panel->dpcd, (DP_RECEIVER_CAP_SIZE + 1));
 		if (rlen < (DP_RECEIVER_CAP_SIZE + 1)) {
@@ -136,9 +164,6 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel)
 
 			goto end;
 		}
-
-		print_hex_dump(KERN_DEBUG, "[drm-dp] SINK DPCD: ",
-			DUMP_PREFIX_NONE, 8, 1, dp_panel->dpcd, rlen, false);
 	}
 
 	rlen = drm_dp_dpcd_read(panel->aux->drm_aux,
@@ -175,6 +200,10 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel)
 
 	link_info->num_lanes = dp_panel->dpcd[DP_MAX_LANE_COUNT] &
 				DP_MAX_LANE_COUNT_MASK;
+
+	if (multi_func)
+		link_info->num_lanes = min_t(unsigned int,
+			link_info->num_lanes, 2);
 
 	pr_debug("lane_count=%d\n", link_info->num_lanes);
 
@@ -271,43 +300,46 @@ static int dp_panel_set_dpcd(struct dp_panel *dp_panel, u8 *dpcd)
 static int dp_panel_read_edid(struct dp_panel *dp_panel,
 	struct drm_connector *connector)
 {
+	int ret = 0;
 	struct dp_panel_private *panel;
 	int count = 0;
 
 	if (!dp_panel) {
 		pr_err("invalid input\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto end;
 	}
 
 	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 
+#ifdef CONFIG_LGE_DISPLAY_SUPPORT_DP_KOPIN
+	if (is_kopin)
+		dp_panel_set_edid(dp_panel, kopin_edid);
+	else
+		panel->custom_edid = 0;
+#endif
 	if (panel->custom_edid) {
 		pr_debug("skip edid read in debug mode\n");
-		return 0;
+		goto end;
 	}
 
 	do {
 		sde_get_edid(connector, &panel->aux->drm_aux->ddc,
 			(void **)&dp_panel->edid_ctrl);
+          	msleep(50);
 		pr_info(" %s %d EDID read %s, count=%d", __func__, __LINE__, !dp_panel->edid_ctrl->edid?"failed":"successed",count);
 	} while (!dp_panel->edid_ctrl->edid && (count++ < 10));
 	if (!dp_panel->edid_ctrl->edid) {
 		pr_err("EDID read failed\n");
-	} else {
-		u8 *buf = (u8 *)dp_panel->edid_ctrl->edid;
-		u32 size = buf[0x7E] ? 256 : 128;
-
-		print_hex_dump(KERN_DEBUG, "[drm-dp] SINK EDID: ",
-			DUMP_PREFIX_NONE, 16, 1, buf, size, false);
-
-		return 0;
+		ret = -EINVAL;
+		goto end;
 	}
-
-	return -EINVAL;
+end:
+	return ret;
 }
 
 static int dp_panel_read_sink_caps(struct dp_panel *dp_panel,
-	struct drm_connector *connector)
+	struct drm_connector *connector, bool multi_func)
 {
 	int rc = 0, rlen, count, downstream_ports;
 	const int count_len = 1;
@@ -321,7 +353,7 @@ static int dp_panel_read_sink_caps(struct dp_panel *dp_panel,
 
 	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 
-	rc = dp_panel_read_dpcd(dp_panel);
+	rc = dp_panel_read_dpcd(dp_panel, multi_func);
 	if (rc || !is_link_rate_valid(drm_dp_link_rate_to_bw_code(
 		dp_panel->link_info.rate)) || !is_lane_count_valid(
 		dp_panel->link_info.num_lanes) ||
@@ -334,7 +366,14 @@ static int dp_panel_read_sink_caps(struct dp_panel *dp_panel,
 		pr_err("panel dpcd read failed/incorrect, set default params\n");
 		dp_panel_set_default_link_params(dp_panel);
 	}
-
+#ifdef CONFIG_LGE_DISPLAY_SUPPORT_DP_KOPIN
+	if (is_kopin) {
+		if (dp_panel->dpcd[DP_DPCD_REV] == 0x13) {
+			pr_info("[drm-dp] rev 1.3...\n");
+			goto end;
+		}
+	}
+#endif
 	downstream_ports = dp_panel->dpcd[DP_DOWNSTREAMPORT_PRESENT] &
 				DP_DWN_STRM_PORT_PRESENT;
 
@@ -666,6 +705,7 @@ static int dp_panel_deinit_panel_info(struct dp_panel *dp_panel)
 {
 	int rc = 0;
 	struct dp_panel_private *panel;
+	struct dp_catalog_hdr_data *hdr;
 
 	if (!dp_panel) {
 		pr_err("invalid input\n");
@@ -673,11 +713,13 @@ static int dp_panel_deinit_panel_info(struct dp_panel *dp_panel)
 	}
 
 	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
+	hdr = &panel->catalog->hdr_data;
 
 	if (!panel->custom_edid)
 		sde_free_edid((void **)&dp_panel->edid_ctrl);
 
 	memset(&dp_panel->pinfo, 0, sizeof(dp_panel->pinfo));
+	memset(&hdr->hdr_meta, 0, sizeof(hdr->hdr_meta));
 	panel->panel_on = false;
 
 	return rc;
@@ -724,30 +766,6 @@ static bool dp_panel_hdr_supported(struct dp_panel *dp_panel)
 		(panel->minor >= 4 || panel->vscext_supported);
 }
 
-static bool dp_panel_is_validate_hdr_state(struct dp_panel_private *panel,
-		struct drm_msm_ext_hdr_metadata *hdr_meta)
-{
-	struct drm_msm_ext_hdr_metadata *panel_hdr_meta =
-			&panel->catalog->hdr_data.hdr_meta;
-
-	if (!hdr_meta)
-		goto end;
-
-	/* bail out if HDR not active */
-	if (hdr_meta->hdr_state == HDR_DISABLED &&
-	    panel->hdr_state == HDR_DISABLED)
-		goto end;
-
-	/* bail out if same meta data is received */
-	if (hdr_meta->hdr_state == HDR_ENABLED &&
-		panel_hdr_meta->eotf == hdr_meta->eotf)
-		goto end;
-
-	return true;
-end:
-	return false;
-}
-
 static int dp_panel_setup_hdr(struct dp_panel *dp_panel,
 		struct drm_msm_ext_hdr_metadata *hdr_meta)
 {
@@ -762,13 +780,17 @@ static int dp_panel_setup_hdr(struct dp_panel *dp_panel,
 	}
 
 	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
+	hdr = &panel->catalog->hdr_data;
 
-	if (!dp_panel_is_validate_hdr_state(panel, hdr_meta))
-		goto end;
+	/* use cached meta data in case meta data not provided */
+	if (!hdr_meta) {
+		if (hdr->hdr_meta.hdr_state)
+			goto cached;
+		else
+			goto end;
+	}
 
 	panel->hdr_state = hdr_meta->hdr_state;
-
-	hdr = &panel->catalog->hdr_data;
 
 	hdr->ext_header_byte0 = 0x00;
 	hdr->ext_header_byte1 = 0x04;
@@ -804,8 +826,9 @@ static int dp_panel_setup_hdr(struct dp_panel *dp_panel,
 		memcpy(&hdr->hdr_meta, hdr_meta, sizeof(hdr->hdr_meta));
 	else
 		memset(&hdr->hdr_meta, 0, sizeof(hdr->hdr_meta));
-
-	panel->catalog->config_hdr(panel->catalog, panel->hdr_state);
+cached:
+	if (panel->panel_on)
+		panel->catalog->config_hdr(panel->catalog, panel->hdr_state);
 end:
 	return rc;
 }

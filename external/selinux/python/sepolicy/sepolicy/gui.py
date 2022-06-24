@@ -69,8 +69,14 @@ enabled = [_("No"), _("Yes")]
 action = [_("Disable"), _("Enable")]
 
 
-def compare(a, b):
-    return cmp(a.lower(), b.lower())
+def cmp(a, b):
+    if a is None and b is None:
+        return 0
+    if a is None:
+        return -1
+    if b is None:
+        return 1
+    return (a > b) - (a < b)
 
 import distutils.sysconfig
 ADVANCED_LABEL = (_("Advanced >>"), _("Advanced <<"))
@@ -673,9 +679,9 @@ class SELinuxGui():
         self.module_dict = {}
         for m in self.dbus.semodule_list().split("\n"):
             mod = m.split()
-            if len(mod) < 2:
+            if len(mod) < 3:
                 continue
-            self.module_dict[mod[0]] = {"version": mod[1], "Disabled": (len(mod) > 2)}
+            self.module_dict[mod[1]] = { "priority": mod[0], "Disabled" : (len(mod) > 3) }
 
         self.enable_unconfined_button.set_active(not self.module_dict["unconfined"]["Disabled"])
         self.enable_permissive_button.set_active(not self.module_dict["permissivedomains"]["Disabled"])
@@ -831,8 +837,7 @@ class SELinuxGui():
             self.enforce_button = self.disabled_button_default
 
     def populate_system_policy(self):
-        selinux_path = selinux.selinux_path()
-        types = map(lambda x: x[1], filter(lambda x: x[0] == selinux_path, os.walk(selinux_path)))[0]
+        types = next(os.walk(selinux.selinux_path(), topdown=True))[1]
         types.sort()
         ctr = 0
         for item in types:
@@ -902,8 +907,8 @@ class SELinuxGui():
             if "object_r" in roles:
                 roles.remove("object_r")
             self.user_liststore.set_value(iter, 1, ", ".join(roles))
-            self.user_liststore.set_value(iter, 2, u["level"])
-            self.user_liststore.set_value(iter, 3, u["range"])
+            self.user_liststore.set_value(iter, 2, u.get("level", ""))
+            self.user_liststore.set_value(iter, 3, u.get("range", ""))
             self.user_liststore.set_value(iter, 4, True)
         self.ready_mouse()
 
@@ -1373,8 +1378,8 @@ class SELinuxGui():
                 self.treeview = self.network_in_treeview
                 category = _("listen for inbound connections")
 
-            self.add_button.set_tooltip_text(_("Add new port definition to which the '%(APP)s' domain is allowed to %s.") % {"APP": self.application, "PERM": category})
-            self.delete_button.set_tooltip_text(_("Delete modified port definitions to which the '%(APP)s' domain is allowed to %s.") % {"APP": self.application, "PERM": category})
+            self.add_button.set_tooltip_text(_("Add new port definition to which the '%(APP)s' domain is allowed to %(PERM)s.") % {"APP": self.application, "PERM": category})
+            self.delete_button.set_tooltip_text(_("Delete modified port definitions to which the '%(APP)s' domain is allowed to %(PERM)s.") % {"APP": self.application, "PERM": category})
             self.modify_button.set_tooltip_text(_("Modify port definitions to which the '%(APP)s' domain is allowed to %(PERM)s.") % {"APP": self.application, "PERM": category})
 
         if self.transitions_radio_button.get_active():
@@ -1594,8 +1599,8 @@ class SELinuxGui():
             self.show_popup(self.login_popup_window)
 
         if self.opage == FILE_EQUIV_PAGE:
-            self.file_equiv_source_entry.set_text(self.file_equiv_liststore.get_value(iter, 0))
-            self.file_equiv_dest_entry.set_text(self.file_equiv_liststore.get_value(iter, 1))
+            self.file_equiv_source_entry.set_text(self.unmarkup(self.file_equiv_liststore.get_value(iter, 0)))
+            self.file_equiv_dest_entry.set_text(self.unmarkup(self.file_equiv_liststore.get_value(iter, 1)))
             self.file_equiv_label.set_text((_("Modify File Equivalency Mapping. Mapping will be created when update is applied.")))
             self.file_equiv_popup_window.set_title(_("Modify SELinux File Equivalency"))
             self.clear_entry = True
@@ -1750,14 +1755,14 @@ class SELinuxGui():
         if self.login_mls_entry.get_text() == "":
             for u in sepolicy.get_selinux_users():
                 if seuser == u['name']:
-                    self.login_mls_entry.set_text(u['range'])
+                    self.login_mls_entry.set_text(u.get('range', ''))
 
     def user_roles_combobox_change(self, combo, *args):
         serole = self.combo_get_active_text(combo)
         if self.user_mls_entry.get_text() == "":
             for u in sepolicy.get_all_roles():
                 if serole == u['name']:
-                    self.user_mls_entry.set_text(u['range'])
+                    self.user_mls_entry.set_text(u.get('range', ''))
 
     def get_selected_iter(self):
         iter = None
@@ -1968,7 +1973,10 @@ class SELinuxGui():
             self.cur_dict["user"][name] = {"action": "-m", "range": mls_range, "level": level, "role": roles, "oldrange": oldrange, "oldlevel": oldlevel, "oldroles": oldroles, "oldname": oldname}
         else:
             iter = self.liststore.append(None)
-            self.cur_dict["user"][name] = {"action": "-a", "range": mls_range, "level": level, "role": roles}
+            if mls_range or level:
+                self.cur_dict["user"][name] = {"action": "-a", "range": mls_range, "level": level, "role": roles}
+            else:
+                self.cur_dict["user"][name] = {"action": "-a", "role": roles}
 
         self.liststore.set_value(iter, 0, name)
         self.liststore.set_value(iter, 1, roles)
@@ -2084,8 +2092,8 @@ class SELinuxGui():
             user_dict = self.cust_dict["user"]
             for user in user_dict:
                 roles = user_dict[user]["role"]
-                mls = user_dict[user]["range"]
-                level = user_dict[user]["level"]
+                mls = user_dict[user].get("range", "")
+                level = user_dict[user].get("level", "")
                 iter = self.user_delete_liststore.append()
                 self.user_delete_liststore.set_value(iter, 1, user)
                 self.user_delete_liststore.set_value(iter, 2, roles)
@@ -2099,7 +2107,7 @@ class SELinuxGui():
             login_dict = self.cust_dict["login"]
             for login in login_dict:
                 seuser = login_dict[login]["seuser"]
-                mls = login_dict[login]["range"]
+                mls = login_dict[login].get("range", "")
                 iter = self.login_delete_liststore.append()
                 self.login_delete_liststore.set_value(iter, 1, seuser)
                 self.login_delete_liststore.set_value(iter, 2, login)
@@ -2263,7 +2271,7 @@ class SELinuxGui():
             self.update_treestore.set_value(niter, 3, False)
             roles = self.cur_dict["user"][user]["role"]
             self.update_treestore.set_value(niter, 1, (_("Roles: %s")) % roles)
-            mls = self.cur_dict["user"][user]["range"]
+            mls = self.cur_dict["user"][user].get("range", "")
             niter = self.update_treestore.append(iter)
             self.update_treestore.set_value(niter, 3, False)
             self.update_treestore.set_value(niter, 1, _("MLS/MCS Range: %s") % mls)
@@ -2288,7 +2296,7 @@ class SELinuxGui():
             self.update_treestore.set_value(niter, 3, False)
             seuser = self.cur_dict["login"][login]["seuser"]
             self.update_treestore.set_value(niter, 1, (_("SELinux User: %s")) % seuser)
-            mls = self.cur_dict["login"][login]["range"]
+            mls = self.cur_dict["login"][login].get("range", "")
             niter = self.update_treestore.append(iter)
             self.update_treestore.set_value(niter, 3, False)
             self.update_treestore.set_value(niter, 1, _("MLS/MCS Range: %s") % mls)
@@ -2482,14 +2490,18 @@ class SELinuxGui():
                 for l in self.cur_dict[k]:
                     if self.cur_dict[k][l]["action"] == "-d":
                         update_buffer += "login -d %s\n" % l
-                    else:
+                    elif "range" in self.cur_dict[k][l]:
                         update_buffer += "login %s -s %s -r %s %s\n" % (self.cur_dict[k][l]["action"], self.cur_dict[k][l]["seuser"], self.cur_dict[k][l]["range"], l)
+                    else:
+                        update_buffer += "login %s -s %s %s\n" % (self.cur_dict[k][l]["action"], self.cur_dict[k][l]["seuser"], l)
             if k in "user":
                 for u in self.cur_dict[k]:
                     if self.cur_dict[k][u]["action"] == "-d":
                         update_buffer += "user -d %s\n" % u
-                    else:
+                    elif "level" in self.cur_dict[k][u] and "range" in self.cur_dict[k][u]:
                         update_buffer += "user %s -L %s -r %s -R %s %s\n" % (self.cur_dict[k][u]["action"], self.cur_dict[k][u]["level"], self.cur_dict[k][u]["range"], self.cur_dict[k][u]["role"], u)
+                    else:
+                        update_buffer += "user %s -R %s %s\n" % (self.cur_dict[k][u]["action"], self.cur_dict[k][u]["role"], u)
 
             if k in "fcontext-equiv":
                 for f in self.cur_dict[k]:

@@ -57,7 +57,7 @@ endif
 LOCAL_MODULE_TAGS := optional
 
 LOCAL_MODULE := libsimd
-
+LOCAL_VENDOR_MODULE := true
 include $(BUILD_STATIC_LIBRARY)
 
 ######################################################
@@ -103,6 +103,6 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_OPTIONAL_STATIC_LIBRARY)
 LOCAL_MODULE_TAGS := optional
 
 LOCAL_MODULE := libjpeg_turbo
-
+LOCAL_VENDOR_MODULE := true
 include $(BUILD_SHARED_LIBRARY)
 endif

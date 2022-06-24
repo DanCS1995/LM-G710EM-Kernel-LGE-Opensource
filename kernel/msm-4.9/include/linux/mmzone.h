@@ -77,6 +77,7 @@ extern char * const migratetype_names[MIGRATE_TYPES];
 extern int *get_migratetype_fallbacks(int mtype);
 
 #ifdef CONFIG_CMA
+bool is_cma_pageblock(struct page *page);
 #  define is_migrate_cma(migratetype) unlikely((migratetype) == MIGRATE_CMA)
 #  define is_migrate_cma_page(_page) (get_pageblock_migratetype(_page) == MIGRATE_CMA)
 #  define get_cma_migrate_type() MIGRATE_CMA
@@ -136,8 +137,9 @@ enum zone_stat_item {
 	NR_SLAB_UNRECLAIMABLE,
 	NR_PAGETABLE,		/* used for pagetables */
 	NR_KERNEL_STACK_KB,	/* measured in KiB */
-	/* Second 128 byte cacheline */
+	NR_KAISERTABLE,
 	NR_BOUNCE,
+	/* Second 128 byte cacheline */
 #if IS_ENABLED(CONFIG_ZSMALLOC)
 	NR_ZSPAGES,		/* allocated in zsmalloc */
 #endif
@@ -249,8 +251,6 @@ struct lruvec {
 #define LRU_ALL_ANON (BIT(LRU_INACTIVE_ANON) | BIT(LRU_ACTIVE_ANON))
 #define LRU_ALL	     ((1 << NR_LRU_LISTS) - 1)
 
-/* Isolate clean file */
-#define ISOLATE_CLEAN		((__force isolate_mode_t)0x1)
 /* Isolate unmapped file */
 #define ISOLATE_UNMAPPED	((__force isolate_mode_t)0x2)
 /* Isolate for asynchronous migration */

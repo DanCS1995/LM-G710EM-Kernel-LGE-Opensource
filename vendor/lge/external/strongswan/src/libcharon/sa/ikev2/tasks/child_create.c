@@ -33,6 +33,7 @@
 #include <utils/cust_settings.h>
 
 #include <lgpcas.h>
+#include <libpatchcodeid.h>
 
 typedef struct private_child_create_t private_child_create_t;
 
@@ -468,6 +469,7 @@ static status_t select_and_install(private_child_create_t *this,
 											this->proposals, no_dh, private);
 
 	/* 2017-01-02 sy.yun@lge.com LGP_DATA_IWLAN_ALLOW_ESP_DHGROUP_WHILE_REKEY_ORG [START] */
+	patch_code_id("LPCP-1996@n@c@libcharon@child_create.c@1");
 	if (this->proposal == NULL)
 	{
 		int slotid = get_slotid(this->ike_sa->get_name(this->ike_sa));
@@ -525,6 +527,7 @@ static status_t select_and_install(private_child_create_t *this,
 		other_ts = narrow_ts(this, FALSE, this->tsr);
 
 		/* 2016-08-30 protocol-iwlan@lge.com LGP_DATA_IWLAN_FORCE_ADD_SUBNET_WHEN_TS_HAS_FULL_RANGE [START] */
+		patch_code_id("LPCP-2148@n@c@libcharon@child_create.c@1");
 		if (my_ts != NULL && my_ts->get_count(my_ts) > 0) {
 			traffic_selector_t *mts = NULL;
 			int num = my_ts->get_count(my_ts);
@@ -605,6 +608,7 @@ static status_t select_and_install(private_child_create_t *this,
 		}
 
 		/* 2017-01-02 sy.yun@lge.com LGP_DATA_IWLAN_FORCE_ANYADDR_TSR_WHILE_REKEY [START] */
+		patch_code_id("LPCP-1997@n@c@libcharon@child_create.c@1");
 		if (get_cust_setting_bool_by_slotid(slotid, FORCE_TSR_FULL)) {
 			enumerator_t *enumerator = this->ike_sa->get_virtual_ips(this->ike_sa);
 			host_t *vip;
@@ -618,7 +622,7 @@ static status_t select_and_install(private_child_create_t *this,
 				for(i = 0 ; i < num ; i++) {
 					my_ts->remove_first(my_ts, (void**)&dst_ts);
 					dst_ts->set_ts_single_addr(dst_ts, vip);
-					DBG1(DBG_IKE, "Changed my_ts by ORG req : %R", dst_ts);
+					DBG1(DBG_IKE, "FORCE_TSR_FULL Changed my_ts : %R", dst_ts);
 					my_ts->insert_last(my_ts, (void**)dst_ts);
 				}
 
@@ -628,7 +632,7 @@ static status_t select_and_install(private_child_create_t *this,
 				for(i = 0 ; i < num ; i++) {
 					other_ts->remove_first(other_ts, (void**)&src_ts);
 					src_ts->set_ts_any_addr(src_ts);
-					DBG1(DBG_IKE, "Changed other_ts by ORG req : %R", src_ts);
+					DBG1(DBG_IKE, "FORCE_TSR_FULL Changed other_ts : %R", src_ts);
 					other_ts->insert_last(other_ts, (void**)src_ts);
 				}
 			}
@@ -970,6 +974,11 @@ static void handle_notify(private_child_create_t *this, notify_payload_t *notify
 	}
 }
 
+/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
+//check network initiate proposals before load dh group
+static child_cfg_t* select_child_cfg(private_child_create_t *this);
+/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
+
 /**
  * Read payloads from message
  */
@@ -980,6 +989,11 @@ static void process_payloads(private_child_create_t *this, message_t *message)
 	sa_payload_t *sa_payload;
 	ke_payload_t *ke_payload;
 	ts_payload_t *ts_payload;
+
+/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
+//check network initiate proposals before load dh group
+	ke_payload = NULL;
+/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
 
 	/* defaults to TUNNEL mode */
 	this->mode = MODE_TUNNEL;
@@ -998,6 +1012,9 @@ static void process_payloads(private_child_create_t *this, message_t *message)
 				if (!this->initiator)
 				{
 					this->dh_group = ke_payload->get_dh_group_number(ke_payload);
+/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
+//check network initiate proposals before load dh group
+/* strongswan original block
 					this->dh = this->keymat->keymat.create_dh(
 										&this->keymat->keymat, this->dh_group);
 				}
@@ -1005,6 +1022,8 @@ static void process_payloads(private_child_create_t *this, message_t *message)
 				{
 					this->dh->set_other_public_value(this->dh,
 								ke_payload->get_key_exchange_data(ke_payload));
+*/
+/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
 				}
 				break;
 			case TRAFFIC_SELECTOR_INITIATOR:
@@ -1023,6 +1042,45 @@ static void process_payloads(private_child_create_t *this, message_t *message)
 		}
 	}
 	enumerator->destroy(enumerator);
+
+/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
+//check network initiate proposals before load dh group
+	if (ke_payload)
+	{
+		if (this->proposals)
+		{
+			bool private = FALSE;
+			private = this->ike_sa->supports_extension(this->ike_sa, EXT_STRONGSWAN);
+			if (this->config == NULL)
+			{
+				this->config = select_child_cfg(this);
+			}
+
+			if (this->config)
+			{
+				this->proposal = this->config->select_proposal(this->config, this->proposals, FALSE, private);
+				if (!this->proposal->has_dh_group(this->proposal, this->dh_group))
+				{
+					DBG1(DBG_IKE, "========================== no proposal");
+					return;
+				}
+			}
+		}
+
+		if (!this->initiator)
+		{
+			this->dh = this->keymat->keymat.create_dh(
+							&this->keymat->keymat, this->dh_group);
+		}
+
+		if (this->dh)
+		{
+			this->dh->set_other_public_value(this->dh,
+						ke_payload->get_key_exchange_data(ke_payload));
+		}
+	}
+/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
+
 }
 
 METHOD(task_t, build_i, status_t,
@@ -1149,11 +1207,33 @@ METHOD(task_t, build_i, status_t,
 		this->tsi->insert_first(this->tsi,
 								this->packet_tsi->clone(this->packet_tsi));
 	}
+
+	/* 2018-11-15 LGSI LGP_DATA_IWLAN REKEY_TSI_FULL [START] */
+	int slotid = get_slotid(this->ike_sa->get_name(this->ike_sa));
+	if (get_cust_setting_bool_by_slotid(slotid, REKEY_TSI_FULL))
+	{
+		traffic_selector_t *src_ts = NULL;
+		int i;
+		int num = this->tsi->get_count(this->tsi);
+		for (i = 0; i < num; i++) {
+			this->tsi->remove_first(this->tsi, (void**)&src_ts);
+			src_ts->set_ts_any_addr(src_ts);
+			DBG1(DBG_IKE, "Changed this->tsi by P4P req : %R", src_ts);
+			this->tsi->insert_last(this->tsi, (void**)src_ts);
+		}
+	}
+	/* 2018-11-15 LGSI LGP_DATA_IWLAN REKEY_TSI_FULL [END] */
+
 	if (this->packet_tsr)
 	{
 		this->tsr->insert_first(this->tsr,
 								this->packet_tsr->clone(this->packet_tsr));
 	}
+
+	/* 2018-11-15 LGSI LGP_DATA_IWLAN REKEY_TSI_FULL [START] */
+	DBG1(DBG_IKE, "traffic selectors of Rekey %#R === %#R", this->tsr, this->tsi);
+	/* 2018-11-15 LGSI LGP_DATA_IWLAN REKEY_TSI_FULL [END] */
+
 	this->proposals = this->config->get_proposals(this->config,
 												  this->dh_group == MODP_NONE);
 	this->mode = this->config->get_mode(this->config);

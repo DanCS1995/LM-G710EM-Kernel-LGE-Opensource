@@ -11,10 +11,6 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 
-#ifdef CONFIG_LGE_ONE_BINARY_SKU
-#include <soc/qcom/lge/board_lge.h>
-#endif
-
 #include "veneer-primitives.h"
 
 #define VOTER_NAME_THERMALD	"THERMALD"
@@ -30,6 +26,7 @@ struct unified_nodes {
 	struct voter_entry		thermald_iusb;
 	struct voter_entry		thermald_ibat;
 	struct voter_entry		thermald_idc;
+	struct voter_entry		thermald_vdc;
 	struct voter_entry		charging_restriction [RESTRICTION_MAX_COUNT];
 	struct voter_entry		charging_enable [2]; // 0 for iusb, 1 for idc
 	const char*			charging_step;
@@ -40,6 +37,7 @@ struct unified_nodes {
 	bool				fake_hvdcp;
 	void*				battery_age;
 	void*				battery_condition;
+	void*				battery_cycle;
 	bool				battery_valid;
 	char				charger_name [64];
 	bool				charger_highspeed;
@@ -239,6 +237,7 @@ static ssize_t charging_restriction_store(struct device* dev, struct device_attr
 static ssize_t charging_restriction_show(struct device* dev, struct device_attribute* attr, char* buf) {
 	// Do print logs, but Don't return anything
 
+	int ret = -1;
 	if (dev && dev->platform_data) {
 		struct voter_entry* restrictions = ((struct unified_nodes*)dev->platform_data)->charging_restriction;
 		int i;
@@ -246,13 +245,16 @@ static ssize_t charging_restriction_show(struct device* dev, struct device_attri
 		for (i=0; i<RESTRICTION_MAX_COUNT; ++i) {
 			struct voter_entry* restriction = &restrictions[i];
 			if (restriction->type != VOTER_TYPE_INVALID) {
+				if (!strcmp(restriction->name, "LCD"))
+					ret = (restriction->limit == VOTE_TOTALLY_RELEASED) ?
+						-1 : restriction->limit;
 				pr_uninode("voting Name=%s, Value=%d\n", restriction->name,
 					(restriction->limit == VOTE_TOTALLY_RELEASED ? -1 : restriction->limit));
 			}
 		}
 	}
 
-	return snprintf(buf, PAGE_SIZE, "%d", -1);
+	return snprintf(buf, PAGE_SIZE, "%d", ret);
 }
 
 static ssize_t thermald_iusb_store(struct device* dev, struct device_attribute* attr, const char* buf, size_t size) {
@@ -322,6 +324,38 @@ static ssize_t thermald_idc_show(struct device* dev, struct device_attribute* at
 		pr_uninode("Error on getting voter\n");
 
 	return idc ? voter_show(idc, buf) : 0;
+}
+
+static ssize_t thermald_vdc_store(struct device* dev, struct device_attribute* attr, const char* buf, size_t size) {
+	struct power_supply* wireless = power_supply_get_by_name("wireless");
+
+	if (dev && dev->platform_data) {
+		int value = -1;
+		sscanf(buf, "%d", &value);
+
+		if (wireless) {
+			union power_supply_propval voltage = { .intval = value, };
+			power_supply_set_property(wireless, POWER_SUPPLY_PROP_VOLTAGE_MAX, &voltage);
+			power_supply_put(wireless);
+		}
+	} else
+		pr_uninode("Error on getting voter\n");
+
+	return size;
+}
+static ssize_t thermald_vdc_show(struct device* dev, struct device_attribute* attr, char* buf) {
+	struct power_supply* wireless = power_supply_get_by_name("wireless");
+	union power_supply_propval voltage = { .intval = 0, };
+
+	if (dev && dev->platform_data) {
+		if (wireless) {
+			power_supply_get_property(wireless, POWER_SUPPLY_PROP_VOLTAGE_MAX, &voltage);
+			power_supply_put(wireless);
+		}
+	} else
+		pr_uninode("Error on getting voter\n");
+
+	return snprintf(buf, PAGE_SIZE, "%d", voltage.intval);
 }
 
 static ssize_t charging_enable_store(struct device* dev, struct device_attribute* attr, const char* buf, size_t size) {
@@ -516,7 +550,6 @@ static ssize_t fake_sdpmax_store(struct device* dev, struct device_attribute* at
 	pr_uninode("Storing %s\n", buf);
 
 	if (dev && dev->platform_data) {
-		struct power_supply*	psy = power_supply_get_by_name("usb");
 		struct unified_nodes*	ref = (struct unified_nodes*)dev->platform_data;
 		bool*			ori = &ref->fake_sdpmax;
 		int			new;
@@ -524,12 +557,8 @@ static ssize_t fake_sdpmax_store(struct device* dev, struct device_attribute* at
 		sscanf(buf, "%d", &new);
 		new = !!new;
 		if (*ori != new) {
-			if (psy) {
-				const union power_supply_propval trigger = { .intval = 500000, };
-				*ori = new;
-				power_supply_set_property(psy, POWER_SUPPLY_PROP_SDP_CURRENT_MAX, &trigger);
-				power_supply_put(psy);
-			}
+			*ori = new;
+			charging_ceiling_sdpmax(new);
 		}
 	}
 
@@ -621,19 +650,11 @@ static ssize_t battery_condition_show(struct device* dev, struct device_attribut
 		int age_thresold_best = 80;
 		int age_thresold_good = 50;
 		int age_thresold_bad = 0;
-		int condition_ret_abnormal = 0;
 		int condition_ret_best = 1;
 		int condition_ret_good = 2;
 		int condition_ret_bad = 3;
-#ifdef CONFIG_LGE_ONE_BINARY_SKU
-		if (lge_get_laop_operator() == OP_LGU_KR
-			|| lge_get_laop_operator() == OP_OPEN_KR) {
-		// Overrides return value only for LGU at this time
-			condition_ret_best = 100;
-			condition_ret_good = 80;
-			condition_ret_bad = 49;
-		}
-#endif
+		int condition_ret_abnormal = 0;
+
 		if (age >= age_thresold_best)
 			ret = condition_ret_best;
 		else if (age >= age_thresold_good)
@@ -642,6 +663,30 @@ static ssize_t battery_condition_show(struct device* dev, struct device_attribut
 			ret = condition_ret_bad;
 		else
 			ret = condition_ret_abnormal;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d", ret);
+}
+
+static ssize_t battery_cycle_show(struct device* dev, struct device_attribute* attr, char* buf)
+{
+	int ret = -1;
+	if (dev && dev->platform_data) {
+		struct unified_nodes* ref = (struct unified_nodes*)dev->platform_data;
+		const char* psy = NULL;
+
+		if (!of_property_read_string(ref->devnode_battage, "battage-psy", &psy)) {
+			struct power_supply* battage_psy = power_supply_get_by_name(psy);
+			union power_supply_propval cycle_count = { .intval = 0, };
+
+			if (battage_psy
+				&& !power_supply_get_property(battage_psy,
+					POWER_SUPPLY_PROP_CYCLE_COUNT, &cycle_count))
+				ret = cycle_count.intval;
+
+			if (battage_psy)
+				power_supply_put(battage_psy);
+		}
 	}
 
 	return snprintf(buf, PAGE_SIZE, "%d", ret);
@@ -819,6 +864,7 @@ static struct device_attribute unified_nodes_dattrs [] = {
 	__ATTR(thermald_iusb,		0664, thermald_iusb_show,		thermald_iusb_store),
 	__ATTR(thermald_ibat,		0664, thermald_ibat_show,		thermald_ibat_store),
 	__ATTR(thermald_idc,		0664, thermald_idc_show,		thermald_idc_store),
+	__ATTR(thermald_vdc,		0664, thermald_vdc_show,		thermald_vdc_store),
 	__ATTR(charging_restriction,	0664, charging_restriction_show,	charging_restriction_store),
 	__ATTR(charging_enable,		0664, charging_enable_show,		charging_enable_store),
 	__ATTR(charging_step,		0644, charging_step_show,		charging_step_store),
@@ -829,6 +875,7 @@ static struct device_attribute unified_nodes_dattrs [] = {
 	__ATTR(fake_hvdcp,		0664, fake_hvdcp_show, 			fake_hvdcp_store),
 	__ATTR(battery_age,		0444, battery_age_show,			NULL),
 	__ATTR(battery_condition,	0444, battery_condition_show,		NULL),
+	__ATTR(battery_cycle,		0444, battery_cycle_show,		NULL),
 	__ATTR(battery_valid,		0664, battery_valid_show,		battery_valid_store),
 	__ATTR(charger_name,		0664, charger_name_show,		charger_name_store),
 	__ATTR(charger_highspeed,	0664, charger_highspeed_show,		charger_highspeed_store),

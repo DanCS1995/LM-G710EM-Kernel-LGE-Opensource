@@ -902,8 +902,11 @@ unsigned short extract_request(HEADER *header, size_t qlen, char *name, unsigned
 size_t setup_reply(HEADER *header, size_t qlen,
 		struct all_addr *addrp, unsigned short flags, unsigned long ttl)
 {
-  unsigned char *p = skip_questions(header, qlen);
-  
+  unsigned char *p;
+
+  if (!(p = skip_questions(header, qlen)))
+    return 0;
+
   header->qr = 1; /* response */
   header->aa = 0; /* authoritive */
   header->ra = 1; /* recursion if available */
@@ -917,7 +920,7 @@ size_t setup_reply(HEADER *header, size_t qlen,
     header->rcode = NOERROR; /* empty domain */
   else if (flags == F_NXDOMAIN)
     header->rcode = NXDOMAIN;
-  else if (p && flags == F_IPV4)
+  else if (flags == F_IPV4)
     { /* we know the address */
       header->rcode = NOERROR;
       header->ancount = htons(1);
@@ -925,7 +928,7 @@ size_t setup_reply(HEADER *header, size_t qlen,
       add_resource_record(header, NULL, NULL, sizeof(HEADER), &p, ttl, NULL, T_A, C_IN, "4", addrp);
     }
 #ifdef HAVE_IPV6
-  else if (p && flags == F_IPV6)
+  else if (flags == F_IPV6)
     {
       header->rcode = NOERROR;
       header->ancount = htons(1);
@@ -1146,9 +1149,6 @@ size_t answer_request(HEADER *header, char *limit, size_t qlen,
   // Make sure we do not underflow here too.
   if (qlen > (size_t)(limit - ((char *)header))) return 0;
  
-  // Make sure we do not underflow here too.
-  if (qlen > (size_t)(limit - ((char *)header))) return 0;
-
   /* If there is an RFC2671 pseudoheader then it will be overwritten by
      partial replies, so we have to do a dry run to see if we can answer
      the query. We check to see if the do bit is set, if so we always

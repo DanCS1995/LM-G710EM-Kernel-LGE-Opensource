@@ -6,6 +6,7 @@
 cc_binary {
     name: "e2fsdroid",
     host_supported: true,
+    defaults: ["e2fsprogs-defaults"],
 
     srcs: [
         "e2fsdroid.c",
@@ -15,18 +16,38 @@ cc_binary {
         "base_fs.c",
         "perms.c",
         "basefs_allocator.c",
-        "hashmap.c",
     ],
-    cflags: ["-W", "-Wall"],
-    shared_libs: [
-        "libext2fs",
-        "libext2_com_err",
-        "libext2_misc",
-        "libcutils",
-        "libbase",
-        "libselinux",
-        "libcrypto",
-    ],
+    target: {
+        host: {
+            static_libs: [
+                "libext2_com_err",
+                "libext2_misc",
+                "libext2fs",
+                "libsparse",
+                "libz",
+                "libcutils",
+                "libbase",
+                "libselinux",
+                "libcrypto",
+                "liblog",
+            ],
+            sanitize: {
+                address: false,  // http://b/68387795 - heap overflow in e2fsdroid
+            },
+        },
+        android: {
+            shared_libs: [
+                "libext2fs",
+                "libext2_com_err",
+                "libext2_misc",
+                "libcutils",
+                "libbase",
+                "libselinux",
+                "libcrypto",
+            ],
+        },
+    },
+    stl: "libc++_static",
 }
 
 //##########################################################################
@@ -35,21 +56,13 @@ cc_binary {
 cc_binary {
     name: "ext2simg",
     host_supported: true,
+    defaults: ["e2fsprogs-defaults"],
 
     srcs: ["ext2simg.c"],
-    cflags: ["-W", "-Wall"],
     shared_libs: [
         "libext2fs",
         "libext2_com_err",
         "libsparse",
+        "libz",
     ],
-
-    target: {
-        host: {
-            shared_libs: ["libz-host"],
-        },
-        android: {
-            shared_libs: ["libz"],
-        },
-    },
 }

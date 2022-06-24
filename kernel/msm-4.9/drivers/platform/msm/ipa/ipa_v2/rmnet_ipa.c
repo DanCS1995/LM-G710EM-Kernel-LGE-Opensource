@@ -53,6 +53,7 @@
 
 #define IPA_WWAN_DEV_NAME "rmnet_ipa%d"
 #define IPA_UPSTEAM_WLAN_IFACE_NAME "wlan0"
+#define IPA_UPSTEAM_WLAN1_IFACE_NAME "wlan1"
 
 #define IPA_WWAN_DEVICE_COUNT (1)
 
@@ -790,7 +791,8 @@ static enum ipa_upstream_type find_upstream_type(const char *upstreamIface)
 			return IPA_UPSTEAM_MODEM;
 	}
 
-	if (strcmp(IPA_UPSTEAM_WLAN_IFACE_NAME, upstreamIface) == 0)
+	if ((strcmp(IPA_UPSTEAM_WLAN_IFACE_NAME, upstreamIface) == 0) ||
+		(strcmp(IPA_UPSTEAM_WLAN1_IFACE_NAME, upstreamIface) == 0))
 		return IPA_UPSTEAM_WLAN;
 	else
 		return IPA_UPSTEAM_MAX;
@@ -1433,6 +1435,8 @@ static int ipa_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 
 	/*  Extended IOCTLs  */
 	case RMNET_IOCTL_EXTENDED:
+		if (!ns_capable(dev_net(dev)->user_ns, CAP_NET_ADMIN))
+			return -EPERM;
 		IPAWANDBG("get ioctl: RMNET_IOCTL_EXTENDED\n");
 		if (copy_from_user(&extend_ioctl_data,
 			(u8 *)ifr->ifr_ifru.ifru_data,
@@ -1661,6 +1665,7 @@ static int ipa_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 				IPAWANERR("Failed to allocate memory.\n");
 				return -ENOMEM;
 			}
+			extend_ioctl_data.u.if_name[IFNAMSIZ-1] = '\0';
 			len = sizeof(wan_msg->upstream_ifname) >
 			sizeof(extend_ioctl_data.u.if_name) ?
 				sizeof(extend_ioctl_data.u.if_name) :
@@ -2808,7 +2813,8 @@ static int rmnet_ipa_query_tethering_stats_wifi(
 	if (rc) {
 		kfree(sap_stats);
 		return rc;
-	} else if (reset) {
+	} else if (data == NULL) {
+		IPAWANDBG("only reset wlan stats\n");
 		kfree(sap_stats);
 		return 0;
 	}
@@ -2868,7 +2874,7 @@ int rmnet_ipa_query_tethering_stats_modem(
 	if (reset) {
 		req->reset_stats_valid = true;
 		req->reset_stats = true;
-		IPAWANERR("reset the pipe stats\n");
+		IPAWANDBG("reset the pipe stats\n");
 	} else {
 		/* print tethered-client enum */
 		IPAWANDBG_LOW("Tethered-client enum(%d)\n", data->ipa_client);
@@ -2881,6 +2887,7 @@ int rmnet_ipa_query_tethering_stats_modem(
 		kfree(resp);
 		return rc;
 	} else if (data == NULL) {
+		IPAWANDBG("only reset modem stats\n");
 		kfree(req);
 		kfree(resp);
 		return 0;
@@ -3075,10 +3082,7 @@ int rmnet_ipa_query_tethering_stats_all(
 int rmnet_ipa_reset_tethering_stats(struct wan_ioctl_reset_tether_stats *data)
 {
 	enum ipa_upstream_type upstream_type;
-	struct wan_ioctl_query_tether_stats tether_stats;
 	int rc = 0;
-
-	memset(&tether_stats, 0, sizeof(struct wan_ioctl_query_tether_stats));
 
 	/* prevent string buffer overflows */
 	data->upstreamIface[IFNAMSIZ-1] = '\0';
@@ -3100,7 +3104,7 @@ int rmnet_ipa_reset_tethering_stats(struct wan_ioctl_reset_tether_stats *data)
 	} else {
 		IPAWANDBG(" reset modem-backhaul stats\n");
 		rc = rmnet_ipa_query_tethering_stats_modem(
-			&tether_stats, true);
+			NULL, true);
 		if (rc) {
 			IPAWANERR("reset MODEM stats failed\n");
 			return rc;

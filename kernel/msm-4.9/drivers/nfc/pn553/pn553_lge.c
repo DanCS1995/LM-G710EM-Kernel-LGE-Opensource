@@ -31,6 +31,13 @@
 #define MAX_BUFFER_SIZE 512
 #define NFC_TIMEOUT_MS 2000
 
+#define READ_IRQ_MODIFY //NFC-6953
+
+#ifdef READ_IRQ_MODIFY
+bool do_reading = 0;
+static bool cancel_read = false;
+#endif
+
 #ifdef CONFIG_LGE_NFC_USE_PMIC // [NFC-367]
 #define CLK_DISABLE 0
 #define CLK_PIN 1
@@ -163,6 +170,9 @@ static irqreturn_t pn547_dev_irq_handler(int irq, void *dev_id)
 
     if (sPowerState == NFC_POWER_ON) {
         spin_lock_irqsave(&pn547_dev->irq_enabled_lock, flags);
+#ifdef READ_IRQ_MODIFY
+        do_reading = 1;
+#endif
         /* Wake up waiting readers */
         wake_up(&pn547_dev->read_wq);
         if (sIsWakeLocked == false) {
@@ -202,8 +212,17 @@ static ssize_t pn547_dev_read(struct file *filp, char __user *buf,
 
     //pr_err("%s : reading %zu bytes.\n", __func__, count); // for debug
 
+#ifdef READ_IRQ_MODIFY
+    if (!gpio_get_value(pn547_dev->irq_gpio))
+        do_reading = 0;
+#endif
+
     if (isFirstPacket == false) {
+#ifdef READ_IRQ_MODIFY
+        ret = wait_event_interruptible_timeout(pn547_dev->read_wq, do_reading|gpio_get_value(pn547_dev->irq_gpio), msecs_to_jiffies(NFC_TIMEOUT_MS)); // NFC-7548
+#else
         ret = wait_event_interruptible_timeout(pn547_dev->read_wq, gpio_get_value(pn547_dev->irq_gpio), msecs_to_jiffies(NFC_TIMEOUT_MS));
+#endif
         if (ret == 0) {
             pr_err("%s: no more interrupt after %dms (%d)!\n", __func__, NFC_TIMEOUT_MS, gpio_get_value(pn547_dev->irq_gpio)); // for debug
             spin_lock_irqsave(&pn547_dev->irq_enabled_lock, flags);
@@ -219,7 +238,11 @@ static ssize_t pn547_dev_read(struct file *filp, char __user *buf,
 
     if (isFirstPacket == true)
     {
+#ifdef READ_IRQ_MODIFY
+        ret = wait_event_interruptible(pn547_dev->read_wq, do_reading|gpio_get_value(pn547_dev->irq_gpio)); // NFC-7548
+#else
         ret = wait_event_interruptible(pn547_dev->read_wq, gpio_get_value(pn547_dev->irq_gpio));
+#endif
         if (ret == 0)
             isFirstPacket = false;
     }
@@ -233,6 +256,14 @@ static ssize_t pn547_dev_read(struct file *filp, char __user *buf,
     else {
         //pr_err("%s: pass wait_event_interruptible by condition (%d)\n", __func__, gpio_get_value(pn547_dev->irq_gpio)); // for debug
     }
+
+#ifdef READ_IRQ_MODIFY
+    if (cancel_read == true) {
+        cancel_read = false;
+        ret = -1;
+        goto fail;
+    }
+#endif
 
     /* Read data */
     mutex_lock(&pn547_dev->read_mutex);
@@ -262,6 +293,9 @@ static ssize_t pn547_dev_read(struct file *filp, char __user *buf,
         kfree(tmp); // [NFC-6460] WBT TD208273
         return -EFAULT;
     }
+#ifdef READ_IRQ_MODIFY
+    fail:
+#endif
     kfree(tmp);
 
     //pr_err("%s: i2c_master_recv success (%d)\n", __func__, ret); // for debug
@@ -403,6 +437,13 @@ static long pn547_dev_unlocked_ioctl(struct file *filp, unsigned int cmd, unsign
             else {
                 pr_err("%s NFC is alread Off!\n", __func__);
             }
+#ifdef READ_IRQ_MODIFY
+        } else if (arg == 3) {
+            pr_err("%s Read Cancel\n", __func__);
+            cancel_read = true;
+            do_reading = 1;
+            wake_up(&pn547_dev->read_wq);
+#endif
         } else {
                 pr_err("%s bad arg %ld\n", __func__, arg);
             return -EINVAL;

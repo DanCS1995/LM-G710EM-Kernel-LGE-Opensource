@@ -835,18 +835,18 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
   switch (mess_type)
     {
     case DHCPDECLINE:
-	//MirrorLink
-	if ((strncmp(iface_name, "usb", 3)) == 0)
-	{
-	   int rand_cclass =  (rand() % 8) + 42;
-	   char rand_addr[20] = {'\0',};
-	   char rand_addr_default[20] = {'\0',};
-	   sprintf(rand_addr, "192.168.%d.129", rand_cclass);
-	   sprintf(rand_addr_default, "192.168.%d.0/24", rand_cclass);
-	   change_ifaceaddr(iface_name, inet_addr(rand_addr));
-	   add_route_local(rand_addr_default, iface_name);
-	}
-	//MirrorLink
+      //MirrorLink
+      if ((strncmp(iface_name, "usb", 3)) == 0)
+      {
+        int rand_cclass =  (rand() % 8) + 42;
+        char rand_addr[20] = {'\0',};
+        char rand_addr_default[20] = {'\0',};
+        sprintf(rand_addr, "192.168.%d.129", rand_cclass);
+        sprintf(rand_addr_default, "192.168.%d.0/24", rand_cclass);
+        change_ifaceaddr(iface_name, inet_addr(rand_addr));
+        add_route_local(rand_addr_default, iface_name);
+      }
+      //MirrorLink
 
       if (!(opt = option_find(mess, sz, OPTION_SERVER_IDENTIFIER, INADDRSZ)) ||
 	  option_addr(opt).s_addr != server_id(context, override, fallback).s_addr)
@@ -2358,44 +2358,44 @@ static void do_options(struct dhcp_context *context,
 //MirrorLink
 int run_ip_cmd(char * cmd)
 {
-	FILE *fp = NULL;
+    FILE *fp = NULL;
 
-	if (strlen(cmd) > 255)
-	   return -1;
+    if (strlen(cmd) > 255)
+       return -1;
 
-	if ((fp = popen(cmd, "r")) == NULL)
-	{
-	   my_syslog(MS_DHCP | LOG_INFO, "failed to popen: %s", strerror(errno));
-	   free(cmd);
-	   return -1;
-	}
+    if ((fp = popen(cmd, "r")) == NULL)
+    {
+       my_syslog(MS_DHCP | LOG_INFO, "failed to popen: %s", strerror(errno));
+       free(cmd);
+       return -1;
+    }
 
-	pclose(fp);
-	free(cmd);
+    pclose(fp);
+    free(cmd);
 
-	return 1;
+    return 1;
 }
 
 static int add_route_local(char *addr, char *iface)
 {
-	char *cmd;
+    char *cmd;
 
-	asprintf(&cmd, "%s route add  %s dev %s table local_network", "system/bin/ip", addr, iface);
-	my_syslog(MS_DHCP | LOG_INFO, "modify_from_route : %s", cmd);
-	if (cmd == NULL || run_ip_cmd(cmd) < 0)
-	{
-	   my_syslog(MS_DHCP | LOG_INFO, "failed to run_ip_cmd");
-	   return -1;
-	}
+    asprintf(&cmd, "%s route add  %s dev %s table local_network", "system/bin/ip", addr, iface);
+    my_syslog(MS_DHCP | LOG_INFO, "modify_from_route : %s", cmd);
+    if (run_ip_cmd(cmd) < 0)
+    {
+       my_syslog(MS_DHCP | LOG_INFO, "failed to run_ip_cmd");
+       return -1;
+    }
 
-	return 1;
+    return 1;
 }
 
 static void change_ifaceaddr(const char *name, in_addr_t addr)
 {
-	ifc_init();
-	ifc_set_addr(name, addr);
-	ifc_close();
+    ifc_init();
+    ifc_set_addr(name, addr);
+    ifc_close();
 }
 //MirrorLink
 

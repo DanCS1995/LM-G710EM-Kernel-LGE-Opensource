@@ -251,6 +251,7 @@ void lge_panel_err_detect_init(struct dsi_panel *panel)
 			pr_warn(" Warning creating workqueue\n");
 			goto err_none;
 		} else {
+			pr_info("register err_detect_work\n");
 			INIT_DELAYED_WORK(&panel->lge.err_detect_int_work, panel->lge.ddic_ops->err_detect_work);
 		}
 	}
@@ -270,7 +271,7 @@ void lge_panel_err_detect_init(struct dsi_panel *panel)
 	cancel_delayed_work(&panel->lge.err_detect_int_work);
 
 	panel->lge.err_detect_result = 0;
-	panel->lge.err_detect_mask = 0;
+	panel->lge.err_detect_mask = -1;
 	panel->lge.err_detect_crash_enabled = 0;
 	panel->lge.is_first_err_mask = true;
 	return;

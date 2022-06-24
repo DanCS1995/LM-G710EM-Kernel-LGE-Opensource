@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -491,22 +491,32 @@ static void sde_rsc_reset_mode_0_1(struct sde_rsc_priv *rsc)
 
 	if (seq_busy && (current_mode == SDE_RSC_MODE_0_VAL ||
 			current_mode == SDE_RSC_MODE_1_VAL)) {
-		dss_reg_w(&rsc->wrapper_io, SDE_RSCC_F1_QTMR_V1_CNTP_CVAL_LO,
-						0xffffffff, rsc->debug_mode);
 		dss_reg_w(&rsc->wrapper_io, SDE_RSCC_F1_QTMR_V1_CNTP_CVAL_HI,
 						0xffffff, rsc->debug_mode);
+		dss_reg_w(&rsc->wrapper_io, SDE_RSCC_F1_QTMR_V1_CNTP_CVAL_LO,
+						0xffffffff, rsc->debug_mode);
 		/* unstick f1 qtimer */
 		wmb();
 
-		dss_reg_w(&rsc->wrapper_io, SDE_RSCC_F1_QTMR_V1_CNTP_CVAL_LO,
-						0x0, rsc->debug_mode);
 		dss_reg_w(&rsc->wrapper_io, SDE_RSCC_F1_QTMR_V1_CNTP_CVAL_HI,
 						0x0, rsc->debug_mode);
+		dss_reg_w(&rsc->wrapper_io, SDE_RSCC_F1_QTMR_V1_CNTP_CVAL_LO,
+						0x0, rsc->debug_mode);
+		/* manually trigger f1 qtimer interrupt */
+		wmb();
+
+		dss_reg_w(&rsc->wrapper_io, SDE_RSCC_F0_QTMR_V1_CNTP_CVAL_HI,
+						0xffffff, rsc->debug_mode);
+		dss_reg_w(&rsc->wrapper_io, SDE_RSCC_F0_QTMR_V1_CNTP_CVAL_LO,
+						0xffffffff, rsc->debug_mode);
+		/* unstick f0 qtimer */
+		wmb();
+
 		dss_reg_w(&rsc->wrapper_io, SDE_RSCC_F0_QTMR_V1_CNTP_CVAL_HI,
 						0x0, rsc->debug_mode);
 		dss_reg_w(&rsc->wrapper_io, SDE_RSCC_F0_QTMR_V1_CNTP_CVAL_LO,
 						0x0, rsc->debug_mode);
-		/* manually trigger f1 qtimer interrupt */
+		/* manually trigger f0 qtimer interrupt */
 		wmb();
 	}
 }
@@ -541,15 +551,8 @@ static int sde_rsc_mode2_entry(struct sde_rsc_priv *rsc)
 			sde_rsc_reset_mode_0_1(rsc);
 	}
 
-	if (rc) {
-		SDE_DBG_DUMP(SDE_RSC_DRV_DBG_NAME,
-		SDE_RSC_WRAPPER_DBG_NAME,
-		SDE_PDC_DBG_NAME,
-		SDE_PDC_SEQ_DBG_NAME,
-		DISP_CC_DBG_NAME,
-		"panic");
+	if (rc)
 		goto end;
-	}
 
 	if ((rsc->current_state == SDE_RSC_VID_STATE) ||
 			(rsc->current_state == SDE_RSC_CLK_STATE)) {

@@ -86,7 +86,7 @@ METHOD(job_t, execute, job_requeue_t,
 
 /* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 	ike_sa_current_thread = charon->ike_sa_manager->get_sa_by_ikeid_rekey(charon->ike_sa_manager, this->ike_sa_id);
-	if (ike_sa_current_thread != NULL)
+    if (ike_sa_current_thread != NULL)
 	{
 		slotid = get_slotid(ike_sa_current_thread->get_name(ike_sa_current_thread));
 	}

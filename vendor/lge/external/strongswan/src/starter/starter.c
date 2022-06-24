@@ -480,7 +480,7 @@ int main (int argc, char **argv)
 	}
 
 	/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
-	property_get("persist.lg.data.swandbglv",args, "10");
+	property_get("persist.product.lge.data.swandbglv",args, "10");
 	if(!streq(args, "10")){
 		DBG1(DBG_APP, "current_loglevel adjusted to %d from %d", atoi(args), current_loglevel);
 		current_loglevel = atoi(args);

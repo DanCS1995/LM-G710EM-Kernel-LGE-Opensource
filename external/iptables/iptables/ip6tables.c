@@ -44,6 +44,7 @@
 #include <sys/socket.h>
 #include "ip6tables-multi.h"
 #include "xshared.h"
+#include <libpatchcodeid.h>
 
 #ifndef TRUE
 #define TRUE 1
@@ -1724,19 +1725,21 @@ int do_command6(int argc, char *argv[], char **table,
 		}
 		cs.invert = FALSE;
 	}
+
+	if (!wait && wait_interval_set)
+		xtables_error(PARAMETER_PROBLEM,
+			      "--wait-interval only makes sense with --wait\n");
+
 /* 2014-12-18 kyungsu.mok@lge.com LGP_DATA_TOOLS_IPTABLES_FORCE_WAIT_OPTION [START] */
 #ifdef LGP_DATA_TOOLS_IPTABLES_FORCE_WAIT_OPTION
     if (!restore && wait == 0) {
+        patch_code_id("LPCP-704@n@c@ip6tables@ip6tables.c@1");
         wait_interval_set = true;
         wait = 3;
         wait_interval.tv_usec = 200;
     }
 #endif
 /* 2014-12-18 kyungsu.mok@lge.com LGP_DATA_TOOLS_IPTABLES_FORCE_WAIT_OPTION [END] */
-
-	if (!wait && wait_interval_set)
-		xtables_error(PARAMETER_PROBLEM,
-			      "--wait-interval only makes sense with --wait\n");
 
 	if (strcmp(*table, "nat") == 0 &&
 	    ((policy != NULL && strcmp(policy, "DROP") == 0) ||
@@ -1788,15 +1791,8 @@ int do_command6(int argc, char *argv[], char **table,
 	generic_opt_check(command, cs.options);
 
 	/* Attempt to acquire the xtables lock */
-	if (!restore && xtables_lock(wait, &wait_interval) == XT_LOCK_BUSY) {
-		fprintf(stderr, "Another app is currently holding the xtables lock. ");
-		if (wait == 0)
-			fprintf(stderr, "Perhaps you want to use the -w option?\n");
-		else
-			fprintf(stderr, "Stopped waiting after %ds.\n", wait);
-		xtables_free_opts(1);
-		exit(RESOURCE_PROBLEM);
-	}
+	if (!restore)
+		xtables_lock_or_exit(wait, &wait_interval);
 
 	/* only allocate handle if we weren't called with a handle */
 	if (!*handle)

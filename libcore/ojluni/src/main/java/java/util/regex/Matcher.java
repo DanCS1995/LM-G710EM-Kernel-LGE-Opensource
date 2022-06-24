@@ -26,6 +26,7 @@
 
 package java.util.regex;
 
+import dalvik.annotation.optimization.ReachabilitySensitive;
 import libcore.util.NativeAllocationRegistry;
 
 /**
@@ -107,12 +108,17 @@ public final class Matcher implements MatchResult {
     /**
      * The Pattern object that created this Matcher.
      */
+    // Patterns also contain cleanup code and a ReachabilitySensitive field.
+    // This ensures that "this" and pattern remain reachable while we're using pattern.address
+    // directly.
+    @ReachabilitySensitive
     private Pattern pattern;
 
     /**
      * The address of the native peer.
      * Uses of this must be manually synchronized to avoid native crashes.
      */
+    @ReachabilitySensitive
     private long address;
 
     /**
@@ -122,6 +128,13 @@ public final class Matcher implements MatchResult {
 
     private static final NativeAllocationRegistry registry = new NativeAllocationRegistry(
             Matcher.class.getClassLoader(), getNativeFinalizer(), nativeSize());
+
+    /**
+     * Holds the original CharSequence for use in {@link #reset}. {@link #input} is used during
+     * matching. Note that CharSequence is mutable while String is not, so reset can cause the input
+     * to match to change.
+     */
+    private CharSequence originalInput;
 
     /**
      * Holds the input text.
@@ -490,6 +503,7 @@ public final class Matcher implements MatchResult {
      *          pattern
      */
     public boolean find(int start) {
+        reset();
         if (start < 0 || start > input.length()) {
             throw new IndexOutOfBoundsException("start=" + start + "; length=" + input.length());
         }
@@ -820,7 +834,7 @@ public final class Matcher implements MatchResult {
      * @since 1.5
      */
     public Matcher region(int start, int end) {
-        return reset(input, start, end);
+        return reset(originalInput, start, end);
     }
 
     /**
@@ -1024,7 +1038,7 @@ public final class Matcher implements MatchResult {
      * @return  This matcher
      */
     public Matcher reset() {
-        return reset(input, 0, input.length());
+        return reset(originalInput, 0, originalInput.length());
     }
 
     /**
@@ -1070,6 +1084,7 @@ public final class Matcher implements MatchResult {
             throw new IndexOutOfBoundsException();
         }
 
+        this.originalInput = input;
         this.input = input.toString();
         this.regionStart = start;
         this.regionEnd = end;

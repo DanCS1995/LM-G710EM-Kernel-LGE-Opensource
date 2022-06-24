@@ -17,13 +17,15 @@ static struct charging_ceiling_struct {
 	// Index of ceiling_entry and the ceiling tables
 	enum charging_supplier	charger_type;
 	struct device_node*	charger_preset;
+	bool			charger_sdpmax;
 } ceiling_me = {
 	.voter_iusb	= { .type = VOTER_TYPE_INVALID },
 	.voter_ibat	= { .type = VOTER_TYPE_INVALID },
 	.voter_idc	= { .type = VOTER_TYPE_INVALID },
 
-	.charger_type	= CHARGING_SUPPLY_UNKNOWN,
+	.charger_type	= CHARGING_SUPPLY_TYPE_UNKNOWN,
 	.charger_preset	= NULL,
+	.charger_sdpmax	= false,
 };
 
 static bool charging_ceiling_entry(enum charging_supplier charger, u32* out, size_t size) {
@@ -70,7 +72,20 @@ bool charging_ceiling_vote(enum charging_supplier charger) {
 		ceiling_me.charger_type = charger;
 	}
 
+	veneer_voter_passover(VOTER_TYPE_IUSB, 900, ceiling_me.charger_sdpmax &&
+		ceiling_me.charger_type == CHARGING_SUPPLY_USB_2P0);
+
 	return true;
+}
+
+bool charging_ceiling_sdpmax(bool enable) {
+	if (ceiling_me.charger_sdpmax != enable) {
+		ceiling_me.charger_sdpmax = enable;
+		charging_ceiling_vote(ceiling_me.charger_type);
+		return true;
+	}
+
+	return false;
 }
 
 bool charging_ceiling_create(struct device_node* dnode) {
@@ -104,8 +119,9 @@ void charging_ceiling_destroy(void) {
 	ceiling_me.voter_idc.type  = VOTER_TYPE_INVALID;
 
 	// Clear misc data
-	ceiling_me.charger_type   = CHARGING_SUPPLY_UNKNOWN;
+	ceiling_me.charger_type   = CHARGING_SUPPLY_TYPE_UNKNOWN;
 	ceiling_me.charger_preset = NULL;
+	ceiling_me.charger_sdpmax = false;
 
 	pr_ceil("Ceiling destroyed\n");
 }

@@ -259,6 +259,7 @@ out:
     return rc;
 }
 
+/*
 int parse_packet(struct ecryptfs_ctx *ctx,
          struct ecryptfs_message *emsg,
          struct ecryptfs_message **reply)
@@ -378,3 +379,4 @@ write_failure:
     }
     return rc;
 }
+*/

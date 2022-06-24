@@ -100,8 +100,11 @@ static void debug_polling(struct smb_charger* charger) {
 	union power_supply_propval	val = {0, };
 	u8				reg = 0;
 
+	bool disabled_ibat  = !!get_effective_result(charger->chg_disable_votable);
+	bool disabled_prll  = !!get_effective_result(charger->pl_disable_votable);
+
+	int  capping_ibat   = disabled_ibat ? 0 : get_effective_result(charger->fcc_votable)/1000;
 	int  capping_iusb   = get_effective_result(charger->usb_icl_votable)/1000;
-	int  capping_ibat   = get_effective_result(charger->fcc_votable)/1000;
 	int  capping_idc    = get_effective_result(charger->dc_icl_votable)/1000;
 	int  capping_vfloat = get_effective_result(charger->fv_votable)/1000;
 
@@ -151,13 +154,12 @@ static void debug_polling(struct smb_charger* charger) {
 
 	pr_info("PMINFO: [VOT] IUSB:%d(%s), IBAT:%d(%s), IDC:%d(%s), FLOAT:%d(%s), CHDIS:%d(%s), PLDIS:%d(%s)\n",
 		capping_iusb,	get_effective_client(charger->usb_icl_votable),
-		capping_ibat,	get_effective_client(charger->fcc_votable),
+		capping_ibat,	get_effective_client(disabled_ibat ? charger->chg_disable_votable : charger->fcc_votable),
 		capping_idc,	get_effective_client(charger->dc_icl_votable),
 		capping_vfloat,	get_effective_client(charger->fv_votable),
-		get_effective_result(charger->chg_disable_votable),
-			get_effective_client(charger->chg_disable_votable),
-		get_effective_result(charger->pl_disable_votable),
-			get_effective_client(charger->pl_disable_votable));
+
+		disabled_ibat,  get_effective_client(charger->chg_disable_votable),
+		disabled_prll,  get_effective_client(charger->pl_disable_votable));
 
 	// If not charging, skip the remained logging
 	if (!presence_usb && !presence_dc)
@@ -222,6 +224,8 @@ static void debug_polling(struct smb_charger* charger) {
 			? val.intval/1000 : -1;
 		int iusb_set = !smblib_get_prop_input_current_settled(charger, &val)
 			? val.intval/1000 : -1;
+		int ibat_now = !smblib_get_prop_from_bms(charger, POWER_SUPPLY_PROP_CURRENT_NOW, &val)
+			? val.intval/1000 : -1;
 		int ibat_pmi = !smblib_get_charge_param(charger, &charger->param.fcc, &val.intval)
 			? val.intval/1000 : 0;
 		int ibat_smb = (prll_chgen <= 0) ? 0 : (!power_supply_get_property(charger->pl.psy,
@@ -235,11 +239,11 @@ static void debug_polling(struct smb_charger* charger) {
 			? reg : -1;
 
 		pr_info("PMINFO: [USB] REAL:%s, VNOW:%d, TPMI:%d, TSMB:%d,"
-			" IUSB:%d(now)<=%d(set)<=%d(cap), IBAT:%d(pmi)+%d(smb)<=%d(cap),"
+			" IUSB:%d(now)<=%d(set)<=%d(cap), IBAT:%d(now):=%d(pmi)+%d(smb)<=%d(cap),"
 			" PRLL:CHGEN(%d)/PINEN(%d)/SUSPN(%d),"
 			" [OVR] LATCHED:%d, AFTAPSD:%d, USBMODE:0x%02x\n",
 			usb_real, usb_vnow, temp_pmi, temp_smb,
-			iusb_now, iusb_set, capping_iusb, ibat_pmi, ibat_smb, capping_ibat,
+			iusb_now, iusb_set, capping_iusb, ibat_now, ibat_pmi, ibat_smb, capping_ibat,
 			prll_chgen, prll_pinen, prll_suspd,
 			icl_override_latched, icl_override_aftapsd, icl_override_usbmode);
 	}
@@ -282,7 +286,7 @@ static void debug_polling(struct smb_charger* charger) {
 
 out:	pr_info("PMINFO: ---------------------------------------------"
 			"-----------------------------------------%s-END.\n",
-			unified_bootmode_name());
+			unified_bootmode_marker());
 
 	vote(charger->awake_votable, POLLING_LOGGER_VOTER, false, 0);
 	return;
@@ -336,18 +340,6 @@ static int restricted_charging_iusb(struct smb_charger* charger, int mvalue) {
 		if (mvalue != VOTE_TOTALLY_RELEASED) {
 			// Releasing undesirable capping on IUSB :
 
-			// In the case of ATS with USB, set ICL to 900
-			if (charger->real_charger_type == POWER_SUPPLY_TYPE_USB) {
-				char buffer [16] = { 0, };
-				int sdpmax = 0;
-				if (unified_nodes_show("fake_sdpmax", buffer)
-					&& sscanf(buffer, "%d", &sdpmax) && !!sdpmax) {
-					#define FAKE_SDPMAX_MA	900
-					pr_info("Override USB ICL to Max mode (%d)\n", FAKE_SDPMAX_MA);
-					mvalue = FAKE_SDPMAX_MA;
-				}
-			}
-
 			// In the case of CWC, LEGACY_UNKNOWN_VOTER limits IUSB
 			// which is set in the 'previous' TypeC removal
 			if (is_client_vote_enabled(charger->usb_icl_votable, LEGACY_UNKNOWN_VOTER)) {
@@ -378,6 +370,7 @@ static int restricted_charging_ibat(struct smb_charger* charger, int mvalue) {
 	int rc = 0;
 
 	if (mvalue != VOTE_TOTALLY_BLOCKED) {
+		pr_info("Restricted IBAT : %duA\n", mvalue*1000);
 		rc |= vote(charger->fcc_votable, VENEER_VOTER_IBAT,
 			mvalue != VOTE_TOTALLY_RELEASED, mvalue*1000);
 
@@ -445,9 +438,17 @@ static int restricted_charging_vfloat(struct smb_charger* charger, int mvalue) {
 			int uv_float = mvalue*1000, uv_now;
 			rc |= power_supply_get_property(charger->bms_psy,
 				POWER_SUPPLY_PROP_VOLTAGE_OCV, &val);
-			uv_now = val.intval; pr_err("uv_now : %d\n", uv_now);
-			vote(charger->fv_votable, VENEER_VOTER_VFLOAT,
-				true, max(uv_float, uv_now));
+			uv_now = val.intval; pr_debug("uv_now : %d\n", uv_now);
+			if (uv_now > uv_float
+				&& !is_client_vote_enabled(charger->fv_votable, VENEER_VOTER_VFLOAT)) {
+				rc |= vote(charger->chg_disable_votable, VENEER_VOTER_VFLOAT,
+					true, 0);
+			} else {
+				rc |= vote(charger->chg_disable_votable, VENEER_VOTER_VFLOAT,
+					false, 0);
+				rc |= vote(charger->fv_votable, VENEER_VOTER_VFLOAT,
+					true, uv_float);
+			}
 		}
 	}
 	else {
@@ -954,38 +955,48 @@ static enum charger_usbid psy_usbid_get(struct smb_charger* chg) {
 	return cache_usbid_type;
 }
 
-static int moisture_mode_enable(struct smb_charger* chg) {
-#define MOISTURE_VOTER	"MOISTURE_VOTER"
-	int rc = 0;
+// Variables for the moisture detection
+static int  moisture_charging = -1;
+static bool moisture_detected = false;
 
+static int moisture_mode_on(struct smb_charger* chg) {
+	int rc;
+
+	if (moisture_charging == 0) {
 	// 1. change UVLO to 10.3v
-	rc = smblib_write(chg, USBIN_ADAPTER_ALLOW_CFG_REG, USBIN_ADAPTER_ALLOW_12V);
-	if (rc < 0) {
-		pr_err("Couldn't write 0x%02x to USBIN_ADAPTER_ALLOW_CFG rc=%d\n",
-			USBIN_ADAPTER_ALLOW_12V, rc);
-		return rc;
-	}
+		rc = smblib_write(chg, USBIN_ADAPTER_ALLOW_CFG_REG, USBIN_ADAPTER_ALLOW_12V);
+		if (rc < 0) {
+			pr_err("Couldn't write 0x%02x to USBIN_ADAPTER_ALLOW_CFG rc=%d\n",
+				USBIN_ADAPTER_ALLOW_12V, rc);
+			return rc;
+		}
 
 	// 2. disable apsd
-	vote(chg->apsd_disable_votable, MOISTURE_VOTER, true, 0);
+		vote(chg->apsd_disable_votable, MOISTURE_VOTER, true, 0);
 
 	// 3. Set input suspend
-	vote(chg->usb_icl_votable, MOISTURE_VOTER, true, 0);
-
-	// 4. disable Dp Dm
-	if (regulator_is_enabled(chg->dpdm_reg)) {
-		rc = regulator_disable(chg->dpdm_reg);
-		if (rc < 0)
-			pr_err( "Couldn't disable dpdm regulator rc=%d\n", rc);
+		vote(chg->usb_icl_votable, MOISTURE_VOTER, true, 0);
 	}
 
-	return rc;
+	// 4. TYPEC_PR_NONE for power role
+	vote(chg->disable_power_role_switch, MOISTURE_VOTER, true, 0);
+
+	// 5. disable Dp Dm
+	if (regulator_is_enabled(chg->dpdm_reg)) {
+		rc = regulator_disable(chg->dpdm_reg);
+		if (rc < 0) {
+			pr_err( "Couldn't disable dpdm regulator rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	return 0;
 }
 
-static int moisture_mode_disable(struct smb_charger* chg) {
-	int rc = 0;
+static int moisture_mode_off(struct smb_charger* chg) {
+	int rc;
 
-	// ~4. enable Dp Dm
+	// ~5. enable Dp Dm
 	if (!regulator_is_enabled(chg->dpdm_reg)) {
 		rc = regulator_enable(chg->dpdm_reg);
 		if (rc < 0) {
@@ -993,6 +1004,9 @@ static int moisture_mode_disable(struct smb_charger* chg) {
 			return rc;
 		}
 	}
+
+	// ~4. TYPEC_PR_DUAL for power role
+	vote(chg->disable_power_role_switch, MOISTURE_VOTER, false, 0);
 
 	// ~3. Clear input suspend
 	vote(chg->usb_icl_votable, MOISTURE_VOTER, false, 0);
@@ -1005,13 +1019,13 @@ static int moisture_mode_disable(struct smb_charger* chg) {
 	if (rc < 0) {
 		pr_err("Couldn't write 0x%02x to USBIN_ADAPTER_ALLOW_CFG rc=%d\n",
 			USBIN_ADAPTER_ALLOW_5V_OR_9V_TO_12V, rc);
+		return rc;
 	}
 
-	return rc;
+	return 0;
 }
 
-static int moisture_mode_command(struct smb_charger* chg, bool enable) {
-	static bool enabled = false;
+static int moisture_mode_command(struct smb_charger* chg, bool moisture) {
 	int rc = 0;
 
 	/* fetch the DPDM regulator */
@@ -1026,17 +1040,22 @@ static int moisture_mode_command(struct smb_charger* chg, bool enable) {
 		}
 	}
 
+	/* fetch the flag of moisture charging */
+	if (moisture_charging == -1 && of_property_read_u32(of_find_node_by_name(chg->dev->of_node,
+		"lge-extension-usb"), "lge,feature-moisture-charging", &moisture_charging) >= 0)
+		pr_info("%sing moisture charging\n", !!moisture_charging ? "Support" : "Block");
+
 	/* commanding only for changed */
-	if (enabled != enable) {
-		rc = enable ? moisture_mode_enable(chg) : moisture_mode_disable(chg);
+	if (moisture_detected != moisture) {
+		rc = moisture ? moisture_mode_on(chg) : moisture_mode_off(chg);
 		if (rc >= 0)
-			enabled = enable;
+			moisture_detected = moisture;
 
 		pr_info("PMI: %s: %s to command moisture mode to %d\n", __func__,
-			rc >= 0 ? "Success" : "Failed", enable);
+			rc >= 0 ? "Success" : "Failed", moisture);
 	}
 	else
-		pr_info("PMI: %s: Skip to %s\n", __func__, enable ? "enable" : "disable");
+		pr_info("PMI: %s: Skip to %s\n", __func__, moisture ? "enable" : "disable");
 
 out:
 	return rc;
@@ -1202,6 +1221,19 @@ static int charger_power_float(/*@Nonnull*/ struct power_supply* usb, int type) 
 	return power;
 }
 
+static bool usbin_ov_check(/*@Nonnull*/ struct smb_charger *chg) {
+	int rc = 0;
+	u8 stat;
+
+	rc = smblib_read(chg, USBIN_BASE + INT_RT_STS_OFFSET, &stat);
+	if (rc < 0) {
+		pr_info("%s: Couldn't read USBIN_RT_STS rc=%d\n", __func__, rc);
+		return false;
+	}
+
+	return (bool)(stat & USBIN_OV_RT_STS_BIT);
+}
+
 static bool usb_pcport_check(/*@Nonnull*/ struct smb_charger *chg) {
 	enum power_supply_type* pst = &chg->real_charger_type;
 	union power_supply_propval val = { 0, };
@@ -1234,22 +1266,19 @@ static bool usb_pcport_check(/*@Nonnull*/ struct smb_charger *chg) {
 }
 
 static int usb_pcport_current(/*@Nonnull*/ struct smb_charger *chg, int req) {
-	enum charger_usbid usbid = CHARGER_USBID_INVALID;
-	char buf [16] = { 0, };
-	int  fake = 0;
+	struct power_supply* veneer = power_supply_get_by_name("veneer");
+	if (veneer) {
+		union power_supply_propval val;
+		if (req == 900000) {
+			// Update veneer's supplier type to USB 3.x
+			val.intval = POWER_SUPPLY_TYPE_USB;
+			power_supply_set_property(veneer, POWER_SUPPLY_PROP_REAL_TYPE, &val);
+		}
+		power_supply_get_property(veneer, POWER_SUPPLY_PROP_SDP_CURRENT_MAX, &val);
+		power_supply_put(veneer);
 
-	usbid = psy_usbid_get(chg);
-	if (usbid == CHARGER_USBID_56KOHM || usbid == CHARGER_USBID_130KOHM
-		|| usbid == CHARGER_USBID_910KOHM) {
-		pr_info("PMI: PC PORT ICL is overridden to 1500 for fabcable\n");
-		return get_client_vote(chg->usb_icl_votable, VENEER_VOTER_IUSB);
-	}
-
-	#define SDP_MAX	900000
-	if (unified_nodes_show("fake_sdpmax", buf) && sscanf(buf, "%d", &fake)
-		&& !!fake) {
-		pr_info("PMI: PC PORT ICL is overridden to 900 for sdp_max\n");
-		return SDP_MAX;
+		if (val.intval != VOTE_TOTALLY_RELEASED && !workaround_usb_compliance_mode_enabled())
+			return val.intval;
 	}
 
 	return req;
@@ -1261,9 +1290,7 @@ static enum power_supply_property extension_usb_appended [] = {
 // Below 2 USB-ID properties don't need to be exported to user space.
 	POWER_SUPPLY_PROP_RESISTANCE,		/* in uvol */
 	POWER_SUPPLY_PROP_RESISTANCE_ID,	/* in ohms */
-
 	POWER_SUPPLY_PROP_POWER_NOW,
-	POWER_SUPPLY_PROP_INPUT_SUSPEND,	// For the moisture detection
 };
 
 enum power_supply_property* extension_usb_properties(void) {
@@ -1358,21 +1385,29 @@ int extension_usb_get_property(struct power_supply *psy,
 	}	return 0;
 
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW : {
-		static int pre_voltage_now = 0;
-		int rc = 0;
+		static int preserved = 0;
 
-		if (workaround_skip_uevent_for_supplementary_battery_enabled()) {
-			val->intval = pre_voltage_now;
-		} else {
-			rc = smb2_usb_get_prop(psy, prp, val);
-			pre_voltage_now = val->intval;
+		if (!workaround_skipping_vusb_delay_enabled()) {
+			int rc = smb2_usb_get_prop(psy, prp, val);
+			preserved = val->intval;
+			return rc;
 		}
-		return rc;
-	}
+		else
+			val->intval = preserved;
+	}	return 0;
 
 	case POWER_SUPPLY_PROP_PRESENT :
-		if ((chg->pd_hard_reset && chg->typec_mode != POWER_SUPPLY_TYPEC_NONE)
-			|| chg->typec_en_dis_active) {
+		if (workaround_usb_compliance_mode_enabled())
+			break;
+
+		if (usbin_ov_check(chg)) {
+			pr_debug("Unset PRESENT by force\n");
+			val->intval = false;
+			return 0;
+		}
+		if (chg->typec_en_dis_active ||
+		    (chg->pd_hard_reset &&
+			 chg->typec_mode >= POWER_SUPPLY_TYPEC_SOURCE_DEFAULT)) {
 			pr_debug("Set PRESENT by force\n");
 			val->intval = true;
 			return 0;
@@ -1391,8 +1426,8 @@ int extension_usb_get_property(struct power_supply *psy,
 		val->intval = fake_hvdcp_effected(chg);
 		return 0;
 
-	case POWER_SUPPLY_PROP_INPUT_SUSPEND :
-		val->intval = is_client_vote_enabled(chg->usb_icl_votable, MOISTURE_VOTER);
+	case POWER_SUPPLY_PROP_MOISTURE_DETECTED :
+		val->intval = moisture_detected;
 		return 0;
 
 	default:
@@ -1447,6 +1482,11 @@ int extension_usb_set_property(struct power_supply* psy,
 	/* _PD_VOLTAGE_MAX, _PD_VOLTAGE_MIN, _USB_HC are defined for fake_hvdcp */
 	case POWER_SUPPLY_PROP_PD_VOLTAGE_MAX :
 	case POWER_SUPPLY_PROP_PD_VOLTAGE_MIN :
+		if (usbin_ov_check(chg)) {
+			pr_info("Skip PD %s voltage control(%d mV) by ov\n",
+				prp== POWER_SUPPLY_PROP_PD_VOLTAGE_MAX ? "Max":"Min", val->intval/1000);
+			return 0;
+		}
 		if (fake_hvdcp_property(chg)
 			&& chg->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP) {
 			pr_info("PMI: Skipping PD voltage control\n");
@@ -1460,15 +1500,16 @@ int extension_usb_set_property(struct power_supply* psy,
 	case POWER_SUPPLY_PROP_SDP_CURRENT_MAX : {
 		static union power_supply_propval isdp;
 		isdp.intval = usb_pcport_current(chg, val->intval);
+		if (isdp.intval != val->intval)
+			pr_info("PMI: SDP_CURRENT_MAX %d is overridden to %d\n", val->intval, isdp.intval);
 		val = &isdp;
-		pr_info("PMI: Setting SDP current to %d\n", val->intval);
 	}	break;
 
 	case POWER_SUPPLY_PROP_RESISTANCE :
 		psy_usbid_update(chg->dev);
 		return 0;
 
-	case POWER_SUPPLY_PROP_INPUT_SUSPEND :
+	case POWER_SUPPLY_PROP_MOISTURE_DETECTED :
 		return moisture_mode_command(chg, !!val->intval);
 
 	default:
@@ -1484,7 +1525,7 @@ int extension_usb_property_is_writeable(struct power_supply *psy,
 
 	switch (prp) {
 	case POWER_SUPPLY_PROP_RESISTANCE :
-	case POWER_SUPPLY_PROP_INPUT_SUSPEND:
+	case POWER_SUPPLY_PROP_MOISTURE_DETECTED:
 		rc = 1;
 		break;
 
@@ -1556,6 +1597,7 @@ int extension_usb_port_get_property(struct power_supply *psy,
 
 	return smb2_usb_port_get_prop(psy, prp, val);
 }
+
 
 /*************************************************************
  * simple extension for dc psy. (for further purpose)
@@ -1652,4 +1694,107 @@ int extension_dc_get_property(struct power_supply* psy,
 	}
 
 	return rc;
+}
+
+
+/*************************************************************
+ * simple extension for usb main psy.
+ */
+
+int extension_usb_main_set_property(struct power_supply* psy,
+	enum power_supply_property prp, const union power_supply_propval* val) {
+	struct smb_charger* charger = power_supply_get_drvdata(psy);
+
+	switch (prp) {
+	case POWER_SUPPLY_PROP_CURRENT_MAX : {
+		enum charger_usbid usbid = psy_usbid_get(charger);
+		bool fabid = usbid == CHARGER_USBID_56KOHM || usbid == CHARGER_USBID_130KOHM || usbid == CHARGER_USBID_910KOHM;
+		bool pcport = charger->real_charger_type == POWER_SUPPLY_TYPE_USB;
+		bool fabproc = fabid && pcport;
+
+		int icl = val->intval;
+		bool chgable = 25000 < icl && icl < INT_MAX;
+
+		if (fabproc && chgable) {
+			#define FABCURR 1500000
+			int rc = 0;
+			u8 reg = 0;
+
+			/* 1. Set override latch bit */
+			if (smblib_read(charger, APSD_RESULT_STATUS_REG, &reg) >= 0
+				&& !(reg & ICL_OVERRIDE_LATCH_BIT)
+				&& smblib_masked_write(charger, CMD_APSD_REG, ICL_OVERRIDE_BIT,
+					ICL_OVERRIDE_BIT) >= 0)
+				pr_info("Set ICL OVERRIDE for fabcable\n");
+			else
+				pr_debug("Skip to set ICL OVERRIDE for fabcable\n");
+
+			/* 2. Configure USBIN_ICL_OPTIONS_REG
+			(It doesn't need to check result : refer to the 'smblib_set_icl_current') */
+			smblib_masked_write(charger, USBIN_ICL_OPTIONS_REG,
+				USBIN_MODE_CHG_BIT | CFG_USB3P0_SEL_BIT | USB51_MODE_BIT,
+				USBIN_MODE_CHG_BIT);
+
+			/* 2. Configure current */
+			rc = smblib_set_charge_param(charger, &charger->param.usb_icl, FABCURR);
+			if (rc < 0) {
+				pr_err("Couldn't set ICL for fabcable, rc=%d\n", rc);
+				break;
+			}
+
+			/* 3. Enforce override */
+			rc = smblib_icl_override(charger, true);
+			if (rc < 0) {
+				pr_err("Couldn't set ICL override rc=%d\n", rc);
+				break;
+			}
+
+			/* 4. Unsuspend after configuring current and override */
+			rc = smblib_set_usb_suspend(charger, false);
+			if (rc < 0) {
+				pr_err("Couldn't resume input rc=%d\n", rc);
+				break;
+			}
+
+			if (icl != FABCURR)
+				pr_info("Success to set IUSB (%d -> %d)mA for fabcable\n", icl/1000, FABCURR/1000);
+
+			return 0;
+		}
+	}	break;
+
+	default:
+		break;
+	}
+
+	return smb2_usb_main_set_prop(psy, prp, val);
+}
+
+int extension_usb_main_get_property(struct power_supply* psy,
+	enum power_supply_property prp, union power_supply_propval* val) {
+	struct smb_charger* charger = power_supply_get_drvdata(psy);
+
+	switch (prp) {
+	case POWER_SUPPLY_PROP_CURRENT_MAX : {
+		enum charger_usbid usbid = psy_usbid_get(charger);
+		bool fabid = usbid == CHARGER_USBID_56KOHM || usbid == CHARGER_USBID_130KOHM || usbid == CHARGER_USBID_910KOHM;
+		bool pcport = charger->real_charger_type == POWER_SUPPLY_TYPE_USB;
+		bool fabproc = fabid && pcport;
+
+		if (fabproc) {
+			int rc = smblib_get_charge_param(charger, &charger->param.usb_icl, &val->intval);
+			if (rc < 0) {
+				pr_err("Couldn't get ICL for fabcable, rc=%d\n", rc);
+				break;
+			}
+			else
+				return 0;
+		}
+	}	break;
+
+	default:
+		break;
+	}
+
+	return smb2_usb_main_get_prop(psy, prp, val);
 }

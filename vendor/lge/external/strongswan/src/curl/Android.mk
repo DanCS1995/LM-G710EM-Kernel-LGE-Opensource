@@ -58,16 +58,6 @@ common_CFLAGS := -Wpointer-arith -Wwrite-strings -Wunused -Winline -Wnested-exte
 
 include $(CLEAR_VARS)
 include $(LOCAL_PATH)/lib/Makefile.inc
-CURL_HEADERS := \
-	curlbuild.h \
-	curl.h \
-	curlrules.h \
-	curlver.h \
-	easy.h \
-	mprintf.h \
-	multi.h \
-	stdcheaders.h \
-	typecheck-gcc.h
 
 LOCAL_SRC_FILES := $(addprefix lib/,$(CSOURCES))
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/lib/
@@ -76,9 +66,7 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/../openssl/include
 LOCAL_C_INCLUDES += external/zlib
 LOCAL_CFLAGS += $(common_CFLAGS)
 LOCAL_LDLIBS += -lcrypto-ss -lssl-ss -lz -lm -llog
-LOCAL_COPY_HEADERS_TO := libcurl-ss/curl
-LOCAL_COPY_HEADERS := $(addprefix include/curl/,$(CURL_HEADERS))
-
+LOCAL_EXPORT_HEADER_LIBRARY_HEADERS := libcurl-ss_headers
 LOCAL_MODULE:= libcurl-ss
 LOCAL_MODULE_TAGS := optional
 
@@ -97,6 +85,11 @@ LOCAL_SHARED_LIBRARIES += libcrypto-ss
 #include $(wildcard $(LOCAL_PATH)/../openssl/Android.mk)
 
 include $(BUILD_SHARED_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := libcurl-ss_headers
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include/curl
+include $(BUILD_HEADER_LIBRARY)
 
 # #########################
 # # Build the curl binary

@@ -34,6 +34,8 @@
 
 #include <utils/cust_settings.h>
 
+#include <libpatchcodeid.h>
+
 typedef struct private_aggressive_mode_t private_aggressive_mode_t;
 
 /**
@@ -111,6 +113,7 @@ static bool establish(private_aggressive_mode_t *this)
 
 #ifdef __ANDROID__
 	if (get_cust_setting_bool(LGP_DATA_DEBUG_ENABLE_PRIVACY_LOG)) {
+        patch_code_id("LPCP-2249@n@c@libcharon@aggressive_mode.c@1");
 		DBG1(DBG_IKE, "IKE_SA %s[%d] established between %H[%Y]...%H[%Y]",
 			 this->ike_sa->get_name(this->ike_sa),
 			 this->ike_sa->get_unique_id(this->ike_sa),

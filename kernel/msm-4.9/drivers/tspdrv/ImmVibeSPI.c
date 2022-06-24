@@ -90,7 +90,6 @@ VibeStatus I2CWrite(unsigned char address, VibeUInt16 nBufferSizeInBytes, VibeIn
 VibeStatus I2CWriteWithResendOnError(unsigned char address, VibeUInt16 nBufferSizeInBytes, VibeInt8* pForceOutputBuffer);
 
 unsigned char fifo = 0;
-bool skip_fifo_check = false;
 
 static char const * const i2c_rsrcs[] = {"i2c_clk", "i2c_sda"};
 struct qup_i2c_clk_path_vote {
@@ -595,7 +594,6 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_AmpDisable(VibeUInt8 nActuatorIndex
     DbgOut((DBL_ERROR, "ImmVibeSPI_ForceOut_AmpDisable.\n"));
 
     /* Nothing to do. DW7800 enters standby when FIFO is empty. */
-    skip_fifo_check = false;
 
     return VIBE_S_SUCCESS;
 }
@@ -664,7 +662,7 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_SetSamples(VibeUInt8 nActuatorIndex
     }
 #endif
 
-    if (VIBE_S_SUCCESS != I2CWrite(DW7800_DATA, nBufferSizeInBytes, pForceOutputBuffer)) {
+    if (VIBE_S_SUCCESS != I2CWriteWithResendOnError(DW7800_DATA, nBufferSizeInBytes, pForceOutputBuffer)) {
         DbgOut((DBL_ERROR, "ImmVibeSPI_ForceOut_SetSamples: i2c write failed\n"));
         return VIBE_E_FAIL;
     }
@@ -826,11 +824,6 @@ IMMVIBESPIAPI int ImmVibeSPI_ForceOut_BufferFull(void)
     }
 
     nResendAttempt = NAK_RESEND_ATTEMPT;
-
-    if (fifo < 48)
-        skip_fifo_check = true;
-    else
-        skip_fifo_check = false;
 
     return fifo > DW7800_FIFOFULL_TARGET;
 }

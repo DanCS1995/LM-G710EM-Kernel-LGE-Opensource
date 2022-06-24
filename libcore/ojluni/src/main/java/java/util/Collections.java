@@ -151,7 +151,7 @@ public class Collections {
     @SuppressWarnings("unchecked")
     public static <T extends Comparable<? super T>> void sort(List<T> list) {
         // Android-changed: Call sort(list, null) here to be consistent
-        // with that method's (Android-changed) behavior.
+        // with that method's (Android changed) behavior.
         // list.sort(null);
         sort(list, null);
     }
@@ -3808,7 +3808,9 @@ public class Collections {
                 };
             }
 
-            @SuppressWarnings("unchecked")
+            // Android-changed: Ignore IsInstanceOfClass warning. b/73288967, b/73344263.
+            // @SuppressWarnings("unchecked")
+            @SuppressWarnings({ "unchecked", "IsInstanceOfClass" })
             public Object[] toArray() {
                 Object[] source = s.toArray();
 

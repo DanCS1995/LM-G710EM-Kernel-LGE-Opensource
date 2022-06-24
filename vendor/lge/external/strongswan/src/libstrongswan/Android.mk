@@ -75,6 +75,9 @@ LOCAL_C_INCLUDES += $(openssl_PATH)
 LOCAL_SHARED_LIBRARIES += libcrypto-ss
 endif
 
+LOCAL_C_INCLUDES += vendor/lge/system/dsqn/libpatchcodeid/
+LOCAL_SHARED_LIBRARIES += libpatchcodeid
+
 LOCAL_SRC_FILES += $(call add_plugin, pem)
 
 LOCAL_SRC_FILES += $(call add_plugin, pkcs1)
@@ -117,6 +120,7 @@ LOCAL_PRELINK_MODULE := false
 
 LOCAL_SHARED_LIBRARIES += libdl libcutils
 
-
+LOCAL_C_INCLUDES += vendor/lge/system/dsqn/libpatchcodeid/
+LOCAL_SHARED_LIBRARIES += libpatchcodeid
 
 include $(BUILD_SHARED_LIBRARY)

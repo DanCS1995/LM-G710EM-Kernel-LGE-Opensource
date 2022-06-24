@@ -486,11 +486,13 @@ void do_translate_packet(const uint8_t *original, size_t original_len, uint8_t *
 
 void check_translated_packet(const uint8_t *original, size_t original_len,
                              const uint8_t *expected, size_t expected_len, const char *msg) {
-  uint8_t translated[MAXMRU];
+  uint8_t *translated = new uint8_t[MAXMRU];
+  ASSERT_NE(translated, nullptr) << msg << ": Unable to allocate memory\n";
   size_t translated_len = sizeof(translated);
   do_translate_packet(original, original_len, translated, &translated_len, msg);
   EXPECT_EQ(expected_len, translated_len) << msg << ": Translated packet length incorrect\n";
   check_data_matches(expected, translated, translated_len, msg);
+  delete [] translated;
 }
 
 void check_fragment_translation(const uint8_t *original[], const size_t original_lengths[],
@@ -505,15 +507,20 @@ void check_fragment_translation(const uint8_t *original[], const size_t original
   }
 
   // Sanity check that reassembling the original and translated fragments produces valid packets.
-  uint8_t reassembled[MAXMRU];
+  uint8_t *reassembled = new uint8_t[MAXMRU];
+  ASSERT_NE(reassembled, nullptr) << msg << ": Unable to allocate memory\n";
   size_t reassembled_len = sizeof(reassembled);
   reassemble_packet(original, original_lengths, numfragments, reassembled, &reassembled_len, msg);
   check_packet(reassembled, reassembled_len, msg);
 
-  uint8_t translated[MAXMRU];
+  uint8_t *translated = new uint8_t[MAXMRU];
+  ASSERT_NE(translated, nullptr) << msg << ": Unable to allocate memory\n";
   size_t translated_len = sizeof(translated);
   do_translate_packet(reassembled, reassembled_len, translated, &translated_len, msg);
   check_packet(translated, translated_len, msg);
+
+  delete [] translated;
+  delete [] reassembled;
 }
 
 int get_transport_checksum(const uint8_t *packet) {
@@ -772,7 +779,8 @@ TEST_F(ClatdTest, DataSanitycheck) {
   check_packet(ipv6_ping, sizeof(ipv6_ping), "IPv6 ping sanity check");
 
   // Sanity checks reassemble_packet.
-  uint8_t reassembled[MAXMRU];
+  uint8_t *reassembled = new uint8_t[MAXMRU];
+  ASSERT_NE(reassembled, nullptr) << ": Unable to allocate memory\n";
   size_t total_length = sizeof(reassembled);
   reassemble_packet(kIPv4Fragments, kIPv4FragLengths, ARRAYSIZE(kIPv4Fragments),
                     reassembled, &total_length, "Reassembly sanity check");
@@ -788,6 +796,7 @@ TEST_F(ClatdTest, DataSanitycheck) {
   ASSERT_TRUE(!is_ipv6_fragment((struct ip6_hdr *) reassembled, total_length))
       << "Sanity check: reassembled packet is a fragment!\n";
   check_packet(reassembled, total_length, "IPv6 Reassembled packet is valid");
+  delete [] reassembled;
 }
 
 TEST_F(ClatdTest, PseudoChecksum) {
@@ -898,7 +907,8 @@ TEST_F(ClatdTest, Fragmentation) {
 
 void check_translate_checksum_neutral(const uint8_t *original, size_t original_len,
                                       size_t expected_len, const char *msg) {
-  uint8_t translated[MAXMRU];
+  uint8_t *translated = new uint8_t[MAXMRU];
+  ASSERT_NE(translated, nullptr) << msg << ": Unable to allocate memory\n";
   size_t translated_len = sizeof(translated);
   do_translate_packet(original, original_len, translated, &translated_len, msg);
   EXPECT_EQ(expected_len, translated_len) << msg << ": Translated packet length incorrect\n";
@@ -909,6 +919,7 @@ void check_translate_checksum_neutral(const uint8_t *original, size_t original_l
   ASSERT_NE(-1, translated_check);
   ASSERT_EQ(original_check, translated_check)
       << "Not checksum neutral: original and translated checksums differ\n";
+  delete [] translated;
 }
 
 TEST_F(ClatdTest, TranslateChecksumNeutral) {

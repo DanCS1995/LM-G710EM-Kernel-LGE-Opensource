@@ -23,35 +23,6 @@ static volatile int mem_recover = 0;
 static jmp_buf mem_jmp;
 static void one_file(char *file, int nest, int hard_opt);
 
-/* Solaris headers don't have facility names. */
-#ifdef HAVE_SOLARIS_NETWORK
-static const struct {
-  char *c_name;
-  unsigned int c_val;
-}  facilitynames[] = {
-  { "kern",   LOG_KERN },
-  { "user",   LOG_USER },
-  { "mail",   LOG_MAIL },
-  { "daemon", LOG_DAEMON },
-  { "auth",   LOG_AUTH },
-  { "syslog", LOG_SYSLOG },
-  { "lpr",    LOG_LPR },
-  { "news",   LOG_NEWS },
-  { "uucp",   LOG_UUCP },
-  { "audit",  LOG_AUDIT },
-  { "cron",   LOG_CRON },
-  { "local0", LOG_LOCAL0 },
-  { "local1", LOG_LOCAL1 },
-  { "local2", LOG_LOCAL2 },
-  { "local3", LOG_LOCAL3 },
-  { "local4", LOG_LOCAL4 },
-  { "local5", LOG_LOCAL5 },
-  { "local6", LOG_LOCAL6 },
-  { "local7", LOG_LOCAL7 },
-  { NULL, 0 }
-};
-#endif
-
 #ifndef HAVE_GETOPT_LONG
 struct myoption {
   const char *name;
@@ -116,7 +87,7 @@ static const struct myoption opts[] =
     { "help", 0, 0, 'w' },
     { "no-daemon", 0, 0, 'd' },
     { "log-queries", 0, 0, 'q' },
-    { "user", 2, 0, 'u' },
+    { "user", 2, 0, 'u' }, //MirrorLink modify
     { "group", 2, 0, 'g' },
     { "resolv-file", 2, 0, 'r' },
     { "mx-host", 1, 0, 'm' },
@@ -155,7 +126,6 @@ static const struct myoption opts[] =
     { "domain-needed", 0, 0, 'D' },
     { "dhcp-lease-max", 1, 0, 'X' },
     { "bind-interfaces", 0, 0, 'z' },
-    { "read-ethers", 0, 0, 'Z' },
     { "alias", 1, 0, 'V' },
     { "dhcp-vendorclass", 1, 0, 'U' },
     { "dhcp-userclass", 1, 0, 'j' },
@@ -291,7 +261,6 @@ static struct {
   { LOPT_PTR, ARG_DUP, "name,target", gettext_noop("Specify PTR DNS record."), NULL },
   { LOPT_INTNAME, ARG_DUP, "name,interface", gettext_noop("Give DNS name to IPv4 address of interface."), NULL },
   { 'z', OPT_NOWILD, NULL, gettext_noop("Bind only to interfaces in use."), NULL },
-  { 'Z', OPT_ETHERS, NULL, gettext_noop("Read DHCP static host information from %s."), ETHERSFILE },
   { '1', OPT_DBUS, NULL, gettext_noop("Enable the DBus interface for setting upstream servers, etc."), NULL },
   { '2', ARG_DUP, "interface", gettext_noop("Do not provide DHCP on this interface, only provide DNS."), NULL },
   { '3', ARG_DUP, "[=<id>[,<id>]]", gettext_noop("Enable dynamic address allocation for bootp."), NULL },
@@ -611,7 +580,6 @@ static void do_usage(void)
     { '*', EDNS_PKTSZ },
     { '&', MAXLEASES },
     { '!', FTABSIZ },
-    { '#', TFTP_MAX_CONNECTIONS },
     { '\0', 0 }
   };
 
@@ -1585,33 +1553,7 @@ static char *one_opt(int option, char *arg, char *gen_prob, int nest)
 	option = '?';
       break;
 #endif
-      
-#ifdef HAVE_TFTP
-    case LOPT_TFTP_MAX:  /*  --tftp-max */
-      if (!atoi_check(arg, &daemon->tftp_max))
-	option = '?';
-      break;  
 
-    case LOPT_PREFIX: /* --tftp-prefix */
-      daemon->tftp_prefix = opt_string_alloc(arg);
-      break;
-
-    case LOPT_TFTPPORTS: /* --tftp-port-range */
-      if (!(comma = split(arg)) || 
-	  !atoi_check16(arg, &daemon->start_tftp_port) ||
-	  !atoi_check16(comma, &daemon->end_tftp_port))
-	problem = _("bad port range");
-      
-      if (daemon->start_tftp_port > daemon->end_tftp_port)
-	{
-	  int tmp = daemon->start_tftp_port;
-	  daemon->start_tftp_port = daemon->end_tftp_port;
-	  daemon->end_tftp_port = tmp;
-	} 
-      
-      break;
-#endif
-	      
     case LOPT_BRIDGE:   /* --bridge-interface */
       {
 	struct dhcp_bridge *new = opt_malloc(sizeof(struct dhcp_bridge));
@@ -2506,17 +2448,17 @@ static char *one_opt(int option, char *arg, char *gen_prob, int nest)
       {
 	char *endptr;
 	uint32_t mark = strtoul(arg, &endptr, 0);
-my_syslog(LOG_WARNING, "passed-in mark: %s", arg);
+        // my_syslog(LOG_WARNING, "passed-in mark: %s", arg);
 	if (!*endptr)
 	  daemon->listen_mark = mark;
 	else
 	  problem = _("invalid mark");
-my_syslog(LOG_WARNING, "daemon->listen_mark: 0x%x, *endptr=%d", daemon->listen_mark, *endptr);
+        // my_syslog(LOG_WARNING, "daemon->listen_mark: 0x%x, *endptr=%d", daemon->listen_mark, *endptr);
 	break;
       }
 
     default:
-      return _("unsupported option (check that dnsmasq was compiled with DHCP/TFTP/DBus support)");
+      return _("unsupported option (check that dnsmasq was compiled with DHCP support)");
 
     }
 
@@ -2802,7 +2744,6 @@ void read_opts(int argc, char **argv, char *compile_opts)
   daemon->username = CHUSER;
   daemon->runfile =  RUNFILE;
   daemon->dhcp_max = MAXLEASES;
-  daemon->tftp_max = TFTP_MAX_CONNECTIONS;
   daemon->edns_pktsz = EDNS_PKTSZ;
   daemon->log_fac = -1;
   add_txt("version.bind", "dnsmasq-" VERSION );

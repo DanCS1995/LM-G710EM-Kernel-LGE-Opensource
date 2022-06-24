@@ -144,25 +144,24 @@ static inline int vote_limit(const union power_supply_propval* vote) {
 }
 
 enum charging_supplier { // Exclusive charging types
-	CHARGING_SUPPLY_UNKNOWN = 0,
-	CHARGING_SUPPLY_NONE,
+	CHARGING_SUPPLY_TYPE_UNKNOWN = 0,
+	CHARGING_SUPPLY_TYPE_FLOAT,
+	CHARGING_SUPPLY_TYPE_NONE,
 
-	CHARGING_SUPPLY_BC12_SDP,
-	CHARGING_SUPPLY_BC12_DCP,
-	CHARGING_SUPPLY_BC12_CDP,
-	CHARGING_SUPPLY_BC12_FLOAT,
+	CHARGING_SUPPLY_DCP_DEFAULT,
+	CHARGING_SUPPLY_DCP_10K,
+	CHARGING_SUPPLY_DCP_22K,
+	CHARGING_SUPPLY_DCP_QC2,
+	CHARGING_SUPPLY_DCP_QC3,
+
+	CHARGING_SUPPLY_USB_2P0,
+	CHARGING_SUPPLY_USB_3PX,
+	CHARGING_SUPPLY_USB_CDP,
+	CHARGING_SUPPLY_USB_PD,
 
 	CHARGING_SUPPLY_FACTORY_56K,
 	CHARGING_SUPPLY_FACTORY_130K,
 	CHARGING_SUPPLY_FACTORY_910K,
-
-	CHARGING_SUPPLY_HVDCP_QC2,
-	CHARGING_SUPPLY_HVDCP_QC3,
-	CHARGING_SUPPLY_HVDCP_PD,
-
-	CHARGING_SUPPLY_TYPEC_10K,
-	CHARGING_SUPPLY_TYPEC_22K,
-//	CHARGING_SUPPLY_TYPEC_56K, will be enumerated to BC12_DCP or HVDCP_x
 
 	CHARGING_SUPPLY_WIRELESS_5W,
 	CHARGING_SUPPLY_WIRELESS_9W,
@@ -216,9 +215,9 @@ static inline bool charger_fabcable(enum charging_supplier charger) {
 static inline bool charger_dcptype(enum charging_supplier charger) {
 
 	switch(charger) {
-	case	CHARGING_SUPPLY_TYPEC_10K :
-	case	CHARGING_SUPPLY_TYPEC_22K :
-	case	CHARGING_SUPPLY_BC12_DCP :
+	case	CHARGING_SUPPLY_DCP_DEFAULT :
+	case	CHARGING_SUPPLY_DCP_10K :
+	case	CHARGING_SUPPLY_DCP_22K :
 		return true;
 	default :
 		break;
@@ -231,25 +230,24 @@ static inline const char* charger_name(enum charging_supplier charger) {
 
 	switch(charger) {
 
-	case	CHARGING_SUPPLY_UNKNOWN :	return "UNKNOWN";
-	case	CHARGING_SUPPLY_NONE :		return "NONE";
+	case	CHARGING_SUPPLY_TYPE_UNKNOWN :	return "UNKNOWN";
+	case	CHARGING_SUPPLY_TYPE_FLOAT :	return "FLOAT";
+	case	CHARGING_SUPPLY_TYPE_NONE :	return "NONE";
 
-	case	CHARGING_SUPPLY_BC12_SDP :	return "SDP";
-	case	CHARGING_SUPPLY_BC12_CDP :	return "CDP";
-	case	CHARGING_SUPPLY_BC12_DCP :	return "DCP";
-	case	CHARGING_SUPPLY_BC12_FLOAT :	return "FLOAT";
+	case	CHARGING_SUPPLY_DCP_DEFAULT :	return "DCP";
+	case	CHARGING_SUPPLY_DCP_10K :	return "10K";
+	case	CHARGING_SUPPLY_DCP_22K :	return "22K";
+	case	CHARGING_SUPPLY_DCP_QC2 :	return "QC2";
+	case	CHARGING_SUPPLY_DCP_QC3 :	return "QC3";
+
+	case	CHARGING_SUPPLY_USB_2P0 :	return "USB2";
+	case	CHARGING_SUPPLY_USB_3PX :	return "USB3";
+	case	CHARGING_SUPPLY_USB_CDP :	return "CDP";
+	case	CHARGING_SUPPLY_USB_PD :	return "PD";
 
 	case	CHARGING_SUPPLY_FACTORY_56K :	return "56K";
 	case	CHARGING_SUPPLY_FACTORY_130K :	return "130K";
 	case	CHARGING_SUPPLY_FACTORY_910K :	return "910K";
-
-	case	CHARGING_SUPPLY_HVDCP_QC2 :	return "QC2";
-	case	CHARGING_SUPPLY_HVDCP_QC3 :	return "QC3";
-	case	CHARGING_SUPPLY_HVDCP_PD :	return "PD";
-
-	case	CHARGING_SUPPLY_TYPEC_10K :	return "10K";
-	case	CHARGING_SUPPLY_TYPEC_22K :	return "22K";
-	//	CHARGING_SUPPLY_TYPEC_56K :  will be enumerated to BC12_DCP or HVDCP_x
 
 	case	CHARGING_SUPPLY_WIRELESS_5W :	return "W5W";
 	case	CHARGING_SUPPLY_WIRELESS_9W :	return "W9W";
@@ -333,6 +331,7 @@ void veneer_voter_passover(enum voter_type type, int limit, bool enable);
 bool veneer_voter_effecting(struct voter_entry* voter);
 bool veneer_voter_enabled(struct voter_entry* voter);
 void veneer_voter_set(struct voter_entry* voter, int limit);
+void veneer_voter_rerun(struct voter_entry* voter);
 void veneer_voter_release(struct voter_entry* voter);
 void veneer_voter_unregister(struct voter_entry* entry);
 bool veneer_voter_register(struct voter_entry* entry, const char* name, enum voter_type type, bool fakeui);
@@ -340,6 +339,7 @@ void veneer_voter_destroy(void);
 bool veneer_voter_create(void (*back_unified_voter)(enum voter_type type, int limit));
 
 bool charging_ceiling_vote(enum charging_supplier charger);
+bool charging_ceiling_sdpmax(bool enable);
 void charging_ceiling_destroy(void);
 bool charging_ceiling_create(struct device_node* dnode);
 
@@ -375,10 +375,12 @@ bool protection_usbio_create(struct device_node* dnode);
 
 enum veneer_bootmode unified_bootmode_type(void);
 enum charger_usbid unified_bootmode_usbid(void);
-const char* unified_bootmode_name(void);
-bool unified_bootmode_fabproc(void);
+const char* unified_bootmode_operator(void);
+const char* unified_bootmode_region(void);
+const char* unified_bootmode_marker(void);
 bool unified_bootmode_chargerlogo(void);
 bool unified_bootmode_chgverbose(void);
+bool unified_bootmode_fabproc(void);
 
 bool unified_nodes_show(const char* key, char* value);
 bool unified_nodes_store(const char* key, const char* value, size_t size);

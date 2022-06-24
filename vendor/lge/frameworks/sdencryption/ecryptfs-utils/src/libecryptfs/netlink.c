@@ -179,6 +179,7 @@ void ecryptfs_release_netlink(struct ecryptfs_nl_ctx *nl_ctx)
         close(nl_ctx->socket_fd);
 }
 
+/*
 int ecryptfs_run_netlink_daemon(struct ecryptfs_nl_ctx *nl_ctx)
 {
     struct ecryptfs_message *emsg = NULL;
@@ -248,3 +249,4 @@ out:
     ecryptfs_free_key_mod_list(&ctx);
     return rc;
 }
+*/

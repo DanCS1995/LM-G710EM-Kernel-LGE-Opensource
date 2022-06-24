@@ -1119,8 +1119,10 @@ void touch_core_shutdown(struct platform_device *pdev)
 	TOUCH_I("%s\n", __func__);
 
 #if defined(CONFIG_SECURE_TOUCH)
-	if (atomic_read(&ts->st_enabled))
-		secure_touch_stop(ts, true);
+	if (atomic_read(&ts->st_enabled)) {
+		secure_touch_stop(ts, false);
+		complete(&ts->st_irq_processed);
+	}
 #endif
 
 	if (ts->dev == NULL)

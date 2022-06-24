@@ -37,9 +37,11 @@ struct sysfs_group {
 };
 
 struct sysfs_map {
-	const char* group;
-	const char* symlink;
-	const char* source;
+	const char*		group;
+	const char*		symlink;
+	const char*		source;
+
+	struct proc_dir_entry*	handle;
 };
 
 static struct proc_dir_entry* sysfs_root;
@@ -89,12 +91,12 @@ static bool sysfs_array(struct device_node* dnode, struct sysfs_map* array, int 
 
 	for (index=0; index<count; ++index) {
 
-		if( of_property_read_string_index(dnode, UNIFIED_SYSFS_PROPERTY,
+		if (of_property_read_string_index(dnode, UNIFIED_SYSFS_PROPERTY,
 				i++, &array[index].group) ||
 			of_property_read_string_index(dnode, UNIFIED_SYSFS_PROPERTY,
 				i++, &array[index].symlink) ||
 			of_property_read_string_index(dnode, UNIFIED_SYSFS_PROPERTY,
-				i++, &array[index].source) ) {
+				i++, &array[index].source)) {
 
 			pr_symlink(ERROR, "ERROR get %ith string\n", i);
 			return false;
@@ -132,8 +134,8 @@ static bool sysfs_mount(struct sysfs_map* array, int count) {
 				goto out;
 			}
 
-			if (!proc_symlink(array[index].symlink, sysfs_group, array[index].source)) {
-				remove_proc_subtree(UNIFIED_SYSFS_ROOT, NULL);
+			array[index].handle = proc_symlink(array[index].symlink, sysfs_group, array[index].source);
+			if (!array[index].handle) {
 				pr_symlink(ERROR, "ERROR making symlink '%s'\n",
 					array[index].symlink);
 				goto out;

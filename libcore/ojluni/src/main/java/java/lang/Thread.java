@@ -1081,7 +1081,9 @@ class Thread implements Runnable {
         ThreadGroup g;
         checkAccess();
         if (newPriority > MAX_PRIORITY || newPriority < MIN_PRIORITY) {
-            throw new IllegalArgumentException();
+            // Android-changed: Improve exception message when the new priority
+            // is out of bounds.
+            throw new IllegalArgumentException("Priority out of range: " + newPriority);
         }
         if((g = getThreadGroup()) != null) {
             if (newPriority > g.getMaxPriority()) {
@@ -1939,7 +1941,7 @@ class Thread implements Runnable {
      *
      * @hide
      */
-    // @VisibleForTesting (would be private if not for tests)
+    // @VisibleForTesting (would be package-private if not for tests)
     public final void dispatchUncaughtException(Throwable e) {
         Thread.UncaughtExceptionHandler initialUeh =
                 Thread.getUncaughtExceptionPreHandler();

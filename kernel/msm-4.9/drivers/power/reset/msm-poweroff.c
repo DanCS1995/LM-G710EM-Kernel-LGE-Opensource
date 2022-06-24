@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -54,19 +54,27 @@
 #define SCM_DLOAD_BOTHDUMPS	(SCM_DLOAD_MINIDUMP | SCM_DLOAD_FULLDUMP)
 
 static int restart_mode;
-static void __iomem *restart_reason, *dload_type_addr;
+static void *restart_reason;
 static bool scm_pmic_arbiter_disable_supported;
 static bool scm_deassert_ps_hold_supported;
 /* Download mode master kill-switch */
 static void __iomem *msm_ps_hold;
 static phys_addr_t tcsr_boot_misc_detect;
+static void scm_disable_sdi(void);
 #ifndef CONFIG_LGE_HANDLE_PANIC
+#ifdef CONFIG_QCOM_DLOAD_MODE
+/* Runtime could be only changed value once.
+ * There is no API from TZ to re-enable the registers.
+ * So the SDI cannot be re-enabled when it already by-passed.
+ */
 static int download_mode = 1;
 #else
- /* dload flag changed value once by bootcmd param. */
+static const int download_mode;
+#endif
+
+#else //CONFIG_LGE_HANDLE_PANIC
 static int download_mode = 0;
 #endif
-static struct kobject dload_kobj;
 
 #ifdef CONFIG_QCOM_DLOAD_MODE
 #define EDL_MODE_PROP "qcom,msm-imem-emergency_download_mode"
@@ -88,6 +96,8 @@ static void *emergency_dload_mode_addr;
 static void *kaslr_imem_addr;
 #endif
 static bool scm_dload_supported;
+static struct kobject dload_kobj;
+static void *dload_type_addr;
 
 #ifdef CONFIG_LGE_USB_GADGET
 /* dload specific suppot */
@@ -109,7 +119,7 @@ struct dload_struct {
 static struct dload_struct __iomem *diag_dload;
 #endif
 
-static int dload_set(const char *val, struct kernel_param *kp);
+static int dload_set(const char *val, const struct kernel_param *kp);
 /* interface for exporting attributes */
 struct reset_attribute {
 	struct attribute        attr;
@@ -216,7 +226,7 @@ static void enable_emergency_dload_mode(void)
 }
 #endif
 
-static int dload_set(const char *val, struct kernel_param *kp)
+static int dload_set(const char *val, const struct kernel_param *kp)
 {
 	int ret;
 
@@ -244,10 +254,24 @@ int lge_get_download_mode()
 	return download_mode;
 }
 EXPORT_SYMBOL(lge_get_download_mode);
+
+int lge_set_download_mode(int val)
+{
+	if(val >> 1)
+		return -EINVAL;
+
+	download_mode = val;
+	set_dload_mode(download_mode);
+	return 0;
+}
+EXPORT_SYMBOL(lge_set_download_mode);
 #endif
 
 #else
-#define set_dload_mode(x) do {} while (0)
+static void set_dload_mode(int on)
+{
+	return;
+}
 
 static void enable_emergency_dload_mode(void)
 {
@@ -259,6 +283,26 @@ static bool get_dload_mode(void)
 	return false;
 }
 #endif
+
+static void scm_disable_sdi(void)
+{
+	int ret;
+	struct scm_desc desc = {
+		.args[0] = 1,
+		.args[1] = 0,
+		.arginfo = SCM_ARGS(2),
+	};
+
+	/* Needed to bypass debug image on some chips */
+	if (!is_scm_armv8())
+		ret = scm_call_atomic2(SCM_SVC_BOOT,
+			       SCM_WDOG_DEBUG_BOOT_PART, 1, 0);
+	else
+		ret = scm_call2_atomic(SCM_SIP_FNID(SCM_SVC_BOOT,
+			  SCM_WDOG_DEBUG_BOOT_PART), &desc);
+	if (ret)
+		pr_err("Failed to disable secure wdog debug: %d\n", ret);
+}
 
 void msm_set_restart_mode(int mode)
 {
@@ -295,6 +339,7 @@ static void msm_restart_prepare(const char *cmd)
 	bool need_warm_reset = false;
 #ifdef CONFIG_LGE_PSTORE_BACKUP
 	pr_notice("reset cmd : %s\n", cmd);
+	need_warm_reset = true;
 #endif
 
 #ifdef CONFIG_QCOM_DLOAD_MODE
@@ -340,9 +385,6 @@ static void msm_restart_prepare(const char *cmd)
 			qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_DMVERITY_CORRUPTED);
 			__raw_writel(0x77665508, restart_reason);
-#ifdef CONFIG_LGE_PSTORE_BACKUP
-			need_warm_reset = true;
-#endif
 		} else if (!strcmp(cmd, "dm-verity enforcing")) {
 			qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_DMVERITY_ENFORCE);
@@ -403,9 +445,6 @@ static void msm_restart_prepare(const char *cmd)
 				PON_RESTART_REASON_NORMAL);
 			__raw_writel(0x77665501, restart_reason);
 
-#ifdef CONFIG_LGE_PSTORE_BACKUP
-			need_warm_reset = true;
-#endif
 		} else {
 			qpnp_pon_set_restart_reason(
 					PON_RESTART_REASON_NORMAL);
@@ -435,30 +474,39 @@ static void msm_restart_prepare(const char *cmd)
 			case 0x633A: // common
 				qpnp_pon_set_restart_reason(
 					PON_RESTART_REASON_LAF_DLOAD_BOOT);
+				__raw_writel(0x77665564, restart_reason);
 				break;
 			case 0x633E: // common
 			case 0x62CE: // vzw
 				qpnp_pon_set_restart_reason(
 					PON_RESTART_REASON_LAF_DLOAD_MTP);
+				__raw_writel(0x77665565, restart_reason);
 				break;
 			case 0x6344: // common
 			case 0x62C4: // vzw
 				qpnp_pon_set_restart_reason(
 					PON_RESTART_REASON_LAF_DLOAD_TETHER);
+				__raw_writel(0x77665566, restart_reason);
 				break;
 			case 0x6000: // factory
 				qpnp_pon_set_restart_reason(
 					PON_RESTART_REASON_LAF_DLOAD_FACTORY);
+				__raw_writel(0x77665567, restart_reason);
 				break;
 			default:
 				qpnp_pon_set_restart_reason(
 					PON_RESTART_REASON_LAF_DLOAD_MODE);
+				__raw_writel(0x77665568, restart_reason);
 				break;
 			}
-		} else
+		} else {
 #endif
 		qpnp_pon_set_restart_reason(
 			PON_RESTART_REASON_LAF_DLOAD_MODE);
+		__raw_writel(0x77665568, restart_reason);
+#ifdef CONFIG_LGE_USB_GADGET
+		}
+#endif
 	}
 
 	if (in_panic)
@@ -500,12 +548,6 @@ static void deassert_ps_hold(void)
 
 static void do_msm_restart(enum reboot_mode reboot_mode, const char *cmd)
 {
-	int ret;
-	struct scm_desc desc = {
-		.args[0] = 1,
-		.args[1] = 0,
-		.arginfo = SCM_ARGS(2),
-	};
 
 #ifdef CONFIG_LGE_HANDLE_PANIC
 	struct task_struct *task = current;
@@ -527,16 +569,7 @@ static void do_msm_restart(enum reboot_mode reboot_mode, const char *cmd)
 		msm_trigger_wdog_bite();
 #endif
 
-	/* Needed to bypass debug image on some chips */
-	if (!is_scm_armv8())
-		ret = scm_call_atomic2(SCM_SVC_BOOT,
-			       SCM_WDOG_DEBUG_BOOT_PART, 1, 0);
-	else
-		ret = scm_call2_atomic(SCM_SIP_FNID(SCM_SVC_BOOT,
-			  SCM_WDOG_DEBUG_BOOT_PART), &desc);
-	if (ret)
-		pr_err("Failed to disable secure wdog debug: %d\n", ret);
-
+	scm_disable_sdi();
 	halt_spmi_pmic_arbiter();
 	deassert_ps_hold();
 
@@ -545,12 +578,6 @@ static void do_msm_restart(enum reboot_mode reboot_mode, const char *cmd)
 
 static void do_msm_poweroff(void)
 {
-	int ret;
-	struct scm_desc desc = {
-		.args[0] = 1,
-		.args[1] = 0,
-		.arginfo = SCM_ARGS(2),
-	};
 
 #ifdef CONFIG_LGE_HANDLE_PANIC
 	struct task_struct *task = current;
@@ -559,19 +586,10 @@ static void do_msm_poweroff(void)
 #else
 	pr_notice("Powering off the SoC\n");
 #endif
-#ifdef CONFIG_QCOM_DLOAD_MODE
+
 	set_dload_mode(0);
-#endif
+	scm_disable_sdi();
 	qpnp_pon_system_pwr_off(PON_POWER_OFF_SHUTDOWN);
-	/* Needed to bypass debug image on some chips */
-	if (!is_scm_armv8())
-		ret = scm_call_atomic2(SCM_SVC_BOOT,
-			       SCM_WDOG_DEBUG_BOOT_PART, 1, 0);
-	else
-		ret = scm_call2_atomic(SCM_SIP_FNID(SCM_SVC_BOOT,
-			  SCM_WDOG_DEBUG_BOOT_PART), &desc);
-	if (ret)
-		pr_err("Failed to disable wdog debug: %d\n", ret);
 
 	halt_spmi_pmic_arbiter();
 	deassert_ps_hold();
@@ -590,6 +608,7 @@ static int __init lge_crash_handler(char *status)
 }
 __setup("lge.crash_handler=", lge_crash_handler);
 #endif
+#ifdef CONFIG_QCOM_DLOAD_MODE
 static ssize_t attr_show(struct kobject *kobj, struct attribute *attr,
 				char *buf)
 {
@@ -720,6 +739,7 @@ static struct attribute *reset_attrs[] = {
 static struct attribute_group reset_attr_group = {
 	.attrs = reset_attrs,
 };
+#endif
 
 static int msm_restart_probe(struct platform_device *pdev)
 {
@@ -845,6 +865,8 @@ skip_sysfs_create:
 		scm_deassert_ps_hold_supported = true;
 
 	set_dload_mode(download_mode);
+	if (!download_mode)
+		scm_disable_sdi();
 
 #ifdef CONFIG_LGE_HANDLE_PANIC
 	if (!download_mode)

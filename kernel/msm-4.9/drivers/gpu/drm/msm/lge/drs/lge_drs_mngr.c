@@ -98,7 +98,7 @@ static bool lge_drs_mngr_is_updated(struct dsi_panel *panel)
 	if (panel->lge.ddic_ops && panel->lge.ddic_ops->get_current_res) {
 		idx = panel->lge.ddic_ops->get_current_res(panel);
 	} else {
-		pr_warn("dic scaler is not supported\n");
+		pr_debug("dic scaler is not supported\n");
 		return true;
 	}
 
@@ -169,14 +169,6 @@ static void lge_drs_mngr_work(struct work_struct *work)
 			rc = lge_drs_mngr_notify_to_user(panel, DRS_SUCCESS);
 			if (rc) {
 				pr_warn("WARNING: fail to notify\n");
-			} else {
-				if (panel->lge.scaler_trigger_after_res_switched) {
-					rc = dsi_panel_update_pps(panel);
-					if (rc) {
-						pr_err("pps cmd update failed, rc=%d\n", rc);
-					}
-
-				}
 			}
 			break;
 		} else {
@@ -300,7 +292,7 @@ static int lge_drs_mngr_get_main_display(struct lge_drs_mngr *drs_mngr)
 	if (!drs_mngr)
 		return -EINVAL;
 
-	addr = (unsigned int **)kallsyms_lookup_name("main_display");
+	addr = (unsigned int **)kallsyms_lookup_name("primary_display");
 	if (addr) {
 		drs_mngr->main_display = (struct dsi_display *)*addr;
 	} else {
@@ -330,6 +322,8 @@ int lge_drs_mngr_init(struct dsi_panel *panel)
 			return -EINVAL;
 		}
 	}
+
+	drs_mngr->current_freeze_state = DRS_NOT_READY;
 
 	drs_mngr->drs_workq = create_workqueue("lge_drs_mngr");
 	if (!drs_mngr->drs_workq) {
@@ -444,4 +438,31 @@ int lge_drs_mngr_freeze_state_hal(int req_type)
 	}
 
 	return rc;
+}
+
+int lge_drs_mngr_set_freeze_state(enum lge_drs_request state)
+{
+	struct lge_drs_mngr *drs_mngr = gdrs_mngr;
+
+	if (!drs_mngr) {
+		pr_err("gdrs mngr is null\n");
+		return -EINVAL;
+	}
+
+	pr_info("change state (%d)->(%d)\n", drs_mngr->current_freeze_state, state);
+	drs_mngr->current_freeze_state = state;
+
+	return 0;
+}
+
+int lge_drs_mngr_get_freeze_state(void)
+{
+	struct lge_drs_mngr *drs_mngr = gdrs_mngr;
+
+	if (!drs_mngr) {
+		pr_err("gdrs mngr is null\n");
+		return -EINVAL;
+	}
+
+	return drs_mngr->current_freeze_state;
 }

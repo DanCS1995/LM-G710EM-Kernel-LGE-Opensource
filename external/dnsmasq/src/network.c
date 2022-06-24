@@ -14,11 +14,8 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/* 2017-01-02 beney.kimg@lge.com LGP_DATA_DNSMASQ_CLEVERBIND [START] */
-#include <sys/system_properties.h>
-#include "cutils/properties.h"
-/* 2017-01-02 beney.kimg@lge.com LGP_DATA_DNSMASQ_CLEVERBIND [END] */
 #include "dnsmasq.h"
+#include <libpatchcodeid.h>
 
 static const char SEPARATOR[] = "|";
 
@@ -324,7 +321,6 @@ static int create_ipv6_listener(struct listener **link, int port)
   l = safe_malloc(sizeof(struct listener));
   l->fd = fd;
   l->tcpfd = tcpfd;
-  l->tftpfd = -1;
   l->family = AF_INET6;
   l->iface = NULL;
   l->next = NULL;
@@ -339,7 +335,7 @@ struct listener *create_wildcard_listeners(void)
   union mysockaddr addr;
   int opt = 1;
   struct listener *l, *l6 = NULL;
-  int tcpfd = -1, fd = -1, tftpfd = -1;
+  int tcpfd = -1, fd = -1;
 
   memset(&addr, 0, sizeof(addr));
   addr.in.sin_family = AF_INET;
@@ -391,31 +387,11 @@ struct listener *create_wildcard_listeners(void)
       }
     }
 #endif /* __ANDROID__ */
-  
-#ifdef HAVE_TFTP
-  if (daemon->options & OPT_TFTP)
-    {
-      addr.in.sin_port = htons(TFTP_PORT);
-      if ((tftpfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
-	return NULL;
-      
-      if (!fix_fd(tftpfd) ||
-#if defined(HAVE_LINUX_NETWORK) 
-	  setsockopt(tftpfd, SOL_IP, IP_PKTINFO, &opt, sizeof(opt)) == -1 ||
-#elif defined(IP_RECVDSTADDR) && defined(IP_RECVIF)
-	  setsockopt(tftpfd, IPPROTO_IP, IP_RECVDSTADDR, &opt, sizeof(opt)) == -1 ||
-	  setsockopt(tftpfd, IPPROTO_IP, IP_RECVIF, &opt, sizeof(opt)) == -1 ||
-#endif 
-	  bind(tftpfd, (struct sockaddr *)&addr, sa_len(&addr)) == -1)
-	return NULL;
-    }
-#endif
-  
+
   l = safe_malloc(sizeof(struct listener));
   l->family = AF_INET;
   l->fd = fd;
   l->tcpfd = tcpfd;
-  l->tftpfd = tftpfd;
   l->iface = NULL;
   l->next = l6;
 
@@ -435,10 +411,7 @@ struct listener *create_wildcard_listeners(void)
  *
  * die's on errors, so don't pass bad data.
  */
-/* 2017-01-02 beney.kimg@lge.com LGP_DATA_DNSMASQ_CLEVERBIND [START] */
-//void create_bound_listener(struct listener **listeners, struct irec *iface) // Original
-void create_bound_listener(struct listener **listeners, struct irec *iface, int dienow)
-/* 2017-01-02 beney.kimg@lge.com LGP_DATA_DNSMASQ_CLEVERBIND [END] */
+void create_bound_listener(struct listener **listeners, struct irec *iface)
 {
   int rc, opt = 1;
 #ifdef HAVE_IPV6
@@ -449,7 +422,6 @@ void create_bound_listener(struct listener **listeners, struct irec *iface, int 
   new->family = iface->addr.sa.sa_family;
   new->iface = iface;
   new->next = *listeners;
-  new->tftpfd = -1;
   new->tcpfd = -1;
   new->fd = -1;
   *listeners = new;
@@ -497,19 +469,17 @@ void create_bound_listener(struct listener **listeners, struct irec *iface, int 
     if (rc == -1 || bind(new->tcpfd, &iface->addr.sa, sa_len(&iface->addr)) == -1)
     {
       prettyprint_addr(&iface->addr, daemon->namebuff);
-      /* 2017-01-02 beney.kimg@lge.com LGP_DATA_DNSMASQ_CLEVERBIND [START] */
+      /* 2017-01-02 beney.kim@lge.com LGP_DATA_DNSMASQ_CLEVERBIND [START] */
       /* failure to bind addresses given by enumerated interface at this point
-         is OK if we're doing bind-dynamic when receiving update_ifaces command from netd */
-      /* 2017-04-20 bongsook.jeong After hotspot  & bt tethering are turned on,  tun bt client off and on repeatedly.
+       * is OK if we're doing bind-dynamic when receiving update_ifaces command from netd
+       * 2017-04-20 bongsook.jeong After hotspot  & bt tethering are turned on,  tun bt client off and on repeatedly.
        * bind is failed with link local address, died is not occured, ipv4 bind is success, and thering mobile is working.
        * http://mlm.lge.com/di/browse/PPAL-2661
        */
-      //if (dienow) {
-      //    die(_("1. failed to bind listening socket for %s: %s"), daemon->namebuff, EC_BADNET);
-      //} else {
-          my_syslog(LOG_ERR, _("[LG_DATA] failed to bind listening tcp socket for %s"), daemon->namebuff);
-      //}
-      /* 2017-01-02 beney.kimg@lge.com LGP_DATA_DNSMASQ_CLEVERBIND [END] */
+      patch_code_id("LPCP-2396@n@c@dnsmasq@network.c@1");
+      //die(_("1. failed to bind listening socket for %s: %s"), daemon->namebuff, EC_BADNET);
+      my_syslog(LOG_ERR, _("[LG_DATA] failed to bind listening tcp socket for %s"), daemon->namebuff);
+      /* 2017-01-02 beney.kim@lge.com LGP_DATA_DNSMASQ_CLEVERBIND [END] */
     }
 
     uint32_t mark = daemon->listen_mark;
@@ -521,20 +491,6 @@ void create_bound_listener(struct listener **listeners, struct irec *iface, int 
     if (listen(new->tcpfd, 5) == -1)
       die(_("failed to listen on socket: %s"), NULL, EC_BADNET);
   }
-
-#ifdef HAVE_TFTP
-  if ((daemon->options & OPT_TFTP) && iface->addr.sa.sa_family == AF_INET && iface->dhcp_ok)
-  {
-    short save = iface->addr.in.sin_port;
-    iface->addr.in.sin_port = htons(TFTP_PORT);
-    if ((new->tftpfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1 ||
-        setsockopt(new->tftpfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1 ||
-        !fix_fd(new->tftpfd) ||
-        bind(new->tftpfd, &iface->addr.sa, sa_len(&iface->addr)) == -1)
-      die(_("failed to create TFTP socket: %s"), NULL, EC_BADNET);
-    iface->addr.in.sin_port = save;
-  }
-#endif
 }
 
 /**
@@ -578,11 +534,6 @@ int delete_listener(struct listener **l)
     my_syslog(LOG_INFO, _("Closing wildcard listener family=%d"), listener->family);
   }
 
-  if (listener->tftpfd != -1)
-  {
-    close(listener->tftpfd);
-    listener->tftpfd = -1;
-  }
   if (listener->tcpfd != -1)
   {
     close(listener->tcpfd);
@@ -632,20 +583,6 @@ int close_bound_listener(struct irec *iface)
 }
 #endif /* __ANDROID__ */
 
-/* 2017-01-02 beney.kimg@lge.com LGP_DATA_DNSMASQ_CLEVERBIND [START] */
-int get_clever_bind_option()
-{
-  static char args[PROP_VALUE_MAX];
-  char def[] = "0";
-  int ret;
-
-  memset(args, 0x0, sizeof(args));
-  ret = property_get("persist.lg.data.dnsmasq.clever", args, def);
-  my_syslog(LOG_WARNING, _("clever bind, ret[%d] args[%s]"), ret, args);
-  return atoi(args);
-}
-/* 2017-01-02 beney.kimg@lge.com LGP_DATA_DNSMASQ_CLEVERBIND [END] */
-
 struct listener *create_bound_listeners(void)
 {
   struct listener *listeners = NULL;
@@ -660,16 +597,12 @@ struct listener *create_bound_listeners(void)
   for (iface = daemon->interfaces; iface; iface = iface->next)
     {
 #ifdef __ANDROID__
-      /* 2017-01-02 beney.kimg@lge.com LGP_DATA_DNSMASQ_CLEVERBIND [START] */
-      //create_bound_listener(&listeners, iface); // Original
-      create_bound_listener(&listeners, iface, get_clever_bind_option() == 1 ? 0 : 1);
-      /* 2017-01-02 beney.kimg@lge.com LGP_DATA_DNSMASQ_CLEVERBIND [START] */
+      create_bound_listener(&listeners, iface);
 #else
       struct listener *new = safe_malloc(sizeof(struct listener));
       new->family = iface->addr.sa.sa_family;
       new->iface = iface;
       new->next = listeners;
-      new->tftpfd = -1;
       new->tcpfd = -1;
       new->fd = -1;
       listeners = new;
@@ -722,20 +655,6 @@ struct listener *create_bound_listeners(void)
 	  if (listen(new->tcpfd, 5) == -1)
 	    die(_("failed to listen on socket: %s"), NULL, EC_BADNET);
 	}
-
-#ifdef HAVE_TFTP
-      if ((daemon->options & OPT_TFTP) && iface->addr.sa.sa_family == AF_INET && iface->dhcp_ok)
-	{
-	  short save = iface->addr.in.sin_port;
-	  iface->addr.in.sin_port = htons(TFTP_PORT);
-	  if ((new->tftpfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1 ||
-	      setsockopt(new->tftpfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1 ||
-	      !fix_fd(new->tftpfd) ||
-	      bind(new->tftpfd, &iface->addr.sa, sa_len(&iface->addr)) == -1)
-	    die(_("failed to create TFTP socket: %s"), NULL, EC_BADNET);
-	  iface->addr.in.sin_port = save;
-	}
-#endif
 #endif /* !__ANDROID */
     }
 
@@ -1119,10 +1038,7 @@ void set_interfaces(const char *interfaces)
         prettyprint_addr(&new_iface->addr, debug_buff);
         my_syslog(LOG_DEBUG, _("adding listener for %s"), debug_buff);
 #endif
-        /* 2017-01-02 beney.kimg@lge.com LGP_DATA_DNSMASQ_CLEVERBIND [START] */
-        //create_bound_listener(&(daemon->listeners), new_iface); // Original
-        create_bound_listener(&(daemon->listeners), new_iface, 1);
-        /* 2017-01-02 beney.kimg@lge.com LGP_DATA_DNSMASQ_CLEVERBIND [END] */
+        create_bound_listener(&(daemon->listeners), new_iface);
       }
     }
 

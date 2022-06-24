@@ -121,6 +121,11 @@ struct frag_hdr {
 extern int sysctl_mld_max_msf;
 extern int sysctl_mld_qrv;
 
+/* 2017-05-19 yunsik.lee@lge.com LGP_DATA_UDP_PREVENT_ICMPv6_WITH_CLAT_IID [START] */
+extern unsigned int sysctl_clat_iid1 __read_mostly;
+extern unsigned int sysctl_clat_iid2 __read_mostly;
+/* 2017-05-19 yunsik.lee@lge.com LGP_DATA_UDP_PREVENT_ICMPv6_WITH_CLAT_IID [END] */
+
 #define _DEVINC(net, statname, mod, idev, field)			\
 ({									\
 	struct inet6_dev *_idev = (idev);				\
@@ -290,6 +295,7 @@ int ipv6_flowlabel_opt_get(struct sock *sk, struct in6_flowlabel_req *freq,
 			   int flags);
 int ip6_flowlabel_init(void);
 void ip6_flowlabel_cleanup(void);
+bool ip6_autoflowlabel(struct net *net, const struct ipv6_pinfo *np);
 
 static inline void fl6_sock_release(struct ip6_flowlabel *fl)
 {

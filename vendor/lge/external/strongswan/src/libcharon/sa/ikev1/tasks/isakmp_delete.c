@@ -20,6 +20,9 @@
 
 #include <utils/cust_settings.h>
 
+#include <lgpcas.h>
+#include <libpatchcodeid.h>
+
 typedef struct private_isakmp_delete_t private_isakmp_delete_t;
 
 /**
@@ -45,6 +48,8 @@ METHOD(task_t, build_i, status_t,
 	ike_sa_id_t *id;
 
 #ifdef __ANDROID__
+
+        patch_code_id("LPCP-2249@n@c@libcharon@isakmp_delete.c@1");
 	if (get_cust_setting_bool(LGP_DATA_DEBUG_ENABLE_PRIVACY_LOG)) {
 		DBG1(DBG_IKE, "deleting IKE_SA %s[%d] between %H[%Y]...%H[%Y]",
 			 this->ike_sa->get_name(this->ike_sa),
@@ -97,6 +102,7 @@ METHOD(task_t, process_r, status_t,
 		 this->ike_sa->get_unique_id(this->ike_sa));
 
 #ifdef __ANDROID__
+        patch_code_id("LPCP-2249@n@c@libcharon@isakmp_delete.c@2");
 	if (get_cust_setting_bool(LGP_DATA_DEBUG_ENABLE_PRIVACY_LOG)) {
 		DBG1(DBG_IKE, "deleting IKE_SA %s[%d] between %H[%Y]...%H[%Y]",
 			 this->ike_sa->get_name(this->ike_sa),

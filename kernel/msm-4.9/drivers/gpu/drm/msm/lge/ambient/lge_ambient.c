@@ -9,6 +9,8 @@
 #include "dsi_panel.h"
 #include "dsi_ctrl_hw.h"
 
+#define SANITIZE(x) do { (x) = ((x)<0)?0:(x); } while(0)
+
 static ssize_t area_get(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -23,7 +25,6 @@ static ssize_t area_get(struct device *dev,
 	return sprintf(buf, "%d %d %d %d\n", rect.x, rect.y, rect.w, rect.h);
 }
 
-#define SANITIZE(x) do { (x) = ((x)<0)?0:(x); } while(0)
 static ssize_t area_set(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
@@ -64,6 +65,44 @@ static ssize_t area_set(struct device *dev,
 
 	return ret;
 }
+static DEVICE_ATTR(area, S_IRUGO | S_IWUSR | S_IWGRP,
+		area_get, area_set);
+
+static ssize_t power_mode_get(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct dsi_panel *panel = NULL;
+	int power_mode = -1;
+
+	panel = dev_get_drvdata(dev);
+	if (panel) {
+		power_mode = panel->lge.aod_power_mode;
+	}
+
+	return sprintf(buf, "%d\n", power_mode);
+}
+
+static ssize_t power_mode_set(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	ssize_t ret = strnlen(buf, PAGE_SIZE);
+	int power_mode;
+	struct dsi_panel *panel = NULL;
+
+	panel = dev_get_drvdata(dev);
+	if (panel == NULL)
+		return ret;
+
+	sscanf(buf, "%d", &power_mode);
+	panel->lge.aod_power_mode = power_mode;
+
+	pr_info("power_mode=%d\n", panel->lge.aod_power_mode);
+
+	return ret;
+}
+static DEVICE_ATTR(power_mode, S_IRUGO | S_IWUSR | S_IWGRP,
+		power_mode_get, power_mode_set);
+
 static ssize_t aod_interface_get(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -81,9 +120,6 @@ static ssize_t aod_interface_get(struct device *dev,
 static DEVICE_ATTR(aod_interface, S_IRUGO,
 		aod_interface_get, NULL);
 
-static DEVICE_ATTR(area, S_IRUGO | S_IWUSR | S_IWGRP,
-		area_get, area_set);
-
 void lge_ambient_create_sysfs(struct dsi_panel *panel, struct class *class_panel)
 {
 	static struct device *aod_sysfs_dev = NULL;
@@ -92,9 +128,11 @@ void lge_ambient_create_sysfs(struct dsi_panel *panel, struct class *class_panel
 		aod_sysfs_dev = device_create(class_panel, NULL, 0, panel, "aod");
 		if (IS_ERR(aod_sysfs_dev)) {
 			pr_err("Failed to create dev(aod_sysfs_dev)!");
-		}else{
+		} else {
 			if (device_create_file(aod_sysfs_dev, &dev_attr_area) < 0)
-				pr_err("add aod node fail!");
+				pr_err("add aod area node fail!");
+			if (device_create_file(aod_sysfs_dev, &dev_attr_power_mode) < 0)
+				pr_err("add aod power mode node fail!");
 			if (device_create_file(aod_sysfs_dev, &dev_attr_aod_interface) < 0)
 				pr_err("add aod interface node fail!");
 		}

@@ -210,6 +210,7 @@ int init_miscdev_daemon(void)
     return 0;
 }
 
+/*
 int ecryptfs_run_miscdev_daemon(struct ecryptfs_miscdev_ctx *miscdev_ctx)
 {
     struct ecryptfs_message *emsg;
@@ -278,3 +279,4 @@ out:
     ecryptfs_free_key_mod_list(&ctx);
     return rc;
 }
+*/

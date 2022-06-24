@@ -17,6 +17,7 @@
 #include <xtables.h>
 #include <math.h>
 #include "xshared.h"
+#include <libpatchcodeid.h>
 
 /*
  * Print out any special helps. A user might like to be able to add a --help
@@ -246,7 +247,7 @@ void xs_init_match(struct xtables_match *match)
 		match->init(match->m);
 }
 
-int xtables_lock(int wait, struct timeval *wait_interval)
+static int xtables_lock(int wait, struct timeval *wait_interval)
 {
 	struct timeval time_left, wait_time;
 	int fd, i = 0;
@@ -260,8 +261,11 @@ int xtables_lock(int wait, struct timeval *wait_interval)
 /* 2014-12-18 kyungsu.mok@lge.com LGP_DATA_TOOLS_IPTABLES_FORCE_WAIT_OPTION [END] */
 
 	fd = open(XT_LOCK_NAME, O_CREAT, 0600);
-	if (fd < 0)
-		return XT_LOCK_UNSUPPORTED;
+	if (fd < 0) {
+		fprintf(stderr, "Fatal: can't open lock file %s: %s\n",
+			XT_LOCK_NAME, strerror(errno));
+		return XT_LOCK_FAILED;
+	}
 
 	if (wait == -1) {
 		if (flock(fd, LOCK_EX) == 0)
@@ -288,6 +292,7 @@ int xtables_lock(int wait, struct timeval *wait_interval)
 		select(0, NULL, NULL, NULL, &wait_time);
 		timersub(&time_left, wait_interval, &time_left);
 /* 2014-12-18 kyungsu.mok@lge.com LGP_DATA_TOOLS_IPTABLES_FORCE_WAIT_OPTION [START] */
+        patch_code_id("LPCP-704@n@c@iptables@xshared.c@1");
 #ifndef LGP_DATA_TOOLS_IPTABLES_FORCE_WAIT_OPTION
 		sleep(1);
 #endif
@@ -299,6 +304,28 @@ void xtables_unlock(int lock)
 {
 	if (lock >= 0)
 		close(lock);
+}
+
+int xtables_lock_or_exit(int wait, struct timeval *wait_interval)
+{
+	int lock = xtables_lock(wait, wait_interval);
+
+	if (lock == XT_LOCK_FAILED) {
+		xtables_free_opts(1);
+		exit(RESOURCE_PROBLEM);
+	}
+
+	if (lock == XT_LOCK_BUSY) {
+		fprintf(stderr, "Another app is currently holding the xtables lock. ");
+		if (wait == 0)
+			fprintf(stderr, "Perhaps you want to use the -w option?\n");
+		else
+			fprintf(stderr, "Stopped waiting after %ds.\n", wait);
+		xtables_free_opts(1);
+		exit(RESOURCE_PROBLEM);
+	}
+
+	return lock;
 }
 
 int parse_wait_time(int argc, char *argv[])

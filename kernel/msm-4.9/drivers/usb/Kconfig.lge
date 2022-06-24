@@ -132,6 +132,13 @@ config LGE_USB_LGMD_LEGACY
 	boolean "LGE USB Legacy Moisture Detector"
 	help
 	  Support legacy moisture deteator.
+
+config LGE_USB_LGMD18
+	boolean "LGE USB Moisture Detector in 2018"
+	select IIO
+	select IIO_BUFFER
+	help
+	  Support moisture deteator in 2018.
 endchoice
 endif
 

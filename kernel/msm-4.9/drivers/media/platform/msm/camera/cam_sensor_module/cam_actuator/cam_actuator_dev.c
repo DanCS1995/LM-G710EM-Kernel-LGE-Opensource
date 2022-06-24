@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,6 +15,11 @@
 #include "cam_actuator_soc.h"
 #include "cam_actuator_core.h"
 #include "cam_trace.h"
+
+#if defined (CONFIG_MACH_SDM845_JUDYPN) || defined (CONFIG_MACH_SDM845_BETA) /* LGE_CHANGE, 2018-09-11, OIS,AF Driver update for LG EIS, yonghwan.lym@lge.com */
+extern void actuator_create_sysfs(struct cam_actuator_ctrl_t *a_ctrl);
+extern void actuator_destroy_sysfs(struct cam_actuator_ctrl_t *a_ctrl);
+#endif
 
 static long cam_actuator_subdev_ioctl(struct v4l2_subdev *sd,
 	unsigned int cmd, void *arg)
@@ -220,6 +225,12 @@ static int32_t cam_actuator_driver_i2c_probe(struct i2c_client *client,
 
 	a_ctrl->cam_act_state = CAM_ACTUATOR_INIT;
 
+#if defined (CONFIG_MACH_SDM845_JUDYPN) || defined (CONFIG_MACH_SDM845_BETA) /* LGE_CHANGE, 2018-09-11, OIS,AF Driver update for LG EIS, yonghwan.lym@lge.com */
+	spin_lock_init(&a_ctrl->hall_lock);
+	a_ctrl->camera_class = NULL;
+	actuator_create_sysfs(a_ctrl);
+#endif
+
 	return rc;
 
 unreg_subdev:
@@ -244,6 +255,10 @@ static int32_t cam_actuator_platform_remove(struct platform_device *pdev)
 		return 0;
 	}
 
+#if defined (CONFIG_MACH_SDM845_JUDYPN) || defined (CONFIG_MACH_SDM845_BETA) /* LGE_CHANGE, 2018-09-11, OIS,AF Driver update for LG EIS, yonghwan.lym@lge.com */
+	actuator_destroy_sysfs(a_ctrl);
+#endif
+
 	soc_private =
 		(struct cam_actuator_soc_private *)a_ctrl->soc_info.soc_private;
 	power_info = &soc_private->power_info;
@@ -252,6 +267,8 @@ static int32_t cam_actuator_platform_remove(struct platform_device *pdev)
 	a_ctrl->io_master_info.cci_client = NULL;
 	kfree(power_info->power_setting);
 	kfree(power_info->power_down_setting);
+	power_info->power_setting = NULL;
+	power_info->power_down_setting = NULL;
 	kfree(a_ctrl->soc_info.soc_private);
 	kfree(a_ctrl->i2c_data.per_frame);
 	a_ctrl->i2c_data.per_frame = NULL;
@@ -274,6 +291,10 @@ static int32_t cam_actuator_driver_i2c_remove(struct i2c_client *client)
 		return -EINVAL;
 	}
 
+#if defined (CONFIG_MACH_SDM845_JUDYPN) || defined (CONFIG_MACH_SDM845_BETA) /* LGE_CHANGE, 2018-09-11, OIS,AF Driver update for LG EIS, yonghwan.lym@lge.com */
+	actuator_destroy_sysfs(a_ctrl);
+#endif
+
 	soc_private =
 		(struct cam_actuator_soc_private *)a_ctrl->soc_info.soc_private;
 	power_info = &soc_private->power_info;
@@ -284,6 +305,8 @@ static int32_t cam_actuator_driver_i2c_remove(struct i2c_client *client)
 	kfree(power_info->power_setting);
 	kfree(power_info->power_down_setting);
 	kfree(a_ctrl->soc_info.soc_private);
+	power_info->power_setting = NULL;
+	power_info->power_down_setting = NULL;
 	a_ctrl->soc_info.soc_private = NULL;
 	kfree(a_ctrl);
 	return rc;
@@ -372,6 +395,12 @@ static int32_t cam_actuator_driver_platform_probe(
 	v4l2_set_subdevdata(&a_ctrl->v4l2_dev_str.sd, a_ctrl);
 	a_ctrl->cam_act_state = CAM_ACTUATOR_INIT;
 
+#if defined (CONFIG_MACH_SDM845_JUDYPN) || defined (CONFIG_MACH_SDM845_BETA) /* LGE_CHANGE, 2018-09-11, OIS,AF Driver update for LG EIS, yonghwan.lym@lge.com */
+	spin_lock_init(&a_ctrl->hall_lock);
+	a_ctrl->camera_class = NULL;
+	actuator_create_sysfs(a_ctrl);
+#endif
+
 	return rc;
 
 free_mem:
@@ -393,6 +422,7 @@ static struct platform_driver cam_actuator_platform_driver = {
 		.name = "qcom,actuator",
 		.owner = THIS_MODULE,
 		.of_match_table = cam_actuator_driver_dt_match,
+		.suppress_bind_attrs = true,
 	},
 	.remove = cam_actuator_platform_remove,
 };

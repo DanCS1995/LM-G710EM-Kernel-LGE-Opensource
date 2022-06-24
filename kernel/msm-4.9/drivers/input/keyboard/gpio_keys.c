@@ -37,9 +37,6 @@
 #ifdef CONFIG_LGE_HANDLE_PANIC
 #include <soc/qcom/lge/lge_handle_panic.h>
 #endif
-#ifdef CONFIG_LGE_TOUCH_HALLIC_COVER
-#include <soc/qcom/lge/board_lge.h>
-#endif
 
 #define CONFIG_LGE_SUPPORT_HALLIC
 
@@ -62,7 +59,7 @@ static bool hallic_check_hydra_name(void)
 	int hydra_name = lge_get_hydra_name();
 	pr_info ("%s hydra_name = %d\n", __func__, hydra_name);
 
-	if (hydra_name == SIGNATURE)
+	if (hydra_name == HYDRA_SIGNATURE)
 		return true;
 	else
 		return false;
@@ -788,11 +785,13 @@ gpio_keys_get_devtree_pdata(struct device *dev)
 			button->debounce_interval = 5;
 
 #ifdef CONFIG_LGE_SUPPORT_HALLIC
-		if (hallic_check_hydra_name()) {
-			if (!strncmp(button->desc, "nfc_cover", 9)) {
-				button->desc = "smart_cover";
-				button->debounce_interval = 15;
-			}
+		if (button->desc != NULL) {
+		    if (hallic_check_hydra_name()) {
+			    if (!strncmp(button->desc, "nfc_cover", 9)) {
+				    button->desc = "smart_cover";
+				    button->debounce_interval = 15;
+			    }
+		    }
 		}
 #endif
 	}

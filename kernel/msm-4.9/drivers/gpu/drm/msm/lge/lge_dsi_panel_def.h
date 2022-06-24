@@ -32,7 +32,14 @@ enum lge_ddic_dsi_cmd_set_type {
 	LGE_DDIC_DSI_SET_LP1,
 	LGE_DDIC_DSI_SET_LP2,
 	LGE_DDIC_DSI_SET_NOLP,
+	LGE_DDIC_DSI_SET_SATURATION,
+	LGE_DDIC_DSI_SET_HUE,
 	LGE_DDIC_DSI_SET_SHARPNESS,
+	LGE_DDIC_DSI_SET_SATURATION_DEFAULT,
+	LGE_DDIC_DSI_SET_HUE_DEFAULT,
+	LGE_DDIC_DSI_SET_SHARPNESS_DEFAULT,
+	LGE_DDIC_DSI_CM_SPORTS,
+	LGE_DDIC_DSI_CM_GAME,
 	LGE_DDIC_DSI_DETECT_VERT_LINE_RESTORE,
 	LGE_DDIC_DSI_DETECT_BLACK_VERT_LINE,
 	LGE_DDIC_DSI_DETECT_WHITE_VERT_LINE,
@@ -45,6 +52,13 @@ enum lge_ddic_dsi_cmd_set_type {
 	LGE_DDIC_DSI_DISP_SC_COMMAND_DUMMY,
 	LGE_DDIC_DSI_REGISTER_LOCK,
 	LGE_DDIC_DSI_REGISTER_UNLOCK,
+	LGE_DDIC_DSI_VIDEO_ENHANCEMENT_ON,
+	LGE_DDIC_DSI_VIDEO_ENHANCEMENT_OFF,
+	LGE_DDIC_DSI_HDR_SET_CTRL,
+	LGE_DDIC_DSI_IRC_CTRL,
+	LGE_DDIC_DSI_ACE_TUNE,
+	LGE_DDIC_DSI_ACE_RESTORE,
+	LGE_DDIC_DSI_AOD_AREA,
 	LGE_DDIC_DSI_CMD_SET_MAX
 };
 
@@ -91,16 +105,29 @@ struct backup_info {
 	bool is_backup;
 };
 
+enum lge_irc_ctrl {
+	LGE_IRC_ON = 0,
+	LGE_IRC_OFF,
+	LGE_IRC_MAX,
+};
+
+enum lge_irc_mode {
+	LGE_GLOBAL_IRC_HBM = 0,
+	LGE_GLOBAL_IRC_HDR,
+	LGE_GLOBAL_IRC_MAX,
+};
+
 struct dsi_panel;
 
 struct lge_ddic_ops {
 	/* For DISPLAY_AMBIENT */
 	int (*store_aod_area)(struct dsi_panel *panel, struct lge_rect rect);
 	int (*prepare_aod_cmds)(struct dsi_panel *panel, struct dsi_cmd_desc *cmds, int cmds_count);
+	void (*prepare_aod_area)(struct dsi_panel *panel, struct dsi_cmd_desc *cmds, int cmds_count);
 	/* For DISPLAY_COLOR_MANAGER */
 	void (*lge_bc_dim_set)(struct dsi_panel *panel, u8 bc_dim_en, u8 bc_dim_f_cnt);
 	int (*lge_set_therm_dim)(struct dsi_panel *panel, int input);
-	void (*lge_get_brightness_dim)(struct dsi_panel *panel);
+	int (*lge_get_brightness_dim)(struct dsi_panel *panel);
 	void (*lge_set_brightness_dim)(struct dsi_panel *panel, int input);
 	void (*lge_set_custom_rgb)(struct dsi_panel *panel, bool send_cmd);
 	void (*lge_set_rgb_tune)(struct dsi_panel *panel, bool send_cmd);
@@ -143,8 +170,8 @@ struct lge_ddic_ops {
 	int (*get_current_res)(struct dsi_panel *panel);
 	void (*get_support_res)(int idx, void* input);
 	struct backup_info* (*get_reg_backup_list)(int *cnt);
-	int (*set_pps_cmds)(struct dsi_panel *panel, enum dsi_cmd_set_type type);
-	int (*unset_pps_cmds)(struct dsi_panel *panel, enum dsi_cmd_set_type type);
+	int (*set_pps_cmds)(struct dsi_panel *panel, enum lge_ddic_dsi_cmd_set_type type);
+	int (*unset_pps_cmds)(struct dsi_panel *panel, enum lge_ddic_dsi_cmd_set_type type);
 
 	/* For DISPLAY_FACTORY */
 	void (*lge_check_vert_black_line)(struct dsi_panel *panel);
@@ -155,6 +182,9 @@ struct lge_ddic_ops {
 	void (*err_detect_work)(struct work_struct *work);
 	irqreturn_t (*err_detect_irq_handler)(int irq, void *data);
 	int (*set_err_detect_mask)(struct dsi_panel *panel);
+	int (*set_irc_state)(struct dsi_panel *panel, enum lge_irc_mode mode, enum lge_irc_ctrl enable);
+	int (*get_irc_state)(struct dsi_panel *panel);
+	int (*set_irc_default_state)(struct dsi_panel *panel);
 };
 
 struct lge_dsi_color_manager_mode_entry {
@@ -191,7 +221,7 @@ struct lge_dsi_panel {
 	const char *bist_usage_type[MAX_BIST_USAGE_TYPE];
 	struct mutex bist_lock;
 	bool use_drs_mngr;
-	bool scaler_trigger_after_res_switched;
+	bool use_internal_pps_switch;
 	struct lge_drs_mngr drs_mngr;
 	bool use_ddic_reg_backup;
 	bool ddic_reg_backup_complete;
@@ -231,6 +261,7 @@ struct lge_dsi_panel {
 	/* For DISPLAY_COLOR_MANAGER */
 	bool use_color_manager;
 	u8 dgc_status;
+	u8 sharpness_status;
 	int color_manager_status;
 	int color_manager_mode;
 	bool is_backup;
@@ -258,6 +289,13 @@ struct lge_dsi_panel {
 	int vr_low_persist_enable;
 	int vr_status;
 
+	bool use_irc_ctrl;
+	bool irc_pending;
+	int irc_request_state;
+	int irc_current_state;
+	bool use_ace_ctrl;
+	int ace_mode;
+
 	atomic_t backup_state;
 	struct work_struct backup_work;
 	struct lge_ddic_ops *ddic_ops;
@@ -281,6 +319,7 @@ struct lge_dsi_panel {
 	bool partial_area_vertical_changed;
 	bool partial_area_horizontal_changed;
 	bool partial_area_height_changed;
+	bool aod_power_mode;
 
 	u32 aod_interface;
 

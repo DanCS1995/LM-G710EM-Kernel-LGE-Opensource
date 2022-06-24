@@ -112,7 +112,7 @@ static bool supplier_connected(struct veneer* veneer_me) {
 
 static enum charging_supplier supplier_sdp(/* @Nonnull */ struct power_supply* usb,
 	/* @Nonnull */ union power_supply_propval* buf) {
-	enum charging_supplier ret = CHARGING_SUPPLY_BC12_SDP;
+	enum charging_supplier ret = CHARGING_SUPPLY_USB_2P0;
 
 	if (!power_supply_get_property(usb, POWER_SUPPLY_PROP_RESISTANCE_ID, buf)) {
 		switch (buf->intval) {
@@ -139,24 +139,23 @@ static enum charging_supplier supplier_typec(/* @Nonnull */ struct power_supply*
 	/* @Nonnull */ union power_supply_propval* buf) {
 
 	enum power_supply_type real = buf->intval;
-	enum charging_supplier ret = CHARGING_SUPPLY_UNKNOWN;
+	enum charging_supplier ret = CHARGING_SUPPLY_TYPE_UNKNOWN;
 
 	if (!power_supply_get_property(usb, POWER_SUPPLY_PROP_TYPEC_MODE, buf)) {
 		switch (buf->intval) {
 		case POWER_SUPPLY_TYPEC_NONE :
 			ret = (real == POWER_SUPPLY_TYPE_USB_FLOAT)
-				? CHARGING_SUPPLY_BC12_FLOAT
-				: CHARGING_SUPPLY_BC12_DCP;
+				? CHARGING_SUPPLY_TYPE_FLOAT
+				: CHARGING_SUPPLY_DCP_DEFAULT;
 			break;
 		case POWER_SUPPLY_TYPEC_SOURCE_DEFAULT :
-			/* CHARGING_SUPPLY_TYPEC_56K */
-			ret = CHARGING_SUPPLY_BC12_DCP;
+			ret = CHARGING_SUPPLY_DCP_DEFAULT;
 			break;
 		case POWER_SUPPLY_TYPEC_SOURCE_MEDIUM :
-			ret = CHARGING_SUPPLY_TYPEC_22K;
+			ret = CHARGING_SUPPLY_DCP_22K;
 			break;
 		case POWER_SUPPLY_TYPEC_SOURCE_HIGH :
-			ret = CHARGING_SUPPLY_TYPEC_10K;
+			ret = CHARGING_SUPPLY_DCP_10K;
 			break;
 		default :
 			break;
@@ -178,7 +177,7 @@ static enum charging_supplier supplier_wireless(struct power_supply* wireless,
 			CHARGING_SUPPLY_WIRELESS_9W : CHARGING_SUPPLY_WIRELESS_5W;
 	}
 	else
-		return CHARGING_SUPPLY_UNKNOWN;
+		return CHARGING_SUPPLY_TYPE_UNKNOWN;
 }
 
 static bool charging_wakelock_acquire(struct wakeup_source* wakelock) {
@@ -191,10 +190,12 @@ static bool charging_wakelock_acquire(struct wakeup_source* wakelock) {
 	return false;
 }
 
-static bool charging_wakelock_release(struct wakeup_source* wakelock) {
+static bool charging_wakelock_release(struct device* dev, struct wakeup_source* wakelock) {
 	if (wakelock->active) {
 		pr_veneer("%s\n", VENEER_WAKELOCK);
 		__pm_relax(wakelock);
+
+		pm_wakeup_event(dev, 1000);
 
 		return true;
 	}
@@ -208,11 +209,12 @@ static void update_veneer_wakelock(struct veneer* veneer_me) {
 	if (connected && !eoc)
 		charging_wakelock_acquire(&veneer_me->veneer_wakelock);
 	else
-		charging_wakelock_release(&veneer_me->veneer_wakelock);
+		charging_wakelock_release(veneer_me->veneer_dev,
+			&veneer_me->veneer_wakelock);
 }
 
 static void update_veneer_supplier(struct veneer* veneer_me) {
-	enum charging_supplier		new = CHARGING_SUPPLY_UNKNOWN;
+	enum charging_supplier		new = CHARGING_SUPPLY_TYPE_UNKNOWN;
 	struct power_supply*		psy = NULL;
 	union power_supply_propval	val;
 
@@ -224,30 +226,35 @@ static void update_veneer_supplier(struct veneer* veneer_me) {
 
 			switch (val.intval) {
 			case POWER_SUPPLY_TYPE_USB_FLOAT :
-				// If FLOAT_CHARGER is detected once, preserve it
-				// : Not to check type C
-				if (veneer_me->veneer_supplier == CHARGING_SUPPLY_BC12_FLOAT) {
-					new = CHARGING_SUPPLY_BC12_FLOAT;
+				// If FLOAT_CHARGER is detected once, preserve it (Not to check type C)
+				if (veneer_me->veneer_supplier == CHARGING_SUPPLY_TYPE_FLOAT) {
+					new = CHARGING_SUPPLY_TYPE_FLOAT;
 					break;
 				}
+				// fall through, (Here is no break)
 			case POWER_SUPPLY_TYPE_USB_DCP :
 				// USB C type would be enumerated to DCP type
 				new = supplier_typec(psy, &val);
 				break;
+
 			case POWER_SUPPLY_TYPE_USB :
 				new = supplier_sdp(psy, &val);
+				// If USB 3.x is detected already, preserve it.
+				if (veneer_me->veneer_supplier == CHARGING_SUPPLY_USB_3PX
+					&& new == CHARGING_SUPPLY_USB_2P0)
+					new = CHARGING_SUPPLY_USB_3PX;
 				break;
 			case POWER_SUPPLY_TYPE_USB_CDP :
-				new = CHARGING_SUPPLY_BC12_CDP;
-				break;
-			case POWER_SUPPLY_TYPE_USB_HVDCP :
-				new = CHARGING_SUPPLY_HVDCP_QC2;
-				break;
-			case POWER_SUPPLY_TYPE_USB_HVDCP_3 :
-				new = CHARGING_SUPPLY_HVDCP_QC3;
+				new = CHARGING_SUPPLY_USB_CDP;
 				break;
 			case POWER_SUPPLY_TYPE_USB_PD :
-				new = CHARGING_SUPPLY_HVDCP_PD;
+				new = CHARGING_SUPPLY_USB_PD;
+				break;
+			case POWER_SUPPLY_TYPE_USB_HVDCP :
+				new = CHARGING_SUPPLY_DCP_QC2;
+				break;
+			case POWER_SUPPLY_TYPE_USB_HVDCP_3 :
+				new = CHARGING_SUPPLY_DCP_QC3;
 				break;
 			default :
 				break;
@@ -255,11 +262,11 @@ static void update_veneer_supplier(struct veneer* veneer_me) {
 		}
 		/* Overriding on fake hvdcp */
 		val.intval = 1;
-		if (psy && new != CHARGING_SUPPLY_HVDCP_QC2
+		if (psy && new != CHARGING_SUPPLY_DCP_QC2
 			&& !power_supply_set_property(psy, POWER_SUPPLY_PROP_USB_HC, &val)
 			&& !power_supply_get_property(psy, POWER_SUPPLY_PROP_USB_HC, &val)
 			&& !!val.intval) {
-			new = CHARGING_SUPPLY_HVDCP_QC2;
+			new = CHARGING_SUPPLY_DCP_QC2;
 			pr_veneer("Fake HVDCP is enabled, set supplier to QC2\n");
 		}
 	}
@@ -268,7 +275,7 @@ static void update_veneer_supplier(struct veneer* veneer_me) {
 		new = supplier_wireless(psy, &val);
 	}
 	else { /* 'new' may be 'NONE' at the initial time and it will be updated soon */
-		new = CHARGING_SUPPLY_NONE;
+		new = CHARGING_SUPPLY_TYPE_NONE;
 	}
 
 	if (veneer_me->veneer_supplier != new) {
@@ -293,7 +300,7 @@ static void update_veneer_uninodes(struct veneer* veneer_me) {
 		enum charging_verbosity	verbose = VERBOSE_CHARGER_NORMAL;
 
 		switch (type) {
-		case CHARGING_SUPPLY_BC12_DCP: {
+		case CHARGING_SUPPLY_DCP_DEFAULT: {
 			int stored;
 			/* VERBOSE_CHARGER_SLOW will be set in set_property and a dedicated work */
 			if (unified_nodes_show("charger_verbose", buff)
@@ -301,13 +308,13 @@ static void update_veneer_uninodes(struct veneer* veneer_me) {
 				verbose = VERBOSE_CHARGER_SLOW;
 		}	break;
 
-		case CHARGING_SUPPLY_BC12_FLOAT:
-			verbose = VERBOSE_CHARGER_INCOMPATIBLE;
+		case CHARGING_SUPPLY_TYPE_NONE:
+		case CHARGING_SUPPLY_TYPE_UNKNOWN:
+			verbose = VERBOSE_CHARGER_NONE;
 			break;
 
-		case CHARGING_SUPPLY_NONE:
-		case CHARGING_SUPPLY_UNKNOWN:
-			verbose = VERBOSE_CHARGER_NONE;
+		case CHARGING_SUPPLY_TYPE_FLOAT:
+			verbose = VERBOSE_CHARGER_INCOMPATIBLE;
 			break;
 
 		default :
@@ -321,12 +328,13 @@ static void update_veneer_uninodes(struct veneer* veneer_me) {
 	else {
 		/* Updating incompatible charger status here for non-vzw models */
 		unified_nodes_store("charger_incompatible",
-			type == CHARGING_SUPPLY_BC12_FLOAT ? "1" : "0", 1);
+			type == CHARGING_SUPPLY_TYPE_FLOAT ? "1" : "0", 1);
 	}
 
 	/* Updating fast charger status here */
 	if (!unified_nodes_show("charger_highspeed", buff) || strncmp(buff, "1", 1)
-		|| type == CHARGING_SUPPLY_NONE || type == CHARGING_SUPPLY_UNKNOWN
+		|| type == CHARGING_SUPPLY_TYPE_NONE || type == CHARGING_SUPPLY_TYPE_UNKNOWN
+		|| type == CHARGING_SUPPLY_TYPE_FLOAT || type == CHARGING_SUPPLY_WIRELESS_5W
 		|| veneer_me->usbin_typefix) {
 
 		#define HIGHSPEED_THRESHOLD_MW_WIRED		15000
@@ -355,12 +363,12 @@ static void update_veneer_uninodes(struct veneer* veneer_me) {
 		}
 
 		unified_nodes_store("charger_highspeed",
-			(mw_now >= mw_highspeed && type != CHARGING_SUPPLY_TYPEC_10K) ? "1" : "0",
+			(mw_now >= mw_highspeed && type != CHARGING_SUPPLY_DCP_10K) ? "1" : "0",
 			1);
 	}
 	else
 		pr_veneer("Skip to update highspeed "
-			"if buff == 1 && !CHARGING_SUPPLY_NONE\n");
+			"if buff == 1 && !CHARGING_SUPPLY_TYPE_NONE\n");
 
 	/* Finally, updating charger name here */
 	unified_nodes_store("charger_name", name, sizeof(name));
@@ -402,33 +410,19 @@ static void notify_siblings(struct veneer* veneer_me) {
 static void notify_fabproc(struct veneer* veneer_me) {
 	struct power_supply* psy;
 
-// Enabling parallel charger here if it is required
-{	char buf [16] = { 0, };
-	int fastparallel;
-	psy = get_psy_battery(veneer_me);
-	if (psy && unified_nodes_show("support_fastpl", buf)
-		&& sscanf(buf, "%d", &fastparallel) && !!fastparallel) {
-		union power_supply_propval enable = { .intval = 0, };
-		// Protocol : Enabling parallel charging by force
-		if (power_supply_set_property(psy, POWER_SUPPLY_PROP_PARALLEL_DISABLE, &enable))
-			pr_veneer("An psy should provide POWER_SUPPLY_PROP_PARALLEL_DISABLE"
-				"for the factory fast parallel charging\n");
+	// Enabling parallel charger here if it is required
+	{	char buf [16] = { 0, };
+		int fastparallel;
+		psy = get_psy_battery(veneer_me);
+		if (psy && unified_nodes_show("support_fastpl", buf)
+			&& sscanf(buf, "%d", &fastparallel) && !!fastparallel) {
+			union power_supply_propval enable = { .intval = 0, };
+			// Protocol : Enabling parallel charging by force
+			if (power_supply_set_property(psy, POWER_SUPPLY_PROP_PARALLEL_DISABLE, &enable))
+				pr_veneer("An psy should provide POWER_SUPPLY_PROP_PARALLEL_DISABLE"
+					"for the factory fast parallel charging\n");
+		}
 	}
-}
-
-// Releasing(Unvoting) IUSB for factory cable
-{	enum charging_supplier charger = veneer_me->veneer_supplier;
-	psy = get_psy_usb(veneer_me);
-	if (psy && (charger == CHARGING_SUPPLY_FACTORY_56K
-		 || charger == CHARGING_SUPPLY_FACTORY_130K
-		 || charger == CHARGING_SUPPLY_FACTORY_910K)) {
-		union power_supply_propval trigger = { .intval = 0xFab, };
-		// Protocol : Unvoting IUSB for SDP
-		if (power_supply_set_property(psy, POWER_SUPPLY_PROP_SDP_CURRENT_MAX, &trigger))
-			pr_veneer("An psy should provide POWER_SUPPLY_PROP_SDP_CURRENT_MAX"
-				"for the factory cable charging\n");
-	}
-}
 }
 
 static void notify_touch(struct veneer* veneer_me) {
@@ -466,7 +460,7 @@ static bool detect_slowchg_required(/* @Nonnull */ struct veneer* veneer_me) {
 	int  verbose;
 
 	return unified_bootmode_chgverbose()
-		&& veneer_me->veneer_supplier == CHARGING_SUPPLY_BC12_DCP
+		&& veneer_me->veneer_supplier == CHARGING_SUPPLY_DCP_DEFAULT
 		&& veneer_me->usbin_aicl < SLOW_CHARGING_CURRENT_MA
 		&& unified_nodes_show("charger_verbose", buf)
 		&& sscanf(buf, "%d", &verbose)
@@ -582,6 +576,12 @@ static int psy_property_get(struct power_supply *psy_me,
 		}
 	}	break;
 
+	case POWER_SUPPLY_PROP_SDP_CURRENT_MAX :
+		val->intval = veneer_me->usbin_realtype == POWER_SUPPLY_TYPE_USB
+			? veneer_me->limited_iusb * 1000
+			: VOTE_TOTALLY_RELEASED;
+		break;
+
 	case POWER_SUPPLY_PROP_REAL_TYPE :
 		val->intval = veneer_me->presence_wireless
 			? POWER_SUPPLY_TYPE_WIRELESS
@@ -625,20 +625,26 @@ static int psy_property_set(struct power_supply *psy_me,
 		*/
 		switch (val->intval) {
 		case POWER_SUPPLY_TYPE_USB_FLOAT :
-			if (veneer_me->veneer_supplier != CHARGING_SUPPLY_BC12_FLOAT)
-				veneer_me->veneer_supplier = CHARGING_SUPPLY_BC12_FLOAT;
+			if (veneer_me->veneer_supplier != CHARGING_SUPPLY_TYPE_FLOAT)
+				veneer_me->veneer_supplier = CHARGING_SUPPLY_TYPE_FLOAT;
 			else
 				goto out;
 			break;
 		case POWER_SUPPLY_TYPE_USB_DCP :
-			if (veneer_me->veneer_supplier != CHARGING_SUPPLY_BC12_DCP)
-				veneer_me->veneer_supplier = CHARGING_SUPPLY_BC12_DCP;
+			if (veneer_me->veneer_supplier != CHARGING_SUPPLY_DCP_DEFAULT)
+				veneer_me->veneer_supplier = CHARGING_SUPPLY_DCP_DEFAULT;
 			else
 				goto out;
 			break;
 		case POWER_SUPPLY_TYPE_USB_PD :
-			if (veneer_me->veneer_supplier == CHARGING_SUPPLY_BC12_FLOAT)
-				veneer_me->veneer_supplier = CHARGING_SUPPLY_HVDCP_PD;
+			if (veneer_me->veneer_supplier == CHARGING_SUPPLY_TYPE_FLOAT)
+				veneer_me->veneer_supplier = CHARGING_SUPPLY_USB_PD;
+			else
+				goto out;
+			break;
+		case POWER_SUPPLY_TYPE_USB :
+			if (veneer_me->veneer_supplier != CHARGING_SUPPLY_USB_3PX)
+				veneer_me->veneer_supplier = CHARGING_SUPPLY_USB_3PX;
 			else
 				goto out;
 			break;
@@ -1006,33 +1012,32 @@ static void back_veneer_voter(enum voter_type type, int limit) {
 		struct power_supply* psy_batt = get_psy_battery(veneer_me);
 		const union power_supply_propval psy_prop = vote_make(type, limit);
 
+		switch (type) {
+			case VOTER_TYPE_IUSB: veneer_me->limited_iusb = limit;
+				break;
+			case VOTER_TYPE_IBAT: veneer_me->limited_ibat = limit;
+				break;
+			case VOTER_TYPE_IDC: veneer_me->limited_idc = limit;
+				break;
+			case VOTER_TYPE_VFLOAT: veneer_me->limited_vfloat = limit;
+				break;
+			case VOTER_TYPE_HVDCP: veneer_me->limited_hvdcp = limit;
+				break;
+			default: pr_veneer("Error on parsing type\n");
+				break;
+		}
+
+		// Update the battery status considering fake UI
+		update_veneer_status(veneer_me);
+
 	       /* At this time, "POWER_SUPPLY_PROP_RESTRICTED_CHARGING" is adopted to vote
 		* restriction value to the battery psy.
 		* So be sure that set_property(POWER_SUPPLY_PROP_RESTRICTED_CHARGING)
 		* should be defined in the psy for the charger driver, which is supporting limited charging.
 		*/
-		if (psy_batt && !power_supply_set_property(psy_batt,
-			POWER_SUPPLY_PROP_RESTRICTED_CHARGING, &psy_prop)) {
-			switch (type) {
-				case VOTER_TYPE_IUSB: veneer_me->limited_iusb = limit;
-					break;
-				case VOTER_TYPE_IBAT: veneer_me->limited_ibat = limit;
-					break;
-				case VOTER_TYPE_IDC: veneer_me->limited_idc = limit;
-					break;
-				case VOTER_TYPE_VFLOAT: veneer_me->limited_vfloat = limit;
-					break;
-				case VOTER_TYPE_HVDCP: veneer_me->limited_hvdcp = limit;
-					break;
-				default: pr_veneer("Error on parsing type\n");
-					break;
-			}
-		}
-		else
-			pr_veneer("Error on voting\n");
-
-		// Update the battery status considering fake UI
-		update_veneer_status(veneer_me);
+		if (!psy_batt || power_supply_set_property(psy_batt,
+			POWER_SUPPLY_PROP_RESTRICTED_CHARGING, &psy_prop))
+			pr_veneer("Error on voting to real world\n");
 	}
 	else
 		pr_veneer("veneer is NULL\n");
@@ -1064,7 +1069,7 @@ static bool probe_preset(struct device* veneer_dev, struct veneer* veneer_me) {
 		return false;
 
 	veneer_me->veneer_dev = veneer_dev;
-	veneer_me->veneer_supplier = CHARGING_SUPPLY_UNKNOWN;
+	veneer_me->veneer_supplier = CHARGING_SUPPLY_TYPE_UNKNOWN;
 	wakeup_source_init(&veneer_me->veneer_wakelock, VENEER_WAKELOCK);
 	INIT_DELAYED_WORK(&veneer_me->dwork_logger, psy_external_logging);
 	INIT_DELAYED_WORK(&veneer_me->dwork_slowchg, detect_slowchg_timer);
@@ -1175,6 +1180,7 @@ static int veneer_probe(struct platform_device *pdev) {
 	}
 
 	platform_set_drvdata(pdev, veneer_me);
+	device_init_wakeup(veneer_me->veneer_dev, true);
 	psy_external_logging(&veneer_me->dwork_logger.work);
 	return 0;
 

@@ -465,7 +465,7 @@ static ssize_t qpnp_pattern_input(const char* string_input, size_t string_size)
 
 static ssize_t qpnp_pattern_blink(const char* string_blink, size_t string_size)
 {
-	int     blink_rgb       = 0;
+	uint    blink_rgb       = 0;
 	int     blink_on        = 0;
 	int     blink_off       = 0;
 
@@ -510,7 +510,7 @@ static ssize_t qpnp_pattern_blink(const char* string_blink, size_t string_size)
 
 static ssize_t qpnp_pattern_onoff(const char* string_onoff, size_t string_size)
 {
-	int     onoff_rgb        = 0;
+	uint    onoff_rgb        = 0;
 	int     onoff_pattern [] = {
 		LPG_NEED_TO_SET, LPG_NEED_TO_SET,     // [0][1] : Solid color for RED
 		LPG_NEED_TO_SET, LPG_NEED_TO_SET,     // [2][3] : Solid color for GREEN

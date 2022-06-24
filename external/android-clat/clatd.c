@@ -53,6 +53,7 @@
 #include "tun.h"
 #include "ring.h"
 
+#include <libpatchcodeid.h>
 /* 2017-05-19 yunsik.lee@lge.com LGP_DATA_UDP_PREVENT_ICMPv6_WITH_CLAT_IID [START] */
 #include <cutils/properties.h>
 /* 2017-05-19 yunsik.lee@lge.com LGP_DATA_UDP_PREVENT_ICMPv6_WITH_CLAT_IID [END] */
@@ -79,9 +80,12 @@ int configure_packet_socket(int sock) {
   struct sockaddr_ll sll = {
     .sll_family   = AF_PACKET,
     .sll_protocol = htons(ETH_P_IPV6),
-    .sll_ifindex  = if_nametoindex((char *) &Global_Clatd_Config.default_pdp_interface), // 2018-05-17 wonkwon.lee@lge.com LGP_DATA_CLAT_OCCUPY_CPU_90
+  /* 2018-05-17 wonkwon.lee@lge.com LGP_DATA_CLAT_OCCUPY_CPU_90 [START] */
+    .sll_ifindex  = if_nametoindex((char *) &Global_Clatd_Config.default_pdp_interface),
     .sll_pkttype  = PACKET_OTHERHOST,  // The 464xlat IPv6 address is not assigned to the kernel.
   };
+  patch_code_id("LPCP-2409@n@c@clatd@clatd.c@1");
+  /* 2018-05-17 wonkwon.lee@lge.com LGP_DATA_CLAT_OCCUPY_CPU_90 [END] */
   if (bind(sock, (struct sockaddr *) &sll, sizeof(sll))) {
     logmsg(ANDROID_LOG_FATAL, "binding packet socket: %s", strerror(errno));
     return 0;
@@ -264,12 +268,13 @@ int update_clat_ipv6_address(const struct tun_data *tunnel, const char *interfac
   }
 
   /* 2017-05-19 yunsik.lee@lge.com LGP_DATA_UDP_PREVENT_ICMPv6_WITH_CLAT_IID [START] */
+  patch_code_id("LPCP-2049@n@c@clatd@clatd.c@1");
   sprintf(addrstr, "%02x%02x%02x%02x%02x%02x%02x%02x",
-    interface_ip->ip6.s6_addr[8], interface_ip->ip6.s6_addr[9],
-    interface_ip->ip6.s6_addr[10], interface_ip->ip6.s6_addr[11],
-    interface_ip->ip6.s6_addr[12], interface_ip->ip6.s6_addr[13],
-    interface_ip->ip6.s6_addr[14], interface_ip->ip6.s6_addr[15]);
-  property_set("lg.data.clat_iid", addrstr);
+      interface_ip->ip6.s6_addr[8], interface_ip->ip6.s6_addr[9],
+      interface_ip->ip6.s6_addr[10], interface_ip->ip6.s6_addr[11],
+      interface_ip->ip6.s6_addr[12], interface_ip->ip6.s6_addr[13],
+      interface_ip->ip6.s6_addr[14], interface_ip->ip6.s6_addr[15]);
+  property_set("product.lge.data.clat_iid", addrstr);
   /* 2017-05-19 yunsik.lee@lge.com LGP_DATA_UDP_PREVENT_ICMPv6_WITH_CLAT_IID [END] */
 
   // Start translating packets to the new prefix.
@@ -296,10 +301,12 @@ int update_clat_ipv6_address(const struct tun_data *tunnel, const char *interfac
  */
 /* 2014-03-26 soochul.lim@lge.com LGP_DATA_NETD_CLATD_RECONFIGURATION [START] */
 void configure_interface(const char *file_path, const char *uplink_interface, const char *plat_prefix, struct tun_data *tunnel, unsigned net_id) {
+  patch_code_id("LPCP-702@n@c@clatd@clatd.c@1");
 /* 2014-03-26 soochul.lim@lge.com LGP_DATA_NETD_CLATD_RECONFIGURATION [END] */
   int error;
 
 /* 2014-03-26 soochul.lim@lge.com LGP_DATA_NETD_CLATD_RECONFIGURATION [START] */
+  patch_code_id("LPCP-702@n@c@clatd@clatd.c@2");
   if(!read_config(file_path, uplink_interface, plat_prefix, net_id)) {
 /* 2014-03-26 soochul.lim@lge.com LGP_DATA_NETD_CLATD_RECONFIGURATION [END] */
     logmsg(ANDROID_LOG_FATAL,"read_config failed");
@@ -399,19 +406,28 @@ void event_loop(struct tun_data *tunnel) {
   last_interface_poll = time(NULL);
 
   while(running) {
-    if(poll(wait_fd, 2, NO_TRAFFIC_INTERFACE_POLL_FREQUENCY*1000) == -1) {
-      if(errno != EINTR) {
-        logmsg(ANDROID_LOG_WARN,"event_loop/poll returned an error: %s",strerror(errno));
+    if (poll(wait_fd, ARRAY_SIZE(wait_fd),
+             NO_TRAFFIC_INTERFACE_POLL_FREQUENCY * 1000) == -1) {
+      if (errno != EINTR) {
+        logmsg(ANDROID_LOG_WARN,"event_loop/poll returned an error: %s", strerror(errno));
       }
     } else {
+      if (wait_fd[0].revents & POLLIN) {
+        ring_read(&tunnel->ring, tunnel->fd4, 0 /* to_ipv6 */);
+      }
+      // If any other bit is set, assume it's due to an error (i.e. POLLERR).
+      if (wait_fd[0].revents & ~POLLIN) {
+        // ring_read doesn't clear the error indication on the socket.
+        recv(tunnel->read_fd6, NULL, 0, MSG_PEEK);
+        logmsg(ANDROID_LOG_WARN, "event_loop: clearing error on read_fd6: %s",
+               strerror(errno));
+      }
+
       // Call read_packet if the socket has data to be read, but also if an
       // error is waiting. If we don't call read() after getting POLLERR, a
       // subsequent poll() will return immediately with POLLERR again,
       // causing this code to spin in a loop. Calling read() will clear the
       // socket error flag instead.
-      if (wait_fd[0].revents) {
-        ring_read(&tunnel->ring, tunnel->fd4, 0 /* to_ipv6 */);
-      }
       if (wait_fd[1].revents) {
         read_packet(tunnel->fd4, tunnel->write_fd6, 1 /* to_ipv6 */);
       }
@@ -435,6 +451,7 @@ void print_help() {
   printf("-n [NetId]\n");
   printf("-m [socket mark]\n");
 /* 2014-03-26 soochul.lim@lge.com LGP_DATA_NETD_CLATD_RECONFIGURATION [START] */
+  patch_code_id("LPCP-702@n@c@clatd@clatd.c@3");
   printf("-c [conf file path]\n");
 /* 2014-03-26 soochul.lim@lge.com LGP_DATA_NETD_CLATD_RECONFIGURATION [END] */
 }
@@ -461,6 +478,7 @@ int main(int argc, char **argv) {
   uint32_t mark = MARK_UNSET;
   unsigned len;
 /* 2014-03-26 soochul.lim@lge.com LGP_DATA_NETD_CLATD_RECONFIGURATION [START] */
+  patch_code_id("LPCP-702@n@c@clatd@clatd.c@4");
   char *file_path = "/system/etc/clatd.conf";
 
 //  while((opt = getopt(argc, argv, "i:p:n:m:h")) != -1) { // original
@@ -481,6 +499,7 @@ int main(int argc, char **argv) {
         break;
 /* 2014-03-26 soochul.lim@lge.com LGP_DATA_NETD_CLATD_RECONFIGURATION [START] */
       case 'c':
+        patch_code_id("LPCP-702@n@c@clatd@clatd.c@5");
         file_path = optarg;
         logmsg(ANDROID_LOG_INFO, "Starting clat: conf file path=%s", file_path);
         break;
@@ -534,11 +553,15 @@ int main(int argc, char **argv) {
   }
 
   // When run from netd, the environment variable ANDROID_DNS_MODE is set to
-  // "local", but that only works for the netd process itself.
+  // "local", but that only works for the netd process itself. Removing the
+  // following line causes XLAT failure in permissive mode.
   unsetenv("ANDROID_DNS_MODE");
 
 /* 2014-03-26 soochul.lim@lge.com LGP_DATA_NETD_CLATD_RECONFIGURATION [START] */
+  patch_code_id("LPCP-702@n@c@clatd@clatd.c@6");
   configure_interface(file_path, uplink_interface, plat_prefix, &tunnel, net_id);
+  //  android_original
+  //  configure_interface(uplink_interface, plat_prefix, &tunnel, net_id);
 /* 2014-03-26 soochul.lim@lge.com LGP_DATA_NETD_CLATD_RECONFIGURATION [END] */
 
   update_clat_ipv6_address(&tunnel, uplink_interface);

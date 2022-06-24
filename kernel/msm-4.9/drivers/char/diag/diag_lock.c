@@ -58,6 +58,7 @@ static diag_lock_state_t get_diag_lock_state_from_smem(void)
 		uint32_t ant_rev;
 		char model_name[16];
 		char sw_version[64];
+		char operator_name[16];
 		char diag_enable;
 	} *smem_id_vendor0 = NULL;
 	unsigned int size;

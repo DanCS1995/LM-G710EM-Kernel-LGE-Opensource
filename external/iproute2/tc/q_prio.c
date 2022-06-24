@@ -23,6 +23,12 @@
 #include "utils.h"
 #include "tc_util.h"
 
+struct prio_qopt {
+	int bands;			/* Number of bands */
+	__u8 priomap[TC_PRIO_MAX+1];	/* Map: logical priority -> PRIO band */
+	__u8 enable_flow; 		/* Enable dequeue */
+};
+
 static void explain(void)
 {
 	fprintf(stderr, "Usage: ... prio bands NUMBER priomap P1 P2...[multiqueue] [flow (enable|disable)]\n");
@@ -32,7 +38,7 @@ static int prio_parse_opt(struct qdisc_util *qu, int argc, char **argv, struct n
 {
 	int pmap_mode = 0;
 	int idx = 0;
-	struct tc_prio_qopt opt={3,{ 1, 2, 2, 2, 1, 2, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1 },1};
+	struct prio_qopt opt = {3, { 1, 2, 2, 2, 1, 2, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1 }, 1};
 	struct rtattr *nest;
 	unsigned char mq = 0;
 
@@ -72,7 +78,8 @@ static int prio_parse_opt(struct qdisc_util *qu, int argc, char **argv, struct n
 			explain();
 			return -1;
 		} else {
-			unsigned band;
+			unsigned int band;
+
 			if (!pmap_mode) {
 				fprintf(stderr, "What is \"%s\"?\n", *argv);
 				explain();
@@ -111,7 +118,7 @@ static int prio_parse_opt(struct qdisc_util *qu, int argc, char **argv, struct n
 int prio_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt)
 {
 	int i;
-	struct tc_prio_qopt *qopt;
+	struct prio_qopt *qopt;
 	struct rtattr *tb[TCA_PRIO_MAX+1];
 
 	if (opt == NULL)
@@ -119,10 +126,10 @@ int prio_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt)
 
 	if (parse_rtattr_nested_compat(tb, TCA_PRIO_MAX, opt, qopt,
 					sizeof(*qopt)))
-                return -1;
+		return -1;
 
 	fprintf(f, "bands %u priomap ", qopt->bands);
-	for (i=0; i<=TC_PRIO_MAX; i++)
+	for (i = 0; i <= TC_PRIO_MAX; i++)
 		fprintf(f, " %d", qopt->priomap[i]);
 
 	if (tb[TCA_PRIO_MQ])
@@ -136,7 +143,7 @@ int prio_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt)
 }
 
 struct qdisc_util prio_qdisc_util = {
-	.id	 	= "prio",
+	.id		= "prio",
 	.parse_qopt	= prio_parse_opt,
 	.print_qopt	= prio_print_opt,
 };

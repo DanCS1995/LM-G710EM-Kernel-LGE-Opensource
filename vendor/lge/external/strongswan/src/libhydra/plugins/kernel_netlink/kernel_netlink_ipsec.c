@@ -2746,6 +2746,10 @@ kernel_netlink_ipsec_t *kernel_netlink_ipsec_create()
       register_for_events = FALSE;
    }
 
+   //LGP_DATA_IWLAN
+   //Blcok start_charon during init_Ipsec
+   //Due to CTS Fail : android.net.cts.IpSecSysctlTest#testProcFiles
+   /*
    f = fopen("/proc/sys/net/core/xfrm_acq_expires", "w");
    if (f)
    {
@@ -2754,6 +2758,7 @@ kernel_netlink_ipsec_t *kernel_netlink_ipsec_create()
                DEFAULT_ACQUIRE_LIFETIME, lib->ns));
       fclose(f);
    }
+   */
 
    this->socket_xfrm = netlink_socket_create(NETLINK_XFRM);
    if (!this->socket_xfrm)

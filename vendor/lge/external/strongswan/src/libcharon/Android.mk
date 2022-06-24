@@ -255,5 +255,8 @@ LOCAL_SHARED_LIBRARIES += libpower
 LOCAL_C_INCLUDES += vendor/lge/frameworks/base/pcas/lib/
 LOCAL_SHARED_LIBRARIES += libpcas
 
+LOCAL_C_INCLUDES += vendor/lge/system/dsqn/libpatchcodeid/
+LOCAL_SHARED_LIBRARIES += libpatchcodeid
+
 include $(BUILD_SHARED_LIBRARY)
 
