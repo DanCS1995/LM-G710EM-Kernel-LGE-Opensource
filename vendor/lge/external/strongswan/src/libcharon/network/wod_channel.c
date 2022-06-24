@@ -8,6 +8,10 @@
 #ifdef ANDROID
 #include <cutils/sockets.h>
 
+#include <errno.h>
+#include <string.h>
+
+
 #define	WOD_TCP_TIMEOUT		10
 
 static int wod_tcp_txrx(char* txbuf, char *rxbuf, int rxbuf_size, int *rxlen)
@@ -26,7 +30,7 @@ static int wod_tcp_txrx(char* txbuf, char *rxbuf, int rxbuf_size, int *rxlen)
 
    	sockfd = socket_local_client("wod_ipsec", ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_STREAM);
 	if (sockfd < 0) {
-		DBG1(DBG_IKE, "Error: create android socket failed: %d", sockfd);
+		DBG1(DBG_IKE, "Error: create android socket failed: %d %s", sockfd, strerror(errno));
 		goto end;
 	}
 
@@ -87,12 +91,24 @@ static int wod_tcp_txrx(char* txbuf, char *rxbuf, int rxbuf_size, int *rxlen)
 
 #endif
 
+/* 2016-07-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_DPD_NOW [START] */
+void notify_dpd_status(const char *conn_name, int status)
+{
+	char rxbuf[MAX_BUF_LEN] = {0, };
+	char tmp[MAX_BUF_LEN] = {0, };
+	int rxlen = 0;
+
+	snprintf(tmp, MAX_BUF_LEN, "ipsecdpd=%s,%d", conn_name, status);
+	wod_tcp_txrx(tmp, rxbuf, MAX_BUF_LEN, &rxlen);
+}
+/* 2016-07-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_DPD_NOW [END] */
+
 //changhwan.lee
 void notify_error(const char *value, const char *conn_name)
 {
-	char rxbuf[MAX_BUF_LEN] = {0};
-	char tmp[MAX_BUF_LEN] = {0};
-	char addrs[MAX_BUF_LEN] = {0};
+	char rxbuf[MAX_BUF_LEN] = {0, };
+	char tmp[MAX_BUF_LEN] = {0, };
+	char addrs[MAX_BUF_LEN] = {0, };
 	int rxlen = 0;
 	int n_6, n_4;
 
@@ -106,9 +122,9 @@ void notify_error(const char *value, const char *conn_name)
 
 void notify_wod(wo_notify_cmd_t cmd, const char *value, conn_info_prop* prop)
 {
-	char rxbuf[MAX_BUF_LEN] = {0};
-	char tmp[MAX_BUF_LEN] = {0};
-	char addrs[MAX_BUF_LEN] = {0};
+	char rxbuf[MAX_BUF_LEN] = {0, };
+	char tmp[MAX_BUF_LEN] = {0, };
+	char addrs[MAX_BUF_LEN] = {0, };
 	int rxlen = 0;
 	int n_6, n_4;
 
@@ -159,7 +175,7 @@ void notify_wod(wo_notify_cmd_t cmd, const char *value, conn_info_prop* prop)
 int atcmd_txrx(char* txbuf, char *rxbuf, int *rxlen)
 {
 	int ret, wod_rxlen;
-	char inrxbuf[MAX_BUF_LEN] = {0};
+	char inrxbuf[MAX_BUF_LEN] = {0, };
 
 	*rxlen = 0;
 

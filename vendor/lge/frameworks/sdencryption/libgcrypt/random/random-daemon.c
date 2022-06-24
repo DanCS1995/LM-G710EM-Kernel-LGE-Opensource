@@ -102,7 +102,7 @@ connect_to_socket (const char *socketname, int *sock)
   if (rc == -1)
     {
       log_error ("error connecting socket `%s': %s\n",
-		 srvr_addr->sun_path, strerror (errno));
+         srvr_addr->sun_path, strerror (errno));
       err = gcry_error_from_errno (errno);
       goto out;
     }
@@ -200,7 +200,7 @@ readn (int fd, void *buf, size_t buflen, size_t *ret_nread)
 static gcry_error_t
 call_daemon (const char *socketname,
              void *buffer, size_t req_nbytes, int nonce,
-	     enum gcry_random_level level)
+         enum gcry_random_level level)
 {
   static int initialized;
   unsigned char buf[255];
@@ -219,7 +219,7 @@ call_daemon (const char *socketname,
     {
       initialized = 1;
       err = connect_to_socket (socketname ? socketname : RANDOM_DAEMON_SOCKET,
-			       &daemon_socket);
+                   &daemon_socket);
       if (err)
         {
           daemon_socket = -1;
@@ -248,75 +248,75 @@ call_daemon (const char *socketname,
       /* Construct request.  */
       buf[0] = 3;
       if (nonce)
-	buf[1] = 10;
+    buf[1] = 10;
       else if (level == GCRY_VERY_STRONG_RANDOM)
-	buf[1] = 12;
+    buf[1] = 12;
       else if (level == GCRY_STRONG_RANDOM)
-	buf[1] = 11;
+    buf[1] = 11;
       buf[2] = nbytes;
 
       /* Send request.  */
       rc = writen (daemon_socket, buf, 3);
       if (rc == -1)
-	{
-	  err = gcry_error_from_errno (errno);
-	  break;
-	}
-	
+    {
+      err = gcry_error_from_errno (errno);
+      break;
+    }
+    
       /* Retrieve response.  */
 
       rc = readn (daemon_socket, buf, 2, &nread);
       if (rc == -1)
-	{
-	  err = gcry_error_from_errno (errno);
-	  log_error ("read error: %s\n", gcry_strerror (err));
-	  break;
-	}
+    {
+      err = gcry_error_from_errno (errno);
+      log_error ("read error: %s\n", gcry_strerror (err));
+      break;
+    }
       if (nread && buf[0])
-	{
-	  log_error ("random daemon returned error code %d\n", buf[0]);
-	  err = gcry_error (GPG_ERR_INTERNAL); /* ? */
-	  break;
-	}
+    {
+      log_error ("random daemon returned error code %d\n", buf[0]);
+      err = gcry_error (GPG_ERR_INTERNAL); /* ? */
+      break;
+    }
       if (nread != 2)
-	{
-	  log_error ("response too small\n");
-	  err = gcry_error (GPG_ERR_PROTOCOL_VIOLATION); /* ? */
-	  break;
-	}
+    {
+      log_error ("response too small\n");
+      err = gcry_error (GPG_ERR_PROTOCOL_VIOLATION); /* ? */
+      break;
+    }
 
-      /*      if (1)*/			/* Do this in verbose mode? */
-      /*	log_info ("received response with %d bytes of data\n", buf[1]);*/
+      /*      if (1)*/            /* Do this in verbose mode? */
+      /*    log_info ("received response with %d bytes of data\n", buf[1]);*/
 
       if (buf[1] < nbytes)
-	{
-	  log_error ("error: server returned less bytes than requested\n");
-	  err = gcry_error (GPG_ERR_PROTOCOL_VIOLATION); /* ? */
-	  break;
-	}
+    {
+      log_error ("error: server returned less bytes than requested\n");
+      err = gcry_error (GPG_ERR_PROTOCOL_VIOLATION); /* ? */
+      break;
+    }
       else if (buf[1] > nbytes)
-	{
-	  log_error ("warning: server returned more bytes than requested\n");
-	  err = gcry_error (GPG_ERR_PROTOCOL_VIOLATION); /* ? */
-	  break;
-	}
+    {
+      log_error ("warning: server returned more bytes than requested\n");
+      err = gcry_error (GPG_ERR_PROTOCOL_VIOLATION); /* ? */
+      break;
+    }
 
       assert (nbytes <= sizeof (buf));
 
       rc = readn (daemon_socket, buf, nbytes, &nread);
       if (rc == -1)
-	{
-	  err = gcry_error_from_errno (errno);
-	  log_error ("read error: %s\n", gcry_strerror (err));
-	  break;
-	}
+    {
+      err = gcry_error_from_errno (errno);
+      log_error ("read error: %s\n", gcry_strerror (err));
+      break;
+    }
       
       if (nread != nbytes)
-	{
-	  log_error ("too little random data read\n");
-	  err = gcry_error (GPG_ERR_INTERNAL);
-	  break;
-	}
+    {
+      log_error ("too little random data read\n");
+      err = gcry_error (GPG_ERR_INTERNAL);
+      break;
+    }
 
       /* Successfuly read another chunk of data.  */
       memcpy (buffer, buf, nbytes);

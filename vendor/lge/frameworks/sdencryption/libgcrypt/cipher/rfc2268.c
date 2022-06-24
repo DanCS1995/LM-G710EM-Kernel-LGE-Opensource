@@ -106,10 +106,10 @@ do_encrypt (void *context, unsigned char *outbuf, const unsigned char *inbuf)
       /* For some reason I cannot combine those steps. */
       word0 += (word1 & ~word3) + (word2 & word3) + ctx->S[j];
       word0 = rotl16(word0, 1);
-		
+        
       word1 += (word2 & ~word0) + (word3 & word0) + ctx->S[j + 1];
       word1 = rotl16(word1, 2);
-		
+        
       word2 += (word3 & ~word1) + (word0 & word1) + ctx->S[j + 2];
       word2 = rotl16(word2, 3);
 
@@ -210,7 +210,7 @@ setkey_core (void *context, const unsigned char *key, unsigned int keylen, int w
   if (selftest_failed)
     return GPG_ERR_SELFTEST_FAILED;
 
-  if (keylen < 40 / 8)	/* We want at least 40 bits. */
+  if (keylen < 40 / 8)    /* We want at least 40 bits. */
     return GPG_ERR_INV_KEYLEN;
 
   S = (unsigned char *) ctx->S;

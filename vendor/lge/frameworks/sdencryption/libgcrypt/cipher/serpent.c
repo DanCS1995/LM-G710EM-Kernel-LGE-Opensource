@@ -1,5 +1,5 @@
 /* serpent.c - Implementation of the Serpent encryption algorithm.
- *	Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
+ *    Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
  *
  * This file is part of Libgcrypt.
  *
@@ -48,7 +48,7 @@ typedef u32 serpent_subkeys_t[ROUNDS + 1][4];
 /* A Serpent context.  */
 typedef struct serpent_context
 {
-  serpent_subkeys_t keys;	/* Generated subkeys.  */
+  serpent_subkeys_t keys;    /* Generated subkeys.  */
 } serpent_context_t;
 
 
@@ -580,7 +580,7 @@ static const char *serpent_test (void);
    internally used format.  */
 static void
 serpent_key_prepare (const byte *key, unsigned int key_length,
-		     serpent_key_t key_prepared)
+             serpent_key_t key_prepared)
 {
   int i;
 
@@ -597,11 +597,11 @@ serpent_key_prepare (const byte *key, unsigned int key_length,
   if (i < 8)
     {
       /* Key must be padded according to the Serpent
-	 specification.  */
+     specification.  */
       key_prepared[i] = 0x00000001;
 
       for (i++; i < 8; i++)
-	key_prepared[i] = 0;
+    key_prepared[i] = 0;
     }
 }
 
@@ -609,7 +609,7 @@ serpent_key_prepare (const byte *key, unsigned int key_length,
 static void
 serpent_subkeys_generate (serpent_key_t key, serpent_subkeys_t subkeys)
 {
-  u32 w_real[140];		/* The `prekey'.  */
+  u32 w_real[140];        /* The `prekey'.  */
   u32 k[132];
   u32 *w = &w_real[8];
   int i, j;
@@ -666,7 +666,7 @@ serpent_subkeys_generate (serpent_key_t key, serpent_subkeys_t subkeys)
 /* Initialize CONTEXT with the key KEY of KEY_LENGTH bits.  */
 static void
 serpent_setkey_internal (serpent_context_t *context,
-			 const byte *key, unsigned int key_length)
+             const byte *key, unsigned int key_length)
 {
   serpent_key_t key_prepared;
 
@@ -678,7 +678,7 @@ serpent_setkey_internal (serpent_context_t *context,
 /* Initialize CTX with the key KEY of KEY_LENGTH bytes.  */
 static gcry_err_code_t
 serpent_setkey (void *ctx,
-		const byte *key, unsigned int key_length)
+        const byte *key, unsigned int key_length)
 {
   serpent_context_t *context = ctx;
   static const char *serpent_test_ret;
@@ -690,7 +690,7 @@ serpent_setkey (void *ctx,
       /* Execute a self-test the first time, Serpent is used.  */
       serpent_test_ret = serpent_test ();
       if (serpent_test_ret)
-	log_error ("Serpent test failure: %s\n", serpent_test_ret);
+    log_error ("Serpent test failure: %s\n", serpent_test_ret);
       serpent_init_done = 1;
     }
 
@@ -707,7 +707,7 @@ serpent_setkey (void *ctx,
 
 static void
 serpent_encrypt_internal (serpent_context_t *context,
-			  const serpent_block_t input, serpent_block_t output)
+              const serpent_block_t input, serpent_block_t output)
 {
   serpent_block_t b, b_next;
   int round = 0;
@@ -773,7 +773,7 @@ serpent_encrypt_internal (serpent_context_t *context,
 
 static void
 serpent_decrypt_internal (serpent_context_t *context,
-			  const serpent_block_t input, serpent_block_t output)
+              const serpent_block_t input, serpent_block_t output)
 {
   serpent_block_t b, b_next;
   int round = ROUNDS;
@@ -844,7 +844,7 @@ serpent_encrypt (void *ctx, byte *buffer_out, const byte *buffer_in)
   serpent_context_t *context = ctx;
 
   serpent_encrypt_internal (context,
-			    (const u32 *) buffer_in, (u32 *) buffer_out);
+                (const u32 *) buffer_in, (u32 *) buffer_out);
   _gcry_burn_stack (2 * sizeof (serpent_block_t));
 }
 
@@ -854,8 +854,8 @@ serpent_decrypt (void *ctx, byte *buffer_out, const byte *buffer_in)
   serpent_context_t *context = ctx;
 
   serpent_decrypt_internal (context,
-			    (const u32 *) buffer_in,
-			    (u32 *) buffer_out);
+                (const u32 *) buffer_in,
+                (u32 *) buffer_out);
   _gcry_burn_stack (2 * sizeof (serpent_block_t));
 }
 
@@ -879,34 +879,34 @@ serpent_test (void)
   } test_data[] =
     {
       {
-	16,
-	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
-	"\xD2\x9D\x57\x6F\xCE\xA3\xA3\xA7\xED\x90\x99\xF2\x92\x73\xD7\x8E",
-	"\xB2\x28\x8B\x96\x8A\xE8\xB0\x86\x48\xD1\xCE\x96\x06\xFD\x99\x2D"
+    16,
+    "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
+    "\xD2\x9D\x57\x6F\xCE\xA3\xA3\xA7\xED\x90\x99\xF2\x92\x73\xD7\x8E",
+    "\xB2\x28\x8B\x96\x8A\xE8\xB0\x86\x48\xD1\xCE\x96\x06\xFD\x99\x2D"
       },
       {
-	24,
-	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-	"\x00\x00\x00\x00\x00\x00\x00\x00",
-	"\xD2\x9D\x57\x6F\xCE\xAB\xA3\xA7\xED\x98\x99\xF2\x92\x7B\xD7\x8E",
-	"\x13\x0E\x35\x3E\x10\x37\xC2\x24\x05\xE8\xFA\xEF\xB2\xC3\xC3\xE9"
+    24,
+    "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    "\x00\x00\x00\x00\x00\x00\x00\x00",
+    "\xD2\x9D\x57\x6F\xCE\xAB\xA3\xA7\xED\x98\x99\xF2\x92\x7B\xD7\x8E",
+    "\x13\x0E\x35\x3E\x10\x37\xC2\x24\x05\xE8\xFA\xEF\xB2\xC3\xC3\xE9"
       },
       {
-	32,
-	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
-	"\xD0\x95\x57\x6F\xCE\xA3\xE3\xA7\xED\x98\xD9\xF2\x90\x73\xD7\x8E",
-	"\xB9\x0E\xE5\x86\x2D\xE6\x91\x68\xF2\xBD\xD5\x12\x5B\x45\x47\x2B"
+    32,
+    "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
+    "\xD0\x95\x57\x6F\xCE\xA3\xE3\xA7\xED\x98\xD9\xF2\x90\x73\xD7\x8E",
+    "\xB9\x0E\xE5\x86\x2D\xE6\x91\x68\xF2\xBD\xD5\x12\x5B\x45\x47\x2B"
       },
       {
-	32,
-	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
-	"\x00\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00",
-	"\x20\x61\xA4\x27\x82\xBD\x52\xEC\x69\x1E\xC3\x83\xB0\x3B\xA7\x7C"
+    32,
+    "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
+    "\x00\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00",
+    "\x20\x61\xA4\x27\x82\xBD\x52\xEC\x69\x1E\xC3\x83\xB0\x3B\xA7\x7C"
       },
       {
-	0
+    0
       },
     };
 
@@ -915,33 +915,33 @@ serpent_test (void)
       serpent_setkey_internal (&context, test_data[i].key,
                                test_data[i].key_length);
       serpent_encrypt_internal (&context,
-				(const u32 *) test_data[i].text_plain,
-				(u32 *) scratch);
+                (const u32 *) test_data[i].text_plain,
+                (u32 *) scratch);
 
       if (memcmp (scratch, test_data[i].text_cipher, sizeof (serpent_block_t)))
-	switch (test_data[i].key_length)
-	  {
-	  case 16:
-	    return "Serpent-128 test encryption failed.";
-	  case  24:
-	    return "Serpent-192 test encryption failed.";
-	  case 32:
-	    return "Serpent-256 test encryption failed.";
-	  }
+    switch (test_data[i].key_length)
+      {
+      case 16:
+        return "Serpent-128 test encryption failed.";
+      case  24:
+        return "Serpent-192 test encryption failed.";
+      case 32:
+        return "Serpent-256 test encryption failed.";
+      }
 
     serpent_decrypt_internal (&context,
-			      (const u32 *) test_data[i].text_cipher,
-			      (u32 *) scratch);
+                  (const u32 *) test_data[i].text_cipher,
+                  (u32 *) scratch);
     if (memcmp (scratch, test_data[i].text_plain, sizeof (serpent_block_t)))
       switch (test_data[i].key_length)
-	{
-	case 16:
-	  return "Serpent-128 test decryption failed.";
-	case  24:
-	  return "Serpent-192 test decryption failed.";
-	case 32:
-	  return "Serpent-256 test decryption failed.";
-	}
+    {
+    case 16:
+      return "Serpent-128 test decryption failed.";
+    case  24:
+      return "Serpent-192 test decryption failed.";
+    case 32:
+      return "Serpent-256 test decryption failed.";
+    }
     }
 
   return NULL;

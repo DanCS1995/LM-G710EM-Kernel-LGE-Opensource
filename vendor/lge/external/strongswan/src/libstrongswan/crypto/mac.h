@@ -2,7 +2,7 @@
  * Copyright (C) 2012 Tobias Brunner
  * Copyright (C) 2005-2008 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -47,7 +47,7 @@ struct mac_t {
 	 * @return			TRUE if mac generated successfully
 	 */
 	bool (*get_mac)(mac_t *this, chunk_t data,
-					u_int8_t *out) __attribute__((warn_unused_result));
+					uint8_t *out) __attribute__((warn_unused_result));
 
 	/**
 	 * Get the size of the resulting MAC.

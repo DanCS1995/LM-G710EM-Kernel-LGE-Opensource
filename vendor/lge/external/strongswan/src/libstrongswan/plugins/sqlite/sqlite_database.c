@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
  * Copyright (C) 2007 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -69,6 +69,18 @@ typedef struct {
 } transaction_t;
 
 /**
+ * Check if the SQLite library is thread safe
+ */
+static bool is_threadsave()
+{
+#if SQLITE_VERSION_NUMBER >= 3005000
+	return sqlite3_threadsafe() > 0;
+#endif
+	/* sqlite connections prior to 3.5 may be used by a single thread only */
+	return FALSE;
+}
+
+/**
  * Create and run a sqlite stmt using a sql string and args
  */
 static sqlite3_stmt* run(private_sqlite_database_t *this, char *sql,
@@ -101,13 +113,15 @@ static sqlite3_stmt* run(private_sqlite_database_t *this, char *sql,
 				case DB_TEXT:
 				{
 					const char *text = va_arg(*args, const char*);
-					res = sqlite3_bind_text(stmt, i, text, -1, SQLITE_STATIC);
+					res = sqlite3_bind_text(stmt, i, text, -1,
+											SQLITE_TRANSIENT);
 					break;
 				}
 				case DB_BLOB:
 				{
 					chunk_t c = va_arg(*args, chunk_t);
-					res = sqlite3_bind_blob(stmt, i, c.ptr, c.len, SQLITE_STATIC);
+					res = sqlite3_bind_blob(stmt, i, c.ptr, c.len,
+											SQLITE_TRANSIENT);
 					break;
 				}
 				case DB_DOUBLE:
@@ -160,26 +174,22 @@ typedef struct {
 	private_sqlite_database_t *database;
 } sqlite_enumerator_t;
 
-/**
- * destroy a sqlite enumerator
- */
-static void sqlite_enumerator_destroy(sqlite_enumerator_t *this)
+METHOD(enumerator_t, sqlite_enumerator_destroy, void,
+	sqlite_enumerator_t *this)
 {
 	sqlite3_finalize(this->stmt);
-#if SQLITE_VERSION_NUMBER < 3005000
-	this->database->mutex->unlock(this->database->mutex);
-#endif
+	if (!is_threadsave())
+	{
+		this->database->mutex->unlock(this->database->mutex);
+	}
 	free(this->columns);
 	free(this);
 }
 
-/**
- * Implementation of database.query().enumerate
- */
-static bool sqlite_enumerator_enumerate(sqlite_enumerator_t *this, ...)
+METHOD(enumerator_t, sqlite_enumerator_enumerate, bool,
+	sqlite_enumerator_t *this, va_list args)
 {
 	int i;
-	va_list args;
 
 	switch (sqlite3_step(this->stmt))
 	{
@@ -192,7 +202,7 @@ static bool sqlite_enumerator_enumerate(sqlite_enumerator_t *this, ...)
 		case SQLITE_DONE:
 			return FALSE;
 	}
-	va_start(args, this);
+
 	for (i = 0; i < this->count; i++)
 	{
 		switch (this->columns[i])
@@ -230,11 +240,9 @@ static bool sqlite_enumerator_enumerate(sqlite_enumerator_t *this, ...)
 			}
 			default:
 				DBG1(DBG_LIB, "invalid result type supplied");
-				va_end(args);
 				return FALSE;
 		}
 	}
-	va_end(args);
 	return TRUE;
 }
 
@@ -246,22 +254,26 @@ METHOD(database_t, query, enumerator_t*,
 	sqlite_enumerator_t *enumerator = NULL;
 	int i;
 
-#if SQLITE_VERSION_NUMBER < 3005000
-	/* sqlite connections prior to 3.5 may be used by a single thread only, */
-	this->mutex->lock(this->mutex);
-#endif
+	if (!is_threadsave())
+	{
+		this->mutex->lock(this->mutex);
+	}
 
 	va_start(args, sql);
 	stmt = run(this, sql, &args);
 	if (stmt)
 	{
-		enumerator = malloc_thing(sqlite_enumerator_t);
-		enumerator->public.enumerate = (void*)sqlite_enumerator_enumerate;
-		enumerator->public.destroy = (void*)sqlite_enumerator_destroy;
-		enumerator->stmt = stmt;
-		enumerator->count = sqlite3_column_count(stmt);
+		INIT(enumerator,
+			.public = {
+				.enumerate = enumerator_enumerate_default,
+				.venumerate = _sqlite_enumerator_enumerate,
+				.destroy = _sqlite_enumerator_destroy,
+			},
+			.stmt = stmt,
+			.count = sqlite3_column_count(stmt),
+			.database = this,
+		);
 		enumerator->columns = malloc(sizeof(db_type_t) * enumerator->count);
-		enumerator->database = this;
 		for (i = 0; i < enumerator->count; i++)
 		{
 			enumerator->columns[i] = va_arg(args, db_type_t);
@@ -365,7 +377,7 @@ static bool finalize_transaction(private_sqlite_database_t *this,
 	return TRUE;
 }
 
-METHOD(database_t, commit, bool,
+METHOD(database_t, commit_, bool,
 	private_sqlite_database_t *this)
 {
 	return finalize_transaction(this, FALSE);
@@ -429,7 +441,7 @@ sqlite_database_t *sqlite_database_create(char *uri)
 				.query = _query,
 				.execute = _execute,
 				.transaction = _transaction,
-				.commit = _commit,
+				.commit = _commit_,
 				.rollback = _rollback,
 				.get_driver = _get_driver,
 				.destroy = _destroy,

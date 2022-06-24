@@ -292,28 +292,28 @@ _gcry_generate_public_prime (unsigned int nbits,
  */
 static gcry_err_code_t
 prime_generate_internal (int need_q_factor,
-			 gcry_mpi_t *prime_generated, unsigned int pbits,
-			 unsigned int qbits, gcry_mpi_t g,
-			 gcry_mpi_t **ret_factors,
-			 gcry_random_level_t randomlevel, unsigned int flags,
+             gcry_mpi_t *prime_generated, unsigned int pbits,
+             unsigned int qbits, gcry_mpi_t g,
+             gcry_mpi_t **ret_factors,
+             gcry_random_level_t randomlevel, unsigned int flags,
                          int all_factors,
                          gcry_prime_check_func_t cb_func, void *cb_arg)
 {
   gcry_err_code_t err = 0;
   gcry_mpi_t *factors_new = NULL; /* Factors to return to the
-				     caller.  */
-  gcry_mpi_t *factors = NULL;	/* Current factors.  */
+                     caller.  */
+  gcry_mpi_t *factors = NULL;    /* Current factors.  */
   gcry_random_level_t poolrandomlevel; /* Random level used for pool primes. */
-  gcry_mpi_t *pool = NULL;	/* Pool of primes.  */
+  gcry_mpi_t *pool = NULL;    /* Pool of primes.  */
   int *pool_in_use = NULL;      /* Array with currently used POOL elements. */
-  unsigned char *perms = NULL;	/* Permutations of POOL.  */
-  gcry_mpi_t q_factor = NULL;	/* Used if QBITS is non-zero.  */
-  unsigned int fbits = 0;	/* Length of prime factors.  */
-  unsigned int n = 0;		/* Number of factors.  */
-  unsigned int m = 0;		/* Number of primes in pool.  */
-  gcry_mpi_t q = NULL;		/* First prime factor.  */
-  gcry_mpi_t prime = NULL;	/* Prime candidate.  */
-  unsigned int nprime = 0;	/* Bits of PRIME.  */
+  unsigned char *perms = NULL;    /* Permutations of POOL.  */
+  gcry_mpi_t q_factor = NULL;    /* Used if QBITS is non-zero.  */
+  unsigned int fbits = 0;    /* Length of prime factors.  */
+  unsigned int n = 0;        /* Number of factors.  */
+  unsigned int m = 0;        /* Number of primes in pool.  */
+  gcry_mpi_t q = NULL;        /* First prime factor.  */
+  gcry_mpi_t prime = NULL;    /* Prime candidate.  */
+  unsigned int nprime = 0;    /* Bits of PRIME.  */
   unsigned int req_qbits;       /* The original QBITS value.  */
   gcry_mpi_t val_2;             /* For check_prime().  */
   int is_locked = 0;            /* Flag to help unlocking the primepool. */
@@ -523,51 +523,51 @@ prime_generate_internal (int need_q_factor,
               gcry_free (perms);
               perms = NULL;
               progress ('!');
-              goto next_try;	
+              goto next_try;    
             }
         }
 
-	/* Generate next prime candidate:
-	   p = 2 * q [ * q_factor] * factor_0 * factor_1 * ... * factor_n + 1. 
+    /* Generate next prime candidate:
+       p = 2 * q [ * q_factor] * factor_0 * factor_1 * ... * factor_n + 1. 
          */
-	mpi_set (prime, q);
-	mpi_mul_ui (prime, prime, 2);
-	if (need_q_factor)
-	  mpi_mul (prime, prime, q_factor);
-	for(i = 0; i < n; i++)
-	  mpi_mul (prime, prime, factors[i]);
-	mpi_add_ui (prime, prime, 1);
-	nprime = mpi_get_nbits (prime);
+    mpi_set (prime, q);
+    mpi_mul_ui (prime, prime, 2);
+    if (need_q_factor)
+      mpi_mul (prime, prime, q_factor);
+    for(i = 0; i < n; i++)
+      mpi_mul (prime, prime, factors[i]);
+    mpi_add_ui (prime, prime, 1);
+    nprime = mpi_get_nbits (prime);
 
-	if (nprime < pbits)
-	  {
-	    if (++count1 > 20)
-	      {
-		count1 = 0;
-		qbits++;
-		progress('>');
-		mpi_free (q);
-		q = gen_prime (qbits, is_secret, randomlevel, NULL, NULL);
-		goto next_try;
-	      }
-	  }
-	else
-	  count1 = 0;
+    if (nprime < pbits)
+      {
+        if (++count1 > 20)
+          {
+        count1 = 0;
+        qbits++;
+        progress('>');
+        mpi_free (q);
+        q = gen_prime (qbits, is_secret, randomlevel, NULL, NULL);
+        goto next_try;
+          }
+      }
+    else
+      count1 = 0;
         
-	if (nprime > pbits)
-	  {
-	    if (++count2 > 20)
-	      {
-		count2 = 0;
-		qbits--;
-		progress('<');
-		mpi_free (q);
-		q = gen_prime (qbits, is_secret, randomlevel, NULL, NULL);
-		goto next_try;
-	      }
-	  }
-	else
-	  count2 = 0;
+    if (nprime > pbits)
+      {
+        if (++count2 > 20)
+          {
+        count2 = 0;
+        qbits--;
+        progress('<');
+        mpi_free (q);
+        q = gen_prime (qbits, is_secret, randomlevel, NULL, NULL);
+        goto next_try;
+          }
+      }
+    else
+      count2 = 0;
     }
   while (! ((nprime == pbits) && check_prime (prime, val_2, 5,
                                               cb_func, cb_arg)));
@@ -715,16 +715,16 @@ prime_generate_internal (int need_q_factor,
     {
       *prime_generated = prime;
       if (ret_factors)
-	*ret_factors = factors_new;
+    *ret_factors = factors_new;
     }
   else
     {
       if (factors_new)
-	{
-	  for (i = 0; factors_new[i]; i++)
-	    mpi_free (factors_new[i]);
-	  gcry_free (factors_new);
-	}
+    {
+      for (i = 0; factors_new[i]; i++)
+        mpi_free (factors_new[i]);
+      gcry_free (factors_new);
+    }
       mpi_free (prime);
     }
 
@@ -736,13 +736,13 @@ prime_generate_internal (int need_q_factor,
    prime will be public and no strong random is required.  */
 gcry_mpi_t
 _gcry_generate_elg_prime (int mode, unsigned pbits, unsigned qbits,
-			  gcry_mpi_t g, gcry_mpi_t **ret_factors)
+              gcry_mpi_t g, gcry_mpi_t **ret_factors)
 {
   gcry_err_code_t err = GPG_ERR_NO_ERROR;
   gcry_mpi_t prime = NULL;
   
   err = prime_generate_internal ((mode == 1), &prime, pbits, qbits, g,
-				 ret_factors, GCRY_WEAK_RANDOM, 0, 0,
+                 ret_factors, GCRY_WEAK_RANDOM, 0, 0,
                                  NULL, NULL);
 
   return prime;
@@ -805,7 +805,7 @@ gen_prime (unsigned int nbits, int secret, int randomlevel,
                 mods[i] -= x;
               if ( !(mods[i] + step) )
                 break;
-	    }
+        }
           if ( x )
             continue;   /* Found a multiple of an already known prime. */
           
@@ -845,13 +845,13 @@ gen_prime (unsigned int nbits, int secret, int randomlevel,
                       return ptest; 
                     }
                 }
-	    }
+        }
           if (++dotcount == 10 )
             {
               progress('.');
               dotcount = 0;
-	    }
-	}
+        }
+    }
       progress(':'); /* restart with a new random value */
     }
 }
@@ -956,7 +956,7 @@ is_prime (gcry_mpi_t n, int steps, unsigned int *count)
               mpi_clear_bit( x, nbits-2 );
             }
           gcry_assert (mpi_cmp (x, nminus1) < 0 && mpi_cmp_ui (x, 1) > 0);
-	}
+    }
       gcry_mpi_powm ( y, x, q, n);
       if ( mpi_cmp_ui(y, 1) && mpi_cmp( y, nminus1 ) )
         {
@@ -968,7 +968,7 @@ is_prime (gcry_mpi_t n, int steps, unsigned int *count)
             }
           if (mpi_cmp( y, nminus1 ) )
             goto leave; /* Not a prime. */
-	}
+    }
       progress('+');
     }
   rc = 1; /* May be a prime. */
@@ -1089,7 +1089,7 @@ m_out_of_n ( char *array, int m, int n )
                 {
                   k1 = i1 - 1;
                   k2 = n - j1;
-		}
+        }
               else
                 {
                   k1 = i1 - 1;
@@ -1116,10 +1116,10 @@ m_out_of_n ( char *array, int m, int n )
    the prime number generation process.  */
 gcry_error_t
 gcry_prime_generate (gcry_mpi_t *prime, unsigned int prime_bits,
-		     unsigned int factor_bits, gcry_mpi_t **factors,
-		     gcry_prime_check_func_t cb_func, void *cb_arg,
-		     gcry_random_level_t random_level,
-		     unsigned int flags)
+             unsigned int factor_bits, gcry_mpi_t **factors,
+             gcry_prime_check_func_t cb_func, void *cb_arg,
+             gcry_random_level_t random_level,
+             unsigned int flags)
 {
   gcry_err_code_t err = GPG_ERR_NO_ERROR;
   gcry_mpi_t *factors_generated = NULL;
@@ -1135,29 +1135,29 @@ gcry_prime_generate (gcry_mpi_t *prime, unsigned int prime_bits,
 
   /* Generate.  */
   err = prime_generate_internal ((mode==1), &prime_generated, prime_bits,
-				 factor_bits, NULL,
+                 factor_bits, NULL,
                                  factors? &factors_generated : NULL,
-				 random_level, flags, 1,
+                 random_level, flags, 1,
                                  cb_func, cb_arg);
 
   if (! err)
     if (cb_func)
       {
-	/* Additional check. */
-	if ( !cb_func (cb_arg, GCRY_PRIME_CHECK_AT_FINISH, prime_generated))
-	  {
-	    /* Failed, deallocate resources.  */
-	    unsigned int i;
+    /* Additional check. */
+    if ( !cb_func (cb_arg, GCRY_PRIME_CHECK_AT_FINISH, prime_generated))
+      {
+        /* Failed, deallocate resources.  */
+        unsigned int i;
 
-	    mpi_free (prime_generated);
+        mpi_free (prime_generated);
             if (factors)
               {
                 for (i = 0; factors_generated[i]; i++)
                   mpi_free (factors_generated[i]);
                 gcry_free (factors_generated);
               }
-	    err = GPG_ERR_GENERAL; 
-	  }
+        err = GPG_ERR_GENERAL; 
+      }
       }
 
   if (! err)

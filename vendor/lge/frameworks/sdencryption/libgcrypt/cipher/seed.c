@@ -1,5 +1,5 @@
 /* SEED for libgcrypt
- *	Copyright (C) 2006 Free Software Foundation, Inc.
+ *    Copyright (C) 2006 Free Software Foundation, Inc.
  *
  * This file is part of Libgcrypt.
  *
@@ -30,14 +30,14 @@
 #include "g10lib.h"
 #include "cipher.h"
 
-#define NUMKC	16
+#define NUMKC    16
 
 #define GETU32(pt) (((u32)(pt)[0] << 24) ^ ((u32)(pt)[1] << 16) ^ \
-		    ((u32)(pt)[2] <<  8) ^ ((u32)(pt)[3]))
+            ((u32)(pt)[2] <<  8) ^ ((u32)(pt)[3]))
 #define PUTU32(ct, st) { (ct)[0] = (byte)((st) >> 24); \
-			 (ct)[1] = (byte)((st) >> 16); \
-			 (ct)[2] = (byte)((st) >>  8); \
-			 (ct)[3] = (byte)(st); }
+             (ct)[1] = (byte)((st) >> 16); \
+             (ct)[2] = (byte)((st) >>  8); \
+             (ct)[3] = (byte)(st); }
 
 union wordbuf
 {
@@ -295,17 +295,17 @@ do_setkey (SEED_context *ctx, const byte *key, const unsigned keylen)
       *(keyout++) = SS0[t1.b0] ^ SS1[t1.b1] ^ SS2[t1.b2] ^ SS3[t1.b3];
 
       if (i % 2 == 0)
-	{
-	  t0.w = x1;
-	  x1 = (x1>>8) ^ (x2<<24);
-	  x2 = (x2>>8) ^ (t0.w<<24);
-	}
+    {
+      t0.w = x1;
+      x1 = (x1>>8) ^ (x2<<24);
+      x2 = (x2>>8) ^ (t0.w<<24);
+    }
       else
-	{
-	  t0.w = x3;
-	  x3 = (x3<<8) ^ (x4>>24);
-	  x4 = (x4<<8) ^ (t0.w>>24);
-	}
+    {
+      t0.w = x3;
+      x3 = (x3<<8) ^ (x4>>24);
+      x4 = (x4<<8) ^ (t0.w>>24);
+    }
     }
 
   return 0;
@@ -323,17 +323,17 @@ seed_setkey (void *context, const byte *key, const unsigned keylen)
 
 
 
-#define OP(X1, X2, X3, X4, rbase)				\
-    t0.w = X3 ^ ctx->keyschedule[rbase];			\
-    t1.w = X4 ^ ctx->keyschedule[rbase+1];			\
-    t1.w ^= t0.w;						\
-    t1.w = SS0[t1.b0] ^ SS1[t1.b1] ^ SS2[t1.b2] ^ SS3[t1.b3];	\
-    t0.w += t1.w;						\
-    t0.w = SS0[t0.b0] ^ SS1[t0.b1] ^ SS2[t0.b2] ^ SS3[t0.b3];	\
-    t1.w += t0.w;						\
-    t1.w = SS0[t1.b0] ^ SS1[t1.b1] ^ SS2[t1.b2] ^ SS3[t1.b3];	\
-    t0.w += t1.w;						\
-    X1 ^= t0.w;							\
+#define OP(X1, X2, X3, X4, rbase)                \
+    t0.w = X3 ^ ctx->keyschedule[rbase];            \
+    t1.w = X4 ^ ctx->keyschedule[rbase+1];            \
+    t1.w ^= t0.w;                        \
+    t1.w = SS0[t1.b0] ^ SS1[t1.b1] ^ SS2[t1.b2] ^ SS3[t1.b3];    \
+    t0.w += t1.w;                        \
+    t0.w = SS0[t0.b0] ^ SS1[t0.b1] ^ SS2[t0.b2] ^ SS3[t0.b3];    \
+    t1.w += t0.w;                        \
+    t1.w = SS0[t1.b0] ^ SS1[t1.b1] ^ SS2[t1.b2] ^ SS3[t1.b3];    \
+    t0.w += t1.w;                        \
+    X1 ^= t0.w;                            \
     X2 ^= t1.w;
 
 /* Encrypt one block.  inbuf and outbuf may be the same. */
@@ -432,7 +432,7 @@ static const char*
 selftest (void)
 {
   SEED_context ctx;
-  byte scratch[16];	   
+  byte scratch[16];       
 
   /* The test vector is taken from the appendix section B.3 of RFC4269.
    */

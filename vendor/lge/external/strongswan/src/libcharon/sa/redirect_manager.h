@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2015 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -101,7 +101,7 @@ chunk_t redirect_data_create(identification_t *gw, chunk_t nonce);
  * Parse notification data of a REDIRECT or REDIRECTED_FROM notify payload.
  *
  * @param data				notification data to parse
- * @param nonce[out]		nonce data (allocated), if any was provided
+ * @param[out] nonce		nonce data (allocated), if any was provided
  * @return					gateway identity, NULL if data is invalid
  */
 identification_t *redirect_data_parse(chunk_t data, chunk_t *nonce);

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -158,7 +158,7 @@ METHOD(simaka_provider_t, resync, bool,
 	{
 		return FALSE;
 	}
-	if (!memeq(macs, xmacs, AKA_MAC_LEN))
+	if (!memeq_const(macs, xmacs, AKA_MAC_LEN))
 	{
 		DBG1(DBG_IKE, "received MACS does not match XMACS");
 		DBG3(DBG_IKE, "MACS %b XMACS %b",
@@ -205,4 +205,3 @@ eap_aka_3gpp2_provider_t *eap_aka_3gpp2_provider_create(
 
 	return &this->public;
 }
-

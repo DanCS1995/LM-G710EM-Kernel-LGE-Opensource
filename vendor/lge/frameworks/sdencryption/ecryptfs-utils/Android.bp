@@ -42,7 +42,6 @@ cc_library_shared {
         "libutils",
         "libdl",
     ],
-    tags: ["optional"],
 }
 
 cc_library_shared {
@@ -60,5 +59,4 @@ cc_library_shared {
         "libutils",
         "libdl",
     ],
-    tags: ["optional"],
 }

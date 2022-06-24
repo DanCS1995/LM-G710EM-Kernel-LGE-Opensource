@@ -75,7 +75,7 @@ mpi_read_from_buffer (const unsigned char *buffer, unsigned *ret_nread,
             }
           a <<= 8;
           a |= *buffer++;
-	}
+    }
       i = 0;
       val->d[j-1] = a;
     }
@@ -131,7 +131,7 @@ mpi_fromstr (gcry_mpi_t val, const char *str)
             {
               c1 = '0';
               prepend_zero = 0;
-	    }
+        }
           else
             c1 = *str++;
 
@@ -139,13 +139,13 @@ mpi_fromstr (gcry_mpi_t val, const char *str)
             {
               mpi_clear (val);
               return 1;  /* Error.  */
-	    }
+        }
           c2 = *str++;
           if (!c2)
             {
               mpi_clear (val);
               return 1;  /* Error.  */
-	    }
+        }
           if ( c1 >= '0' && c1 <= '9' )
             c = c1 - '0';
           else if ( c1 >= 'a' && c1 <= 'f' )
@@ -156,7 +156,7 @@ mpi_fromstr (gcry_mpi_t val, const char *str)
             {
               mpi_clear (val);
               return 1;  /* Error.  */
-	    }
+        }
           c <<= 4;
           if ( c2 >= '0' && c2 <= '9' )
             c |= c2 - '0';
@@ -168,10 +168,10 @@ mpi_fromstr (gcry_mpi_t val, const char *str)
             {
               mpi_clear(val);
               return 1;  /* Error. */
-	    }
+        }
           a <<= 8;
           a |= c;
-	}
+    }
       i = 0;
       val->d[j-1] = a;
     }
@@ -247,7 +247,7 @@ do_get_buffer (gcry_mpi_t a, unsigned int *nbytes, int *sign, int force_secure)
   *nbytes = a->nlimbs * BYTES_PER_MPI_LIMB;
   n = *nbytes? *nbytes:1; /* Allocate at least one byte.  */
   p = buffer = (force_secure || mpi_is_secure(a))? gcry_malloc_secure (n)
-						 : gcry_malloc (n);
+                         : gcry_malloc (n);
   if (!buffer)
     return NULL;
 
@@ -258,7 +258,7 @@ do_get_buffer (gcry_mpi_t a, unsigned int *nbytes, int *sign, int force_secure)
       *p++ = alimb >> 24;
       *p++ = alimb >> 16;
       *p++ = alimb >>  8;
-      *p++ = alimb	  ;
+      *p++ = alimb      ;
 #elif BYTES_PER_MPI_LIMB == 8
       *p++ = alimb >> 56;
       *p++ = alimb >> 48;
@@ -267,7 +267,7 @@ do_get_buffer (gcry_mpi_t a, unsigned int *nbytes, int *sign, int force_secure)
       *p++ = alimb >> 24;
       *p++ = alimb >> 16;
       *p++ = alimb >>  8;
-      *p++ = alimb	  ;
+      *p++ = alimb      ;
 #else
 #     error please implement for this limb size.
 #endif
@@ -317,12 +317,12 @@ _gcry_mpi_set_buffer (gcry_mpi_t a, const void *buffer_arg,
   for (i=0, p = buffer+nbytes-1; p >= buffer+BYTES_PER_MPI_LIMB; ) 
     {
 #if BYTES_PER_MPI_LIMB == 4
-      alimb  = *p--	    ;
+      alimb  = *p--        ;
       alimb |= *p-- <<  8 ;
       alimb |= *p-- << 16 ;
       alimb |= *p-- << 24 ;
 #elif BYTES_PER_MPI_LIMB == 8
-      alimb  = (mpi_limb_t)*p--	;
+      alimb  = (mpi_limb_t)*p--    ;
       alimb |= (mpi_limb_t)*p-- <<  8 ;
       alimb |= (mpi_limb_t)*p-- << 16 ;
       alimb |= (mpi_limb_t)*p-- << 24 ;
@@ -404,15 +404,15 @@ gcry_mpi_scan (struct gcry_mpi **ret_mpi, enum gcry_mpi_format format,
               /* FIXME: we have to convert from 2compl to magnitude format */
               mpi_free (a);
               return gcry_error (GPG_ERR_INTERNAL);
-	    }
+        }
           else
             _gcry_mpi_set_buffer (a, s, len, 0);
-	}
+    }
       if (ret_mpi)
         {
           mpi_normalize ( a );
           *ret_mpi = a;
-	}
+    }
       else
         mpi_free(a);
       return 0;
@@ -429,7 +429,7 @@ gcry_mpi_scan (struct gcry_mpi **ret_mpi, enum gcry_mpi_format format,
         {
           mpi_normalize ( a );
           *ret_mpi = a;
-	}
+    }
       else
         mpi_free(a);
       return 0;
@@ -443,7 +443,7 @@ gcry_mpi_scan (struct gcry_mpi **ret_mpi, enum gcry_mpi_format format,
         {
           mpi_normalize (a);
           *ret_mpi = a;
-	}
+    }
       else if (a)
         {
           mpi_free(a);
@@ -477,10 +477,10 @@ gcry_mpi_scan (struct gcry_mpi **ret_mpi, enum gcry_mpi_format format,
               /* FIXME: we have to convert from 2compl to magnitude format */
               mpi_free(a);
               return gcry_error (GPG_ERR_INTERNAL);
-	    }
+        }
           else
             _gcry_mpi_set_buffer( a, s, n, 0 );
-	}
+    }
       if (nscanned)
         *nscanned = n+4;
       if (ret_mpi)
@@ -508,7 +508,7 @@ gcry_mpi_scan (struct gcry_mpi **ret_mpi, enum gcry_mpi_format format,
         {
           mpi_normalize ( a );
           *ret_mpi = a;
-	}
+    }
       else
         mpi_free(a);
       return 0;
@@ -554,14 +554,14 @@ gcry_mpi_print (enum gcry_mpi_format format,
         {
           n++;
           extra=1;
-	}
+    }
       
       if (buffer && n > len)
         {
           /* The provided buffer is too short. */
           gcry_free (tmp);
           return gcry_error (GPG_ERR_TOO_SHORT);  
-	}
+    }
       if (buffer)
         {
           unsigned char *s = buffer;
@@ -569,7 +569,7 @@ gcry_mpi_print (enum gcry_mpi_format format,
           if (extra)
             *s++ = 0;
           memcpy (s, tmp, n-extra);
-	}
+    }
       gcry_free(tmp);
       *nwritten = n;
       return 0;
@@ -580,7 +580,7 @@ gcry_mpi_print (enum gcry_mpi_format format,
 
       /* Note:  We ignore the sign for this format.  */
       /* FIXME: for performance reasons we should put this into
-	 mpi_aprint because we can then use the buffer directly.  */
+     mpi_aprint because we can then use the buffer directly.  */
       if (buffer && n > len)
         return gcry_error (GPG_ERR_TOO_SHORT);
       if (buffer)
@@ -592,7 +592,7 @@ gcry_mpi_print (enum gcry_mpi_format format,
             return gpg_error_from_syserror ();
           memcpy (buffer, tmp, n);
           gcry_free (tmp);
-	}
+    }
       *nwritten = n;
       return 0;
     }
@@ -620,7 +620,7 @@ gcry_mpi_print (enum gcry_mpi_format format,
             return gpg_error_from_syserror ();
           memcpy (s+2, tmp, n);
           gcry_free (tmp);
-	}
+    }
       *nwritten = n+2;
       return 0;
     }
@@ -640,13 +640,13 @@ gcry_mpi_print (enum gcry_mpi_format format,
         {
           n++;
           extra=1;
-	}
+    }
 
       if (buffer && n+4 > len)
         {
           gcry_free(tmp);
           return gcry_error (GPG_ERR_TOO_SHORT);
-	}
+    }
 
       if (buffer)
         {
@@ -660,7 +660,7 @@ gcry_mpi_print (enum gcry_mpi_format format,
             *s++ = 0;
           
           memcpy (s, tmp, n-extra);
-	}
+    }
       gcry_free (tmp);
       *nwritten = 4+n;
       return 0;
@@ -682,7 +682,7 @@ gcry_mpi_print (enum gcry_mpi_format format,
         {
           gcry_free(tmp);
           return gcry_error (GPG_ERR_TOO_SHORT);
-	}
+    }
       if (buffer)
         {
           unsigned char *s = buffer;
@@ -693,7 +693,7 @@ gcry_mpi_print (enum gcry_mpi_format format,
             {
               *s++ = '0';
               *s++ = '0';
-	    }
+        }
           
           for (i=0; i < n; i++)
             {
@@ -702,14 +702,14 @@ gcry_mpi_print (enum gcry_mpi_format format,
               *s++ = (c >> 4) < 10? '0'+(c>>4) : 'A'+(c>>4)-10 ;
               c &= 15;
               *s++ = c < 10? '0'+c : 'A'+c-10 ;
-	    }
+        }
           *s++ = 0;
           *nwritten = s - buffer;
-	}
+    }
       else 
         {
           *nwritten = 2*n + extra + !!a->sign + 1;
-	}
+    }
       gcry_free (tmp);
       return 0;
     }
@@ -726,7 +726,7 @@ gcry_mpi_print (enum gcry_mpi_format format,
 gcry_error_t
 gcry_mpi_aprint (enum gcry_mpi_format format,
                  unsigned char **buffer, size_t *nwritten,
-		 struct gcry_mpi *a)
+         struct gcry_mpi *a)
 {
   size_t n;
   gcry_error_t rc;

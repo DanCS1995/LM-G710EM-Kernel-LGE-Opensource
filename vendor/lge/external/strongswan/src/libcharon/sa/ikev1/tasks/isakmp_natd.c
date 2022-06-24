@@ -2,7 +2,7 @@
  * Copyright (C) 2006-2011 Tobias Brunner,
  * Copyright (C) 2006-2007 Martin Willi
  * Copyright (C) 2006 Daniel Roethlisberger
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -41,7 +41,6 @@
 
 #include <string.h>
 
-#include <hydra.h>
 #include <daemon.h>
 #include <sa/ikev1/keymat_v1.h>
 #include <config/peer_cfg.h>
@@ -104,7 +103,7 @@ static bool force_encap(ike_cfg_t *ike_cfg)
 {
 	if (!ike_cfg->force_encap(ike_cfg))
 	{
-		return hydra->kernel_interface->get_features(hydra->kernel_interface) &
+		return charon->kernel->get_features(charon->kernel) &
 					KERNEL_REQUIRE_UDP_ENCAPSULATION;
 	}
 	return TRUE;
@@ -117,9 +116,9 @@ static payload_type_t get_nat_d_payload_type(ike_sa_t *ike_sa)
 {
 	if (ike_sa->supports_extension(ike_sa, EXT_NATT_DRAFT_02_03))
 	{
-		return NAT_D_DRAFT_00_03_V1;
+		return PLV1_NAT_D_DRAFT_00_03;
 	}
-	return NAT_D_V1;
+	return PLV1_NAT_D;
 }
 
 /**
@@ -130,8 +129,8 @@ static chunk_t generate_natd_hash(private_isakmp_natd_t *this,
 {
 	hasher_t *hasher;
 	chunk_t natd_chunk, natd_hash;
-	u_int64_t spi_i, spi_r;
-	u_int16_t port;
+	uint64_t spi_i, spi_r;
+	uint16_t port;
 
 	hasher = this->keymat->get_hasher(this->keymat);
 	if (!hasher)
@@ -269,8 +268,8 @@ static void process_payloads(private_isakmp_natd_t *this, message_t *message)
 	enumerator = message->create_payload_enumerator(message);
 	while (enumerator->enumerate(enumerator, &payload))
 	{
-		if (payload->get_type(payload) != NAT_D_V1 &&
-			payload->get_type(payload) != NAT_D_DRAFT_00_03_V1)
+		if (payload->get_type(payload) != PLV1_NAT_D &&
+			payload->get_type(payload) != PLV1_NAT_D_DRAFT_00_03)
 		{
 			continue;
 		}
@@ -334,7 +333,7 @@ METHOD(task_t, build_i, status_t,
 		case ID_PROT:
 		{	/* add NAT-D payloads to the second request, need to process
 			 * those by the responder contained in the second response */
-			if (message->get_payload(message, SECURITY_ASSOCIATION_V1))
+			if (message->get_payload(message, PLV1_SECURITY_ASSOCIATION))
 			{	/* wait for the second exchange */
 				return NEED_MORE;
 			}
@@ -362,7 +361,7 @@ METHOD(task_t, process_i, status_t,
 		case ID_PROT:
 		{	/* process NAT-D payloads in the second response, added them in the
 			 * second request already, so we're done afterwards */
-			if (message->get_payload(message, SECURITY_ASSOCIATION_V1))
+			if (message->get_payload(message, PLV1_SECURITY_ASSOCIATION))
 			{	/* wait for the second exchange */
 				return NEED_MORE;
 			}
@@ -407,7 +406,7 @@ METHOD(task_t, process_r, status_t,
 		case ID_PROT:
 		{	/* process NAT-D payloads in the second request, need to add ours
 			 * to the second response */
-			if (message->get_payload(message, SECURITY_ASSOCIATION_V1))
+			if (message->get_payload(message, PLV1_SECURITY_ASSOCIATION))
 			{	/* wait for the second exchange */
 				return NEED_MORE;
 			}
@@ -428,7 +427,7 @@ METHOD(task_t, build_r, status_t,
 		case ID_PROT:
 		{	/* add NAT-D payloads to second response, already processed those
 			 * contained in the second request */
-			if (message->get_payload(message, SECURITY_ASSOCIATION_V1))
+			if (message->get_payload(message, PLV1_SECURITY_ASSOCIATION))
 			{	/* wait for the second exchange */
 				return NEED_MORE;
 			}

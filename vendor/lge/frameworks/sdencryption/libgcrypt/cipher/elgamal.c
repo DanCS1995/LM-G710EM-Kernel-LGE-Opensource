@@ -32,18 +32,18 @@
 
 typedef struct
 {
-  gcry_mpi_t p;	    /* prime */
-  gcry_mpi_t g;	    /* group generator */
-  gcry_mpi_t y;	    /* g^x mod p */
+  gcry_mpi_t p;        /* prime */
+  gcry_mpi_t g;        /* group generator */
+  gcry_mpi_t y;        /* g^x mod p */
 } ELG_public_key;
 
 
 typedef struct
 {
-  gcry_mpi_t p;	    /* prime */
-  gcry_mpi_t g;	    /* group generator */
-  gcry_mpi_t y;	    /* g^x mod p */
-  gcry_mpi_t x;	    /* secret exponent */
+  gcry_mpi_t p;        /* prime */
+  gcry_mpi_t g;        /* group generator */
+  gcry_mpi_t y;        /* g^x mod p */
+  gcry_mpi_t x;        /* secret exponent */
 } ELG_secret_key;
 
 
@@ -67,7 +67,7 @@ static void *progress_cb_data;
 void
 _gcry_register_pk_elg_progress (void (*cb) (void *, const char *,
                                             int, int, int),
-				void *cb_data)
+                void *cb_data)
 {
   progress_cb = cb;
   progress_cb_data = cb_data;
@@ -91,26 +91,26 @@ static unsigned int
 wiener_map( unsigned int n )
 {
   static struct { unsigned int p_n, q_n; } t[] =
-    { /*   p	  q	 attack cost */
-      {  512, 119 },	/* 9 x 10^17 */
-      {  768, 145 },	/* 6 x 10^21 */
-      { 1024, 165 },	/* 7 x 10^24 */
-      { 1280, 183 },	/* 3 x 10^27 */
-      { 1536, 198 },	/* 7 x 10^29 */
-      { 1792, 212 },	/* 9 x 10^31 */
-      { 2048, 225 },	/* 8 x 10^33 */
-      { 2304, 237 },	/* 5 x 10^35 */
-      { 2560, 249 },	/* 3 x 10^37 */
-      { 2816, 259 },	/* 1 x 10^39 */
-      { 3072, 269 },	/* 3 x 10^40 */
-      { 3328, 279 },	/* 8 x 10^41 */
-      { 3584, 288 },	/* 2 x 10^43 */
-      { 3840, 296 },	/* 4 x 10^44 */
-      { 4096, 305 },	/* 7 x 10^45 */
-      { 4352, 313 },	/* 1 x 10^47 */
-      { 4608, 320 },	/* 2 x 10^48 */
-      { 4864, 328 },	/* 2 x 10^49 */
-      { 5120, 335 },	/* 3 x 10^50 */
+    { /*   p      q     attack cost */
+      {  512, 119 },    /* 9 x 10^17 */
+      {  768, 145 },    /* 6 x 10^21 */
+      { 1024, 165 },    /* 7 x 10^24 */
+      { 1280, 183 },    /* 3 x 10^27 */
+      { 1536, 198 },    /* 7 x 10^29 */
+      { 1792, 212 },    /* 9 x 10^31 */
+      { 2048, 225 },    /* 8 x 10^33 */
+      { 2304, 237 },    /* 5 x 10^35 */
+      { 2560, 249 },    /* 3 x 10^37 */
+      { 2816, 259 },    /* 1 x 10^39 */
+      { 3072, 269 },    /* 3 x 10^40 */
+      { 3328, 279 },    /* 8 x 10^41 */
+      { 3584, 288 },    /* 2 x 10^43 */
+      { 3840, 296 },    /* 4 x 10^44 */
+      { 4096, 305 },    /* 7 x 10^45 */
+      { 4352, 313 },    /* 1 x 10^47 */
+      { 4608, 320 },    /* 2 x 10^48 */
+      { 4864, 328 },    /* 2 x 10^49 */
+      { 5120, 335 },    /* 3 x 10^50 */
       { 0, 0 }
     };
   int i;
@@ -216,7 +216,7 @@ gen_k( gcry_mpi_t p, int small_k )
           char *pp = gcry_random_bytes_secure( 4, GCRY_STRONG_RANDOM );
           memcpy( rndbuf, pp, 4 );
           gcry_free(pp);
-	}
+    }
       _gcry_mpi_set_buffer( k, rndbuf, nbytes, 0 );
         
       for(;;)
@@ -238,7 +238,7 @@ gen_k( gcry_mpi_t p, int small_k )
           mpi_add_ui( k, k, 1 );
           if( DBG_CIPHER )
             progress('.');
-	}
+    }
     }
  found:
   gcry_free(rndbuf);
@@ -253,7 +253,7 @@ gen_k( gcry_mpi_t p, int small_k )
 /****************
  * Generate a key pair with a key of size NBITS
  * Returns: 2 structures filled with all needed values
- *	    and an array with n-1 factors of (p-1)
+ *        and an array with n-1 factors of (p-1)
  */
 static void
 generate ( ELG_secret_key *sk, unsigned int nbits, gcry_mpi_t **ret_factors )
@@ -277,7 +277,7 @@ generate ( ELG_secret_key *sk, unsigned int nbits, gcry_mpi_t **ret_factors )
 
 
   /* Select a random number which has these properties:
-   *	 0 < x < p-1
+   *     0 < x < p-1
    * This must be a very good random number because this is the
    * secret part.  The prime is public and may be shared anyway,
    * so a random generator level of 1 is used for the prime.
@@ -313,12 +313,12 @@ generate ( ELG_secret_key *sk, unsigned int nbits, gcry_mpi_t **ret_factors )
               memcpy(rndbuf, r, 2 );
               gcry_free(r);
             }
-	}
+    }
       else 
         {
           rndbuf = gcry_random_bytes_secure( (xbits+7)/8,
                                              GCRY_VERY_STRONG_RANDOM );
-	}
+    }
       _gcry_mpi_set_buffer( x, rndbuf, (xbits+7)/8, 0 );
       mpi_clear_highbit( x, xbits+1 );
     } 
@@ -356,7 +356,7 @@ generate ( ELG_secret_key *sk, unsigned int nbits, gcry_mpi_t **ret_factors )
    encryption.  It has appliactions in backup systems.
  
    Returns: A structure filled with all needed values and an array
- 	    with n-1 factors of (p-1).  */
+         with n-1 factors of (p-1).  */
 static gcry_err_code_t
 generate_using_x (ELG_secret_key *sk, unsigned int nbits, gcry_mpi_t x,
                   gcry_mpi_t **ret_factors )
@@ -460,9 +460,9 @@ do_encrypt(gcry_mpi_t a, gcry_mpi_t b, gcry_mpi_t input, ELG_public_key *pkey )
   k = gen_k( pkey->p, 1 );
   gcry_mpi_powm( a, pkey->g, k, pkey->p );
   /* b = (y^k * input) mod p
-   *	 = ((y^k mod p) * (input mod p)) mod p
+   *     = ((y^k mod p) * (input mod p)) mod p
    * and because input is < p
-   *	 = ((y^k mod p) * input) mod p
+   *     = ((y^k mod p) * input) mod p
    */
   gcry_mpi_powm( b, pkey->y, k, pkey->p );
   gcry_mpi_mulm( b, b, input, pkey->p );
@@ -535,14 +535,14 @@ sign(gcry_mpi_t a, gcry_mpi_t b, gcry_mpi_t input, ELG_secret_key *skey )
 #if 0
     if( DBG_CIPHER ) 
       {
-	log_mpidump("elg sign p= ", skey->p);
-	log_mpidump("elg sign g= ", skey->g);
-	log_mpidump("elg sign y= ", skey->y);
-	log_mpidump("elg sign x= ", skey->x);
-	log_mpidump("elg sign k= ", k);
-	log_mpidump("elg sign M= ", input);
-	log_mpidump("elg sign a= ", a);
-	log_mpidump("elg sign b= ", b);
+    log_mpidump("elg sign p= ", skey->p);
+    log_mpidump("elg sign g= ", skey->g);
+    log_mpidump("elg sign y= ", skey->y);
+    log_mpidump("elg sign x= ", skey->x);
+    log_mpidump("elg sign k= ", k);
+    log_mpidump("elg sign M= ", input);
+    log_mpidump("elg sign a= ", a);
+    log_mpidump("elg sign b= ", b);
       }
 #endif
     mpi_free(k);
@@ -565,7 +565,7 @@ verify(gcry_mpi_t a, gcry_mpi_t b, gcry_mpi_t input, ELG_public_key *pkey )
   gcry_mpi_t ex[4];
 
   if( !(mpi_cmp_ui( a, 0 ) > 0 && mpi_cmp( a, pkey->p ) < 0) )
-    return 0; /* assertion	0 < a < p  failed */
+    return 0; /* assertion    0 < a < p  failed */
 
   t1 = mpi_alloc( mpi_get_nlimbs(a) );
   t2 = mpi_alloc( mpi_get_nlimbs(a) );
@@ -694,7 +694,7 @@ elg_check_secret_key (int algo, gcry_mpi_t *skey)
       sk.x = skey[3];
       
       if (! check_secret_key (&sk))
-	err = GPG_ERR_BAD_SECKEY;
+    err = GPG_ERR_BAD_SECKEY;
     }
 
   return err;
@@ -798,7 +798,7 @@ elg_verify (int algo, gcry_mpi_t hash, gcry_mpi_t *data, gcry_mpi_t *pkey,
       pk.g = pkey[1];
       pk.y = pkey[2];
       if (! verify (data[0], data[1], hash, &pk))
-	err = GPG_ERR_BAD_SIGNATURE;
+    err = GPG_ERR_BAD_SIGNATURE;
     }
 
   return err;

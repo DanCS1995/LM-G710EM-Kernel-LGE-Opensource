@@ -3,7 +3,7 @@
  * Copyright (C) 2005-2010 Martin Willi
  * Copyright (C) 2010 revosec AG
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -55,7 +55,7 @@ struct private_cert_payload_t {
 	/**
 	 * Next payload type.
 	 */
-	u_int8_t  next_payload;
+	uint8_t  next_payload;
 
 	/**
 	 * Critical flag.
@@ -70,12 +70,12 @@ struct private_cert_payload_t {
 	/**
 	 * Length of this payload.
 	 */
-	u_int16_t payload_length;
+	uint16_t payload_length;
 
 	/**
 	 * Encoding of the CERT Data.
 	 */
-	u_int8_t encoding;
+	uint8_t encoding;
 
 	/**
 	 * The contained cert data value.
@@ -224,6 +224,9 @@ METHOD(cert_payload_t, get_cert, certificate_t*,
 		case ENC_X509_SIGNATURE:
 			type = CERT_X509;
 			break;
+		case ENC_X509_ATTRIBUTE:
+			type = CERT_X509_AC;
+			break;
 		case ENC_CRL:
 			type = CERT_X509_CRL;
 			break;
@@ -312,7 +315,7 @@ cert_payload_t *cert_payload_create(payload_type_t type)
 			.get_url = _get_url,
 			.destroy = _destroy,
 		},
-		.next_payload = NO_PAYLOAD,
+		.next_payload = PL_NONE,
 		.payload_length = get_header_length(this),
 		.type = type,
 	);
@@ -332,6 +335,9 @@ cert_payload_t *cert_payload_create_from_cert(payload_type_t type,
 	{
 		case CERT_X509:
 			this->encoding = ENC_X509_SIGNATURE;
+			break;
+		case CERT_X509_AC:
+			this->encoding = ENC_X509_ATTRIBUTE;
 			break;
 		default:
 			DBG1(DBG_ENC, "embedding %N certificate in payload failed",
@@ -357,7 +363,7 @@ cert_payload_t *cert_payload_create_from_hash_and_url(chunk_t hash, char *url)
 {
 	private_cert_payload_t *this;
 
-	this = (private_cert_payload_t*)cert_payload_create(CERTIFICATE);
+	this = (private_cert_payload_t*)cert_payload_create(PLV2_CERTIFICATE);
 	this->encoding = ENC_X509_HASH_AND_URL;
 	this->data = chunk_cat("cc", hash, chunk_create(url, strlen(url)));
 	this->payload_length = get_header_length(this) + this->data.len;
@@ -380,4 +386,3 @@ cert_payload_t *cert_payload_create_custom(payload_type_t type,
 
 	return &this->public;
 }
-

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2012-2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -41,7 +41,7 @@ struct private_pkcs5_t {
 	/**
 	 * Iterations for key derivation
 	 */
-	u_int64_t iterations;
+	uint64_t iterations;
 
 	/**
 	 * Encryption algorithm
@@ -108,13 +108,13 @@ struct private_pkcs5_t {
  * Verify padding of decrypted blob.
  * Length of blob is adjusted accordingly.
  */
-static bool verify_padding(chunk_t *blob)
+static bool verify_padding(crypter_t *crypter, chunk_t *blob)
 {
-	u_int8_t padding, count;
+	uint8_t padding, count;
 
 	padding = count = blob->ptr[blob->len - 1];
 
-	if (padding > 8)
+	if (padding > crypter->get_block_size(crypter))
 	{
 		return FALSE;
 	}
@@ -153,7 +153,7 @@ static bool decrypt_generic(private_pkcs5_t *this, chunk_t password,
 		return FALSE;
 	}
 	memwipe(keymat.ptr, keymat.len);
-	if (verify_padding(decrypted))
+	if (verify_padding(this->crypter, decrypted))
 	{
 		return TRUE;
 	}
@@ -181,10 +181,10 @@ static bool pkcs12_kdf(private_pkcs5_t *this, chunk_t password, chunk_t keymat)
  * Function F of PBKDF2
  */
 static bool pbkdf2_f(chunk_t block, prf_t *prf, chunk_t seed,
-					 u_int64_t iterations)
+					 uint64_t iterations)
 {
 	chunk_t u;
-	u_int64_t i;
+	uint64_t i;
 
 	u = chunk_alloca(prf->get_block_size(prf));
 	if (!prf->get_bytes(prf, seed, u.ptr))
@@ -212,7 +212,7 @@ static bool pbkdf2(private_pkcs5_t *this, chunk_t password, chunk_t key)
 	prf_t *prf;
 	chunk_t keymat, block, seed;
 	size_t blocks;
-	u_int32_t i = 0;
+	uint32_t i = 0;
 
 	prf = this->data.pbes2.prf;
 
@@ -247,7 +247,7 @@ static bool pbkdf1(private_pkcs5_t *this, chunk_t password, chunk_t key)
 {
 	hasher_t *hasher;
 	chunk_t hash;
-	u_int64_t i;
+	uint64_t i;
 
 	hasher = this->data.pbes1.hasher;
 
@@ -422,7 +422,9 @@ static bool parse_pbes1_params(private_pkcs5_t *this, chunk_t blob, int level0)
 /**
  * ASN.1 definition of a PBKDF2-params structure
  * The salt is actually a CHOICE and could be an AlgorithmIdentifier from
- * PBKDF2-SaltSources (but as per RFC 2898 that's for future versions).
+ * PBKDF2-SaltSources (but as per RFC 8018 that's for future versions).
+ * The PRF algorithm is actually defined as DEFAULT and not OPTIONAL, but the
+ * parser can't handle ASN1_DEF with SEQUENCEs.
  */
 static const asn1Object_t pbkdf2ParamsObjects[] = {
 	{ 0, "PBKDF2-params",	ASN1_SEQUENCE,		ASN1_NONE			}, /* 0 */
@@ -430,7 +432,8 @@ static const asn1Object_t pbkdf2ParamsObjects[] = {
 	{ 1,   "iterationCount",ASN1_INTEGER,		ASN1_BODY			}, /* 2 */
 	{ 1,   "keyLength",		ASN1_INTEGER,		ASN1_OPT|ASN1_BODY	}, /* 3 */
 	{ 1,   "end opt",		ASN1_EOC,			ASN1_END			}, /* 4 */
-	{ 1,   "prf",			ASN1_EOC,			ASN1_DEF|ASN1_RAW	}, /* 5 */
+	{ 1,   "prf",			ASN1_SEQUENCE,		ASN1_OPT|ASN1_RAW	}, /* 5 */
+	{ 1,   "end opt",		ASN1_EOC,			ASN1_END			}, /* 6 */
 	{ 0, "exit",			ASN1_EOC,			ASN1_EXIT			}
 };
 #define PBKDF2_SALT					1
@@ -446,13 +449,15 @@ static bool parse_pbkdf2_params(private_pkcs5_t *this, chunk_t blob, int level0)
 	asn1_parser_t *parser;
 	chunk_t object;
 	int objectID;
-	bool success;
+	bool success = FALSE;
 
 	parser = asn1_parser_create(pbkdf2ParamsObjects, blob);
 	parser->set_top_level(parser, level0);
 
  	/* keylen is optional */
 	this->keylen = 0;
+	/* defaults to id-hmacWithSHA1 */
+	this->data.pbes2.prf_alg = PRF_HMAC_SHA1;
 
 	while (parser->iterate(parser, &objectID, &object))
 	{
@@ -474,13 +479,22 @@ static bool parse_pbkdf2_params(private_pkcs5_t *this, chunk_t blob, int level0)
 				break;
 			}
 			case PBKDF2_PRF:
-			{	/* defaults to id-hmacWithSHA1, no other is currently defined */
-				this->data.pbes2.prf_alg = PRF_HMAC_SHA1;
+			{
+				int oid;
+
+				oid = asn1_parse_algorithmIdentifier(object,
+										parser->get_level(parser) + 1, NULL);
+				this->data.pbes2.prf_alg = pseudo_random_function_from_oid(oid);
+				if (this->data.pbes2.prf_alg == PRF_UNDEFINED)
+				{	/* unsupported PRF algorithm */
+					goto end;
+				}
 				break;
 			}
 		}
 	}
 	success = parser->success(parser);
+end:
 	parser->destroy(parser);
 	return success;
 }
@@ -504,6 +518,7 @@ static bool parse_pbes2_params(private_pkcs5_t *this, chunk_t blob, int level0)
 {
 	asn1_parser_t *parser;
 	chunk_t object, params;
+	size_t keylen;
 	int objectID;
 	bool success = FALSE;
 
@@ -533,20 +548,35 @@ static bool parse_pbes2_params(private_pkcs5_t *this, chunk_t blob, int level0)
 			{
 				int oid = asn1_parse_algorithmIdentifier(object,
 									parser->get_level(parser) + 1, &params);
-				if (oid != OID_3DES_EDE_CBC)
+				this->encr = encryption_algorithm_from_oid(oid, &keylen);
+				if (this->encr == ENCR_UNDEFINED)
 				{	/* unsupported encryption scheme */
 					goto end;
 				}
-				if (this->keylen <= 0)
-				{	/* default key length for DES-EDE3-CBC-Pad */
-					this->keylen = 24;
+				/* prefer encoded key length */
+				this->keylen = this->keylen ?: keylen / 8;
+				if (!this->keylen)
+				{	/* set default key length for known algorithms */
+					switch (this->encr)
+					{
+						case ENCR_DES:
+							this->keylen = 8;
+							break;
+						case ENCR_3DES:
+							this->keylen = 24;
+							break;
+						case ENCR_BLOWFISH:
+							this->keylen = 16;
+							break;
+						default:
+							goto end;
+					}
 				}
 				if (!asn1_parse_simple_object(&params, ASN1_OCTET_STRING,
 									parser->get_level(parser) + 1, "IV"))
 				{
 					goto end;
 				}
-				this->encr = ENCR_3DES;
 				this->data.pbes2.iv = chunk_clone(params);
 				break;
 			}

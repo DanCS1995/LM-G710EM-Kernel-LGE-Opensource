@@ -92,7 +92,7 @@ static void destroy_attr(attr_t *this)
  * Hashtable entry with leases and attributes
  */
 typedef struct {
-	/** IKE_SA uniqe id we assign the IP lease */
+	/** IKE_SA unique id we assign the IP lease */
 	uintptr_t id;
 	/** list of IP leases received from AAA, as host_t */
 	linked_list_t *addrs;
@@ -178,18 +178,38 @@ static void add_addr(private_eap_radius_provider_t *this,
  * Remove the next address from the locked hashtable stored for given id
  */
 static host_t* remove_addr(private_eap_radius_provider_t *this,
-						   hashtable_t *hashtable, uintptr_t id)
+						   hashtable_t *hashtable, uintptr_t id, host_t *addr)
 {
+	enumerator_t *enumerator;
 	entry_t *entry;
-	host_t *addr = NULL;
+	host_t *found = NULL, *current;
 
 	entry = hashtable->remove(hashtable, (void*)id);
 	if (entry)
 	{
-		entry->addrs->remove_first(entry->addrs, (void**)&addr);
+		enumerator = entry->addrs->create_enumerator(entry->addrs);
+		while (enumerator->enumerate(enumerator, &current))
+		{
+			if (addr->ip_equals(addr, current))
+			{	/* prefer an exact match */
+				entry->addrs->remove_at(entry->addrs, enumerator);
+				enumerator->destroy(enumerator);
+				put_or_destroy_entry(hashtable, entry);
+				return current;
+			}
+			if (!found && addr->get_family(addr) == current->get_family(current))
+			{	/* fallback to the first IP with a matching address family */
+				found = current;
+			}
+		}
+		enumerator->destroy(enumerator);
+		if (found)
+		{
+			entry->addrs->remove(entry->addrs, found, NULL);
+		}
 		put_or_destroy_entry(hashtable, entry);
 	}
-	return addr;
+	return found;
 }
 
 /**
@@ -311,19 +331,13 @@ METHOD(listener_t, ike_rekey, bool,
 
 METHOD(attribute_provider_t, acquire_address, host_t*,
 	private_eap_radius_provider_t *this, linked_list_t *pools,
-	identification_t *id, host_t *requested)
+	ike_sa_t *ike_sa, host_t *requested)
 {
 	enumerator_t *enumerator;
 	host_t *addr = NULL;
-	ike_sa_t *ike_sa;
 	uintptr_t sa;
 	char *name;
 
-	ike_sa = charon->bus->get_sa(charon->bus);
-	if (!ike_sa)
-	{
-		return NULL;
-	}
 	sa = ike_sa->get_unique_id(ike_sa);
 
 	enumerator = pools->create_enumerator(pools);
@@ -332,7 +346,7 @@ METHOD(attribute_provider_t, acquire_address, host_t*,
 		if (streq(name, "radius"))
 		{
 			this->listener.mutex->lock(this->listener.mutex);
-			addr = remove_addr(this, this->listener.unclaimed, sa);
+			addr = remove_addr(this, this->listener.unclaimed, sa, requested);
 			if (addr)
 			{
 				add_addr(this, this->listener.claimed, sa, addr->clone(addr));
@@ -348,19 +362,13 @@ METHOD(attribute_provider_t, acquire_address, host_t*,
 
 METHOD(attribute_provider_t, release_address, bool,
 	private_eap_radius_provider_t *this, linked_list_t *pools, host_t *address,
-	identification_t *id)
+	ike_sa_t *ike_sa)
 {
 	enumerator_t *enumerator;
 	host_t *found = NULL;
-	ike_sa_t *ike_sa;
 	uintptr_t sa;
 	char *name;
 
-	ike_sa = charon->bus->get_sa(charon->bus);
-	if (!ike_sa)
-	{
-		return FALSE;
-	}
 	sa = ike_sa->get_unique_id(ike_sa);
 
 	enumerator = pools->create_enumerator(pools);
@@ -369,7 +377,7 @@ METHOD(attribute_provider_t, release_address, bool,
 		if (streq(name, "radius"))
 		{
 			this->listener.mutex->lock(this->listener.mutex);
-			found = remove_addr(this, this->listener.claimed, sa);
+			found = remove_addr(this, this->listener.claimed, sa, address);
 			this->listener.mutex->unlock(this->listener.mutex);
 			break;
 		}
@@ -396,11 +404,13 @@ typedef struct {
 	attr_t *current;
 } attribute_enumerator_t;
 
-
 METHOD(enumerator_t, attribute_enumerate, bool,
-	attribute_enumerator_t *this, configuration_attribute_type_t *type,
-	chunk_t *data)
+	attribute_enumerator_t *this, va_list args)
 {
+	configuration_attribute_type_t *type;
+	chunk_t *data;
+
+	VA_ARGS_VGET(args, type, data);
 	if (this->current)
 	{
 		destroy_attr(this->current);
@@ -428,23 +438,18 @@ METHOD(enumerator_t, attribute_destroy, void,
 
 METHOD(attribute_provider_t, create_attribute_enumerator, enumerator_t*,
 	private_eap_radius_provider_t *this, linked_list_t *pools,
-	identification_t *id, linked_list_t *vips)
+	ike_sa_t *ike_sa, linked_list_t *vips)
 {
 	attribute_enumerator_t *enumerator;
 	attr_t *attr;
-	ike_sa_t *ike_sa;
 	uintptr_t sa;
 
-	ike_sa = charon->bus->get_sa(charon->bus);
-	if (!ike_sa)
-	{
-		return NULL;
-	}
 	sa = ike_sa->get_unique_id(ike_sa);
 
 	INIT(enumerator,
 		.public = {
-			.enumerate = (void*)_attribute_enumerate,
+			.enumerate = enumerator_enumerate_default,
+			.venumerate = _attribute_enumerate,
 			.destroy = _attribute_destroy,
 		},
 		.list = linked_list_create(),
@@ -467,7 +472,7 @@ METHOD(attribute_provider_t, create_attribute_enumerator, enumerator_t*,
 }
 
 METHOD(eap_radius_provider_t, add_framed_ip, void,
-	private_eap_radius_provider_t *this, u_int32_t id, host_t *ip)
+	private_eap_radius_provider_t *this, uint32_t id, host_t *ip)
 {
 	this->listener.mutex->lock(this->listener.mutex);
 	add_addr(this, this->listener.unclaimed, id, ip);
@@ -475,7 +480,7 @@ METHOD(eap_radius_provider_t, add_framed_ip, void,
 }
 
 METHOD(eap_radius_provider_t, add_attribute, void,
-	private_eap_radius_provider_t *this, u_int32_t id,
+	private_eap_radius_provider_t *this, uint32_t id,
 	configuration_attribute_type_t type, chunk_t data)
 {
 	attr_t *attr;

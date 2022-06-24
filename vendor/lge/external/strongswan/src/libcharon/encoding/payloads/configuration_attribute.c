@@ -2,7 +2,7 @@
  * Copyright (C) 2005-2010 Martin Willi
  * Copyright (C) 2010 revosec AG
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -49,12 +49,12 @@ struct private_configuration_attribute_t {
 	/**
 	 * Type of the attribute.
 	 */
-	u_int16_t attr_type;
+	uint16_t attr_type;
 
 	/**
 	 * Length of the attribute, value if af_flag set.
 	 */
-	u_int16_t length_or_value;
+	uint16_t length_or_value;
 
 	/**
 	 * Attribute value as chunk.
@@ -62,7 +62,7 @@ struct private_configuration_attribute_t {
 	chunk_t value;
 
 	/**
-	 * Payload type, CONFIGURATION_ATTRIBUTE or DATA_ATTRIBUTE_V1
+	 * Payload type, PLV2_CONFIGURATION_ATTRIBUTE or DATA_ATTRIBUTE_V1
 	 */
 	payload_type_t type;
 };
@@ -146,6 +146,13 @@ METHOD(payload_t, verify, status_t,
 			}
 			break;
 		case INTERNAL_IP6_ADDRESS:
+			if (this->type == PLV1_CONFIGURATION_ATTRIBUTE &&
+				this->length_or_value == 16)
+			{	/* 16 bytes are correct for IKEv1, but older releases sent a
+				 * prefix byte so we still accept 0 or 17 as in IKEv2 */
+				break;
+			}
+			/* fall-through */
 		case INTERNAL_IP6_SUBNET:
 			if (this->length_or_value != 0 && this->length_or_value != 17)
 			{
@@ -160,12 +167,15 @@ METHOD(payload_t, verify, status_t,
 				failed = TRUE;
 			}
 			break;
+		/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 		case P_CSCF_IP6_ADDRESS:
 			if (this->length_or_value != 0 && this->length_or_value != 16 && this->length_or_value != 17)
 			{
 				failed = TRUE;
 			}
 			break;
+		/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
+
 		case SUPPORTED_ATTRIBUTES:
 			if (this->length_or_value % 2)
 			{
@@ -229,7 +239,7 @@ METHOD(payload_t, verify, status_t,
 METHOD(payload_t, get_encoding_rules, int,
 	private_configuration_attribute_t *this, encoding_rule_t **rules)
 {
-	if (this->type == CONFIGURATION_ATTRIBUTE)
+	if (this->type == PLV2_CONFIGURATION_ATTRIBUTE)
 	{
 		*rules = encodings_v2;
 		return countof(encodings_v2);
@@ -253,7 +263,7 @@ METHOD(payload_t, get_type, payload_type_t,
 METHOD(payload_t, get_next_type, payload_type_t,
 	private_configuration_attribute_t *this)
 {
-	return NO_PAYLOAD;
+	return PL_NONE;
 }
 
 METHOD(payload_t, set_next_type, void,
@@ -283,7 +293,7 @@ METHOD(configuration_attribute_t, get_chunk, chunk_t,
 	return this->value;
 }
 
-METHOD(configuration_attribute_t, get_value, u_int16_t,
+METHOD(configuration_attribute_t, get_value, uint16_t,
 	private_configuration_attribute_t *this)
 {
 	if (this->af_flag)
@@ -339,9 +349,10 @@ configuration_attribute_t *configuration_attribute_create_chunk(
 
 	this = (private_configuration_attribute_t*)
 							configuration_attribute_create(type);
-	this->attr_type = ((u_int16_t)attr_type) & 0x7FFF;
+	this->attr_type = ((uint16_t)attr_type) & 0x7FFF;
 	this->value = chunk_clone(chunk);
 	this->length_or_value = chunk.len;
+
 	return &this->public;
 }
 
@@ -349,15 +360,16 @@ configuration_attribute_t *configuration_attribute_create_chunk(
  * Described in header.
  */
 configuration_attribute_t *configuration_attribute_create_value(
-					configuration_attribute_type_t attr_type, u_int16_t value)
+					configuration_attribute_type_t attr_type, uint16_t value)
 {
 	private_configuration_attribute_t *this;
 
 	this = (private_configuration_attribute_t*)
-					configuration_attribute_create(CONFIGURATION_ATTRIBUTE_V1);
-	this->attr_type = ((u_int16_t)attr_type) & 0x7FFF;
+					configuration_attribute_create(PLV1_CONFIGURATION_ATTRIBUTE);
+	this->attr_type = ((uint16_t)attr_type) & 0x7FFF;
 	this->length_or_value = value;
 	this->af_flag = TRUE;
 
 	return &this->public;
 }
+

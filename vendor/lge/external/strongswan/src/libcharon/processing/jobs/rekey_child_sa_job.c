@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2006 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -25,15 +25,11 @@ typedef struct private_rekey_child_sa_job_t private_rekey_child_sa_job_t;
  * Private data of an rekey_child_sa_job_t object.
  */
 struct private_rekey_child_sa_job_t {
+
 	/**
 	 * Public rekey_child_sa_job_t interface.
 	 */
 	rekey_child_sa_job_t public;
-
-	/**
-	 * reqid of the child to rekey
-	 */
-	u_int32_t reqid;
 
 	/**
 	 * protocol of the CHILD_SA (ESP/AH)
@@ -43,16 +39,22 @@ struct private_rekey_child_sa_job_t {
 	/**
 	 * inbound SPI of the CHILD_SA
 	 */
-	u_int32_t spi;
+	uint32_t spi;
+
+	/**
+	 * SA destination address
+	 */
+	host_t *dst;
 };
 
 METHOD(job_t, destroy, void,
 	private_rekey_child_sa_job_t *this)
 {
+	this->dst->destroy(this->dst);
 	free(this);
 }
-
-METHOD(job_t, checkout_by_id, ike_sa_t*,
+/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
+METHOD(job_t, checkout, ike_sa_t*,
 	private_rekey_child_sa_job_t *this)
 {
 	ike_sa_t *ike_sa = NULL;
@@ -60,12 +62,14 @@ METHOD(job_t, checkout_by_id, ike_sa_t*,
 	struct timespec tsa, tsr;
 
 	do {
-		ike_sa = charon->ike_sa_manager->checkout_by_id(charon->ike_sa_manager, this->reqid, TRUE);
+		ike_sa = charon->child_sa_manager->checkout(charon->child_sa_manager,
+										this->protocol, this->spi, this->dst, NULL);
 		if (ike_sa) {
 			break;
 		}
 		j++;
-		DBG1(DBG_JOB, "CHILD_SA with reqid %d not found for rekeying, loop: %d",  this->reqid, j);
+		//TODO need print more info.
+		DBG1(DBG_JOB, "CHILD_SA not found for rekeying, loop: %d", j);
 		tsa.tv_sec = 0;
 		tsa.tv_nsec = 0;
 		tsr.tv_sec = 0;
@@ -75,21 +79,21 @@ METHOD(job_t, checkout_by_id, ike_sa_t*,
 
 	return ike_sa;
 }
+/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 
 METHOD(job_t, execute, job_requeue_t,
 	private_rekey_child_sa_job_t *this)
 {
 	ike_sa_t *ike_sa = NULL;
+/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 	status_t status = SUCCESS;
 	int i = 0;
 	struct timespec tsa, tsr;
 	int slotid = 0;
-/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 	ike_sa_t *ike_sa_current_thread = NULL;
-/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
 
-/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
-	ike_sa_current_thread = charon->ike_sa_manager->get_sa_by_reqid_rekey(charon->ike_sa_manager, this->reqid, TRUE);
+	ike_sa_current_thread = charon->child_sa_manager->get_sa(charon->child_sa_manager,
+														this->protocol, this->spi, this->dst);
 	if (ike_sa_current_thread != NULL)
 	{
 		slotid = get_slotid(ike_sa_current_thread->get_name(ike_sa_current_thread));
@@ -97,14 +101,14 @@ METHOD(job_t, execute, job_requeue_t,
 
 	if (get_cust_setting_bool_by_slotid(slotid, REKEY_DELAY))
 	{
-		ike_sa = checkout_by_id(this);
+		ike_sa = checkout(this);
 	}
 	else
 	{
 /* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
-		ike_sa = charon->ike_sa_manager->checkout_by_id(charon->ike_sa_manager, this->reqid, TRUE);
+	ike_sa = charon->child_sa_manager->checkout(charon->child_sa_manager,
+									this->protocol, this->spi, this->dst, NULL);
 	}
-
 	if (ike_sa == NULL)
 	{
 /* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
@@ -115,40 +119,44 @@ METHOD(job_t, execute, job_requeue_t,
 /* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
 		else
 		{
-			DBG2(DBG_JOB, "CHILD_SA with reqid %d not found for rekeying",
-				this->reqid);
+		DBG1(DBG_JOB, "CHILD_SA %N/0x%08x/%H not found for rekey",
+			 protocol_id_names, this->protocol, htonl(this->spi), this->dst);
 		}
 	}
 	else
 	{
-/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
-		if (get_cust_setting_bool_by_slotid(slotid, REKEY_DELAY))
+		if (ike_sa->get_state(ike_sa) != IKE_PASSIVE)
 		{
-/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
-			status = ike_sa->rekey_child_sa(ike_sa, this->protocol, this->spi);
-			for (i = 1; (i < 60) && (status == NEED_MORE); i++)
+			/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
+			if (get_cust_setting_bool_by_slotid(slotid, REKEY_DELAY))
 			{
-				charon->ike_sa_manager->checkin(charon->ike_sa_manager, ike_sa);
-				DBG1(DBG_IKE, "delaying rekey_child_sa_job initiation,loop: %d", i);
-
-				tsa.tv_sec = 0;
-				tsa.tv_nsec = 0;
-				tsr.tv_sec = 0;
-				tsr.tv_nsec = 500000000;
-				clock_nanosleep(CLOCK_REALTIME_ALARM, 0, &tsr, &tsa);
-
-				ike_sa = checkout_by_id(this);
-				if (ike_sa == NULL)
-				{
-					DBG1(DBG_JOB, "CHILD_SA with reqid %d not found for rekeying",  this->reqid);
-					return JOB_REQUEUE_NONE;
-				}
 				status = ike_sa->rekey_child_sa(ike_sa, this->protocol, this->spi);
+				for (i = 1; (i < 60) && (status == NEED_MORE); i++)
+				{
+					charon->ike_sa_manager->checkin(charon->ike_sa_manager, ike_sa);
+					DBG1(DBG_IKE, "delaying rekey_child_sa_job initiation,loop: %d", i);
+
+					tsa.tv_sec = 0;
+					tsa.tv_nsec = 0;
+					tsr.tv_sec = 0;
+					tsr.tv_nsec = 500000000;
+					clock_nanosleep(CLOCK_REALTIME_ALARM, 0, &tsr, &tsa);
+
+					ike_sa = checkout(this);
+					if (ike_sa == NULL)
+					{
+						//TODO need print more info
+						DBG1(DBG_JOB, "CHILD_SA not found for rekeying");
+						return JOB_REQUEUE_NONE;
+					}
+					status = ike_sa->rekey_child_sa(ike_sa, this->protocol, this->spi);
+				}
 			}
-		}
-		else
-		{
+			else
+			{
+			/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
 			ike_sa->rekey_child_sa(ike_sa, this->protocol, this->spi);
+			}
 		}
 		charon->ike_sa_manager->checkin(charon->ike_sa_manager, ike_sa);
 	}
@@ -164,9 +172,8 @@ METHOD(job_t, get_priority, job_priority_t,
 /*
  * Described in header
  */
-rekey_child_sa_job_t *rekey_child_sa_job_create(u_int32_t reqid,
-												protocol_id_t protocol,
-												u_int32_t spi)
+rekey_child_sa_job_t *rekey_child_sa_job_create(protocol_id_t protocol,
+												uint32_t spi, host_t *dst)
 {
 	private_rekey_child_sa_job_t *this;
 
@@ -178,9 +185,9 @@ rekey_child_sa_job_t *rekey_child_sa_job_create(u_int32_t reqid,
 				.destroy = _destroy,
 			},
 		},
-		.reqid = reqid,
 		.protocol = protocol,
 		.spi = spi,
+		.dst = dst->clone(dst),
 	);
 
 	return &this->public;

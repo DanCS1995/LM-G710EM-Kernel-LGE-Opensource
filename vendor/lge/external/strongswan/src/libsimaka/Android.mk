@@ -10,9 +10,7 @@ LOCAL_SRC_FILES := $(filter %.c,$(libsimaka_la_SOURCES))
 
 # build libsimaka ---------------------------------------------------------------
 
-LOCAL_C_INCLUDES += \
-	$(strongswan_PATH)/src/include \
-	$(strongswan_PATH)/src/libstrongswan
+LOCAL_C_INCLUDES += $(strongswan_PATH)/src/libstrongswan/
 
 LOCAL_CFLAGS := $(strongswan_CFLAGS)
 

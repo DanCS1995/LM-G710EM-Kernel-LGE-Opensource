@@ -15,7 +15,9 @@
 
 #include "tnc_imv.h"
 
+#ifndef WIN32
 #include <dlfcn.h>
+#endif
 
 #include <tncif_pa_subtypes.h>
 
@@ -343,10 +345,16 @@ static private_tnc_imv_t* tnc_imv_create_empty(char *name)
 imv_t* tnc_imv_create(char *name, char *path)
 {
 	private_tnc_imv_t *this;
+	int flag = RTLD_LAZY;
 
 	this = tnc_imv_create_empty(name);
 
-	this->handle = dlopen(path, RTLD_LAZY);
+	if (lib->settings->get_bool(lib->settings, "%s.dlopen_use_rtld_now",
+								FALSE, lib->ns))
+	{
+		flag = RTLD_NOW;
+	}
+	this->handle = dlopen(path, flag);
 	if (!this->handle)
 	{
 		DBG1(DBG_TNC, "IMV \"%s\" failed to load: %s", name, dlerror());

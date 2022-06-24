@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  * Copyright (C) 2013 Martin Willi
  * Copyright (C) 2013 revosec AG
  *
@@ -18,13 +18,16 @@
 #include "test_runner.h"
 
 #include <library.h>
+#include <threading/thread.h>
 #include <plugins/plugin_feature.h>
 #include <collections/array.h>
 #include <utils/test.h>
 
+#include <stdlib.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <limits.h>
+#include <stdlib.h>
 
 /**
  * Get a tty color escape character for stderr
@@ -32,40 +35,113 @@
 #define TTY(color) tty_escape_get(2, TTY_FG_##color)
 
 /**
- * Initialize the lookup table for testable functions (defined in libstrongswan)
+ * A global symbol indicating libtest linkage
  */
-static void testable_functions_create() __attribute__ ((constructor(1000)));
-static void testable_functions_create()
+#ifdef WIN32
+__declspec(dllexport)
+#endif
+bool test_runner_available = TRUE;
+
+/**
+ * Destroy a single test suite and associated data
+ */
+static void destroy_suite(test_suite_t *suite)
 {
-	testable_functions = hashtable_create(hashtable_hash_str,
-										  hashtable_equals_str, 8);
+	test_case_t *tcase;
+
+	while (array_remove(suite->tcases, 0, &tcase))
+	{
+		array_destroy(tcase->functions);
+		array_destroy(tcase->fixtures);
+	}
+	free(suite);
 }
 
 /**
- * Destroy the lookup table for testable functions
+ * Filter loaded test suites, either remove suites listed (exclude=TRUE), or all
+ * that are not listed (exclude=FALSE).
  */
-static void testable_functions_destroy() __attribute__ ((destructor(1000)));
-static void testable_functions_destroy()
+static void apply_filter(array_t *loaded, char *filter, bool exclude)
 {
-	testable_functions->destroy(testable_functions);
-	/* if leak detective is enabled plugins are not actually unloaded, which
-	 * means their destructor is called AFTER this one when the process
-	 * terminates, even though the priority says differently, make sure this
-	 * does not crash */
-	testable_functions = NULL;
+	enumerator_t *enumerator, *names;
+	hashtable_t *listed;
+	test_suite_t *suite;
+	char *name;
+
+	listed = hashtable_create(hashtable_hash_str, hashtable_equals_str, 8);
+	names = enumerator_create_token(filter, ",", " ");
+	while (names->enumerate(names, &name))
+	{
+		listed->put(listed, name, name);
+	}
+	enumerator = array_create_enumerator(loaded);
+	while (enumerator->enumerate(enumerator, &suite))
+	{
+		if ((exclude && listed->get(listed, suite->name)) ||
+			(!exclude && !listed->get(listed, suite->name)))
+		{
+			array_remove_at(loaded, enumerator);
+			destroy_suite(suite);
+		}
+	}
+	enumerator->destroy(enumerator);
+	listed->destroy(listed);
+	names->destroy(names);
 }
 
 /**
- * Load all available test suites
+ * Check if the given string is contained in the filter string.
+ */
+static bool is_in_filter(const char *find, char *filter)
+{
+	enumerator_t *names;
+	bool found = FALSE;
+	char *name;
+
+	names = enumerator_create_token(filter, ",", " ");
+	while (names->enumerate(names, &name))
+	{
+		if (streq(name, find))
+		{
+			found = TRUE;
+			break;
+		}
+	}
+	names->destroy(names);
+	return found;
+}
+
+/**
+ * Removes and destroys test suites that are not selected or
+ * explicitly excluded.
+ */
+static void filter_suites(array_t *loaded)
+{
+	char *filter;
+
+	filter = getenv("TESTS_SUITES");
+	if (filter)
+	{
+		apply_filter(loaded, filter, FALSE);
+	}
+	filter = getenv("TESTS_SUITES_EXCLUDE");
+	if (filter)
+	{
+		apply_filter(loaded, filter, TRUE);
+	}
+}
+
+/**
+ * Load all available test suites, or optionally only selected ones.
  */
 static array_t *load_suites(test_configuration_t configs[],
-							test_runner_init_t init)
+							test_runner_init_t init, char *cfg)
 {
 	array_t *suites;
 	bool old = FALSE;
 	int i;
 
-	library_init(NULL, "test-runner");
+	library_init(cfg, "test-runner");
 
 	test_setup_handler();
 
@@ -91,6 +167,7 @@ static array_t *load_suites(test_configuration_t configs[],
 			array_insert(suites, -1, configs[i].suite());
 		}
 	}
+	filter_suites(suites);
 
 	if (lib->leak_detective)
 	{
@@ -112,16 +189,10 @@ static array_t *load_suites(test_configuration_t configs[],
 static void unload_suites(array_t *suites)
 {
 	test_suite_t *suite;
-	test_case_t *tcase;
 
 	while (array_remove(suites, 0, &suite))
 	{
-		while (array_remove(suite->tcases, 0, &tcase))
-		{
-			array_destroy(tcase->functions);
-			array_destroy(tcase->fixtures);
-		}
-		free(suite);
+		destroy_suite(suite);
 	}
 	array_destroy(suites);
 }
@@ -136,6 +207,7 @@ static bool run_test(test_function_t *tfun, int i)
 		tfun->cb(i);
 		return TRUE;
 	}
+	thread_cleanup_popall();
 	return FALSE;
 }
 
@@ -155,15 +227,22 @@ static bool call_fixture(test_case_t *tcase, bool up)
 		{
 			if (up)
 			{
-				fixture->setup();
+				if (fixture->setup)
+				{
+					fixture->setup();
+				}
 			}
 			else
 			{
-				fixture->teardown();
+				if (fixture->teardown)
+				{
+					fixture->teardown();
+				}
 			}
 		}
 		else
 		{
+			thread_cleanup_popall();
 			failure = TRUE;
 			break;
 		}
@@ -176,15 +255,18 @@ static bool call_fixture(test_case_t *tcase, bool up)
 /**
  * Test initialization, initializes libstrongswan for the next run
  */
-static bool pre_test(test_runner_init_t init)
+static bool pre_test(test_runner_init_t init, char *cfg)
 {
-	library_init(NULL, "test-runner");
+	library_init(cfg, "test-runner");
 
 	/* use non-blocking RNG to generate keys fast */
 	lib->settings->set_default_str(lib->settings,
 			"libstrongswan.plugins.random.random",
 			lib->settings->get_str(lib->settings,
 				"libstrongswan.plugins.random.urandom", "/dev/urandom"));
+	/* same for the gcrypt plugin */
+	lib->settings->set_default_str(lib->settings,
+			"libstrongswan.plugins.gcrypt.quick_random", "yes");
 
 	if (lib->leak_detective)
 	{
@@ -197,7 +279,6 @@ static bool pre_test(test_runner_init_t init)
 		library_deinit();
 		return FALSE;
 	}
-	dbg_default_set_level(LEVEL_SILENT);
 	return TRUE;
 }
 
@@ -206,7 +287,7 @@ static bool pre_test(test_runner_init_t init)
  */
 typedef struct {
 	char *name;
-	char msg[512 - sizeof(char*) - 2 * sizeof(int)];
+	char msg[4096 - sizeof(char*) - 2 * sizeof(int)];
 	const char *file;
 	int line;
 	int i;
@@ -254,7 +335,7 @@ static void sum_leaks(report_data_t *data, int count, size_t bytes,
  * Do library cleanup and optionally check for memory leaks
  */
 static bool post_test(test_runner_init_t init, bool check_leaks,
-					  array_t *failures, char *name, int i)
+					  array_t *failures, char *name, int i, int *leaks)
 {
 	report_data_t data = {
 		.failures = failures,
@@ -264,7 +345,16 @@ static bool post_test(test_runner_init_t init, bool check_leaks,
 
 	if (init)
 	{
-		init(FALSE);
+		if (test_restore_point())
+		{
+			init(FALSE);
+		}
+		else
+		{
+			thread_cleanup_popall();
+			library_deinit();
+			return FALSE;
+		}
 	}
 	if (check_leaks && lib->leak_detective)
 	{
@@ -274,7 +364,8 @@ static bool post_test(test_runner_init_t init, bool check_leaks,
 	}
 	library_deinit();
 
-	return data.leaks != 0;
+	*leaks = data.leaks;
+	return TRUE;
 }
 
 /**
@@ -295,18 +386,46 @@ static void collect_failure_info(array_t *failures, char *name, int i)
 }
 
 /**
+ * Collect warning information, add failure_t to array
+ */
+static bool collect_warning_info(array_t *warnings, char *name, int i)
+{
+	failure_t warning = {
+		.name = name,
+		.i = i,
+	};
+
+	warning.line = test_warning_get(warning.msg, sizeof(warning.msg),
+									&warning.file);
+	if (warning.line)
+	{
+		array_insert(warnings, -1, &warning);
+	}
+	return warning.line;
+}
+
+/**
  * Print array of collected failure_t to stderr
  */
-static void print_failures(array_t *failures)
+static void print_failures(array_t *failures, bool warnings)
 {
 	failure_t failure;
 
+	threads_init();
 	backtrace_init();
 
 	while (array_remove(failures, 0, &failure))
 	{
-		fprintf(stderr, "      %sFailure in '%s': %s (",
-				TTY(RED), failure.name, failure.msg);
+		if (warnings)
+		{
+			fprintf(stderr, "      %sWarning in '%s': %s (",
+					TTY(YELLOW), failure.name, failure.msg);
+		}
+		else
+		{
+			fprintf(stderr, "      %sFailure in '%s': %s (",
+					TTY(RED), failure.name, failure.msg);
+		}
 		if (failure.line)
 		{
 			fprintf(stderr, "%s:%d, ", failure.file, failure.line);
@@ -320,19 +439,21 @@ static void print_failures(array_t *failures)
 	}
 
 	backtrace_deinit();
+	threads_deinit();
 }
 
 /**
  * Run a single test case with fixtures
  */
-static bool run_case(test_case_t *tcase, test_runner_init_t init)
+static bool run_case(test_case_t *tcase, test_runner_init_t init, char *cfg)
 {
 	enumerator_t *enumerator;
 	test_function_t *tfun;
 	int passed = 0;
-	array_t *failures;
+	array_t *failures, *warnings;
 
 	failures = array_create(sizeof(failure_t), 0);
+	warnings = array_create(sizeof(failure_t), 0);
 
 	fprintf(stderr, "    Running case '%s': ", tcase->name);
 	fflush(stderr);
@@ -344,9 +465,10 @@ static bool run_case(test_case_t *tcase, test_runner_init_t init)
 
 		for (i = tfun->start; i < tfun->end; i++)
 		{
-			if (pre_test(init))
+			if (pre_test(init, cfg))
 			{
-				bool ok = FALSE, leaks = FALSE;
+				bool ok = FALSE;
+				int leaks = 0;
 
 				test_setup_timeout(tcase->timeout);
 
@@ -363,9 +485,11 @@ static bool run_case(test_case_t *tcase, test_runner_init_t init)
 					{
 						call_fixture(tcase, FALSE);
 					}
-
 				}
-				leaks = post_test(init, ok, failures, tfun->name, i);
+				if (!post_test(init, ok, failures, tfun->name, i, &leaks))
+				{
+					ok = FALSE;
+				}
 
 				test_setup_timeout(0);
 
@@ -374,7 +498,14 @@ static bool run_case(test_case_t *tcase, test_runner_init_t init)
 					if (!leaks)
 					{
 						rounds++;
-						fprintf(stderr, "%s+%s", TTY(GREEN), TTY(DEF));
+						if (!collect_warning_info(warnings, tfun->name, i))
+						{
+							fprintf(stderr, "%s+%s", TTY(GREEN), TTY(DEF));
+						}
+						else
+						{
+							fprintf(stderr, "%s~%s", TTY(YELLOW), TTY(DEF));
+						}
 					}
 				}
 				else
@@ -401,8 +532,10 @@ static bool run_case(test_case_t *tcase, test_runner_init_t init)
 
 	fprintf(stderr, "\n");
 
-	print_failures(failures);
+	print_failures(warnings, TRUE);
+	print_failures(failures, FALSE);
 	array_destroy(failures);
+	array_destroy(warnings);
 
 	return passed == array_count(tcase->functions);
 }
@@ -410,7 +543,7 @@ static bool run_case(test_case_t *tcase, test_runner_init_t init)
 /**
  * Run a single test suite
  */
-static bool run_suite(test_suite_t *suite, test_runner_init_t init)
+static bool run_suite(test_suite_t *suite, test_runner_init_t init, char *cfg)
 {
 	enumerator_t *enumerator;
 	test_case_t *tcase;
@@ -421,7 +554,7 @@ static bool run_suite(test_suite_t *suite, test_runner_init_t init)
 	enumerator = array_create_enumerator(suite->tcases);
 	while (enumerator->enumerate(enumerator, &tcase))
 	{
-		if (run_case(tcase, init))
+		if (run_case(tcase, init, cfg))
 		{
 			passed++;
 		}
@@ -449,22 +582,39 @@ int test_runner_run(const char *name, test_configuration_t configs[],
 	test_suite_t *suite;
 	enumerator_t *enumerator;
 	int passed = 0, result;
+	level_t level = LEVEL_SILENT;
+	char *cfg, *runners, *verbosity;
 
 	/* redirect all output to stderr (to redirect make's stdout to /dev/null) */
 	dup2(2, 1);
 
-	suites = load_suites(configs, init);
+	runners = getenv("TESTS_RUNNERS");
+	if (runners && !is_in_filter(name, runners))
+	{
+		return EXIT_SUCCESS;
+	}
+
+	cfg = getenv("TESTS_STRONGSWAN_CONF");
+
+	suites = load_suites(configs, init, cfg);
 	if (!suites)
 	{
 		return EXIT_FAILURE;
 	}
+
+	verbosity = getenv("TESTS_VERBOSITY");
+	if (verbosity)
+	{
+		level = atoi(verbosity);
+	}
+	dbg_default_set_level(level);
 
 	fprintf(stderr, "Running %u '%s' test suites:\n", array_count(suites), name);
 
 	enumerator = array_create_enumerator(suites);
 	while (enumerator->enumerate(enumerator, &suite))
 	{
-		if (run_suite(suite, init))
+		if (run_suite(suite, init, cfg))
 		{
 			passed++;
 		}

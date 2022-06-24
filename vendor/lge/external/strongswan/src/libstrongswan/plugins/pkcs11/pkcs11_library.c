@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2011 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * Copyright (C) 2011-2015 Tobias Brunner
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * Copyright (C) 2010 Martin Willi
  * Copyright (C) 2010 revosec AG
@@ -21,6 +21,7 @@
 #include <dlfcn.h>
 
 #include <library.h>
+#include <asn1/asn1.h>
 #include <utils/debug.h>
 #include <threading/mutex.h>
 #include <collections/linked_list.h>
@@ -641,10 +642,37 @@ static void free_attrs(object_enumerator_t *this)
 }
 
 /**
+ * CKA_EC_POINT is encodeed as ASN.1 octet string, we can't handle that and
+ * some tokens actually return them even unwrapped.
+ *
+ * Because ASN1_OCTET_STRING is 0x04 and uncompressed EC_POINTs also begin with
+ * 0x04 (compressed ones with 0x02 or 0x03) there will be an attempt to parse
+ * unwrapped uncompressed EC_POINTs.  This will fail in most cases as the length
+ * will not be correct, however, there is a small chance that the key's first
+ * byte denotes the correct length.  Checking the first byte of the key should
+ * further reduce the risk of false positives, though.
+ *
+ * The original memory is freed if the value is unwrapped.
+ */
+static void unwrap_ec_point(chunk_t *data)
+{
+	chunk_t wrapped, unwrapped;
+
+	wrapped = unwrapped = *data;
+	if (asn1_unwrap(&unwrapped, &unwrapped) == ASN1_OCTET_STRING &&
+		unwrapped.len && unwrapped.ptr[0] >= 0x02 && unwrapped.ptr[0] <= 0x04)
+	{
+		*data = chunk_clone(unwrapped);
+		free(wrapped.ptr);
+	}
+}
+
+/**
  * Get attributes for a given object during enumeration
  */
 static bool get_attributes(object_enumerator_t *this, CK_OBJECT_HANDLE object)
 {
+	chunk_t data;
 	CK_RV rv;
 	int i;
 
@@ -677,15 +705,27 @@ static bool get_attributes(object_enumerator_t *this, CK_OBJECT_HANDLE object)
 		DBG1(DBG_CFG, "C_GetAttributeValue() error: %N", ck_rv_names, rv);
 		return FALSE;
 	}
+	for (i = 0; i < this->count; i++)
+	{
+		if (this->attr[i].type == CKA_EC_POINT)
+		{
+			data = chunk_create(this->attr[i].pValue, this->attr[i].ulValueLen);
+			unwrap_ec_point(&data);
+			this->attr[i].pValue = data.ptr;
+			this->attr[i].ulValueLen = data.len;
+		}
+	}
 	return TRUE;
 }
 
 METHOD(enumerator_t, object_enumerate, bool,
-	object_enumerator_t *this, CK_OBJECT_HANDLE *out)
+	object_enumerator_t *this, va_list args)
 {
-	CK_OBJECT_HANDLE object;
+	CK_OBJECT_HANDLE object, *out;
 	CK_ULONG found;
 	CK_RV rv;
+
+	VA_ARGS_VGET(args, out);
 
 	if (!this->object)
 	{
@@ -748,7 +788,8 @@ METHOD(pkcs11_library_t, create_object_enumerator, enumerator_t*,
 
 	INIT(enumerator,
 		.public = {
-			.enumerate = (void*)_object_enumerate,
+			.enumerate = enumerator_enumerate_default,
+			.venumerate = _object_enumerate,
 			.destroy = _object_destroy,
 		},
 		.session = session,
@@ -768,7 +809,8 @@ METHOD(pkcs11_library_t, create_object_attr_enumerator, enumerator_t*,
 
 	INIT(enumerator,
 		.public = {
-			.enumerate = (void*)_object_enumerate,
+			.enumerate = enumerator_enumerate_default,
+			.venumerate = _object_enumerate,
 			.destroy = _object_destroy,
 		},
 		.session = session,
@@ -800,10 +842,13 @@ typedef struct {
 } mechanism_enumerator_t;
 
 METHOD(enumerator_t, enumerate_mech, bool,
-	mechanism_enumerator_t *this, CK_MECHANISM_TYPE* type,
-	CK_MECHANISM_INFO *info)
+	mechanism_enumerator_t *this, va_list args)
 {
+	CK_MECHANISM_INFO *info;
+	CK_MECHANISM_TYPE *type;
 	CK_RV rv;
+
+	VA_ARGS_VGET(args, type, info);
 
 	if (this->current >= this->count)
 	{
@@ -838,7 +883,8 @@ METHOD(pkcs11_library_t, create_mechanism_enumerator, enumerator_t*,
 
 	INIT(enumerator,
 		.public = {
-			.enumerate = (void*)_enumerate_mech,
+			.enumerate = enumerator_enumerate_default,
+			.venumerate = _enumerate_mech,
 			.destroy = _destroy_mech,
 		},
 		.lib = &this->public,
@@ -853,8 +899,8 @@ METHOD(pkcs11_library_t, create_mechanism_enumerator, enumerator_t*,
 		return enumerator_create_empty();
 	}
 	enumerator->mechs = malloc(sizeof(CK_MECHANISM_TYPE) * enumerator->count);
-	enumerator->lib->f->C_GetMechanismList(slot, enumerator->mechs,
-										   &enumerator->count);
+	rv = enumerator->lib->f->C_GetMechanismList(slot, enumerator->mechs,
+												&enumerator->count);
 	if (rv != CKR_OK)
 	{
 		DBG1(DBG_CFG, "C_GetMechanismList() failed: %N", ck_rv_names, rv);
@@ -886,6 +932,10 @@ METHOD(pkcs11_library_t, get_ck_attribute, bool,
 			 ck_rv_names, rv);
 		chunk_free(data);
 		return FALSE;
+	}
+	if (attr.type == CKA_EC_POINT)
+	{
+		unwrap_ec_point(data);
 	}
 	return TRUE;
 }

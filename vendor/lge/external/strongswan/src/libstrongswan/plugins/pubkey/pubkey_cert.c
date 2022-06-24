@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -137,13 +137,16 @@ METHOD(certificate_t, equals, bool,
 
 METHOD(certificate_t, issued_by, bool,
 	private_pubkey_cert_t *this, certificate_t *issuer,
-	signature_scheme_t *scheme)
+	signature_params_t **scheme)
 {
-	if (scheme)
+	bool valid = equals(this, issuer);
+	if (valid && scheme)
 	{
-		*scheme = SIGN_UNKNOWN;
+		INIT(*scheme,
+			.scheme = SIGN_UNKNOWN,
+		);
 	}
-	return equals(this, issuer);
+	return valid;
 }
 
 METHOD(certificate_t, get_public_key,  public_key_t*,
@@ -196,6 +199,13 @@ METHOD(certificate_t, destroy, void,
 	}
 }
 
+METHOD(pubkey_cert_t, set_subject, void,
+	private_pubkey_cert_t *this, identification_t *subject)
+{
+	DESTROY_IF(this->subject);
+	this->subject = subject->clone(subject);
+}
+
 /*
  * see header file
  */
@@ -222,6 +232,7 @@ static pubkey_cert_t *pubkey_cert_create(public_key_t *key,
 				.get_ref = _get_ref,
 				.destroy = _destroy,
 			},
+			.set_subject = _set_subject,
 		},
 		.ref = 1,
 		.key = key,

@@ -1,4 +1,4 @@
-/* stdmem.c  -	private memory allocator
+/* stdmem.c  -    private memory allocator
  * Copyright (C) 1998, 2000, 2002, 2005, 2008 Free Software Foundation, Inc.
  *
  * This file is part of Libgcrypt.
@@ -224,7 +224,7 @@ _gcry_private_free (void *a)
       else
         {
           free(p-EXTRA_ALIGN-4);
-	}
+    }
     }
   else if ( _gcry_private_is_secure(a) )
     _gcry_secmem_free(p);

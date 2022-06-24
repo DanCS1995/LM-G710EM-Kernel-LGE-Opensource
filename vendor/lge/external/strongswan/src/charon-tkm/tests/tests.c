@@ -1,8 +1,8 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
- * Copyright (C) 2012 Reto Buerki
+ * Copyright (C) 2012-2014 Reto Buerki
  * Copyright (C) 2012 Adrian-Ken Rueegsegger
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,7 +18,6 @@
 #include <tests/test_runner.h>
 
 #include <library.h>
-#include <hydra.h>
 #include <daemon.h>
 
 #include "tkm.h"
@@ -36,8 +35,8 @@
 static test_configuration_t tests[] = {
 #define TEST_SUITE(x) \
 	{ .suite = x, },
-#define TEST_SUITE_DEPEND(x, type, args) \
-	{ .suite = x, .feature = PLUGIN_DEPENDS(type, args) },
+#define TEST_SUITE_DEPEND(x, type, ...) \
+	{ .suite = x, .feature = PLUGIN_DEPENDS(type, __VA_ARGS__) },
 #include "tests.h"
 	{ .suite = NULL, }
 };
@@ -50,11 +49,10 @@ static bool test_runner_init(bool init)
 
 	if (init)
 	{
-		libhydra_init();
 		libcharon_init();
 		lib->settings->set_int(lib->settings,
-							   "test_runner.filelog.stdout.default", 0);
-		charon->load_loggers(charon, NULL, FALSE);
+							   "test-runner.filelog.stdout.default", 0);
+		charon->load_loggers(charon);
 
 		/* Register TKM specific plugins */
 		static plugin_feature_t features[] = {
@@ -64,7 +62,7 @@ static bool test_runner_init(bool init)
 				PLUGIN_PROVIDE(CUSTOM, "kernel-ipsec"),
 		};
 		lib->plugins->add_static_features(lib->plugins, "tkm-tests", features,
-										  countof(features), TRUE);
+										  countof(features), TRUE, NULL, NULL);
 
 		lib->settings->set_int(lib->settings, "%s.dh_mapping.%d", 1,
 							   lib->ns, MODP_3072_BIT);
@@ -73,8 +71,6 @@ static bool test_runner_init(bool init)
 		register_dh_mapping();
 
 		plugin_loader_add_plugindirs(BUILDDIR "/src/libstrongswan/plugins",
-									 PLUGINS);
-		plugin_loader_add_plugindirs(BUILDDIR "/src/libhydra/plugins",
 									 PLUGINS);
 		plugin_loader_add_plugindirs(BUILDDIR "/src/libcharon/plugins",
 									 PLUGINS);
@@ -95,7 +91,6 @@ static bool test_runner_init(bool init)
 
 	destroy_dh_mapping();
 	libcharon_deinit();
-	libhydra_deinit();
 	return result;
 }
 

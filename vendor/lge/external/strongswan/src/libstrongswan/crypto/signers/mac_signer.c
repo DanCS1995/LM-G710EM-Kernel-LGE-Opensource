@@ -2,7 +2,7 @@
  * Copyright (C) 2012 Tobias Brunner
  * Copyright (C) 2005-2008 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -41,11 +41,11 @@ struct private_signer_t {
 };
 
 METHOD(signer_t, get_signature, bool,
-	private_signer_t *this, chunk_t data, u_int8_t *buffer)
+	private_signer_t *this, chunk_t data, uint8_t *buffer)
 {
 	if (buffer)
 	{
-		u_int8_t mac[this->mac->get_mac_size(this->mac)];
+		uint8_t mac[this->mac->get_mac_size(this->mac)];
 
 		if (!this->mac->get_mac(this->mac, data, mac))
 		{
@@ -62,7 +62,7 @@ METHOD(signer_t, allocate_signature, bool,
 {
 	if (chunk)
 	{
-		u_int8_t mac[this->mac->get_mac_size(this->mac)];
+		uint8_t mac[this->mac->get_mac_size(this->mac)];
 
 		if (!this->mac->get_mac(this->mac, data, mac))
 		{
@@ -78,24 +78,14 @@ METHOD(signer_t, allocate_signature, bool,
 METHOD(signer_t, verify_signature, bool,
 	private_signer_t *this, chunk_t data, chunk_t signature)
 {
-	u_int8_t mac[this->mac->get_mac_size(this->mac)];
-	bool ret;
-	int i;
+	uint8_t mac[this->mac->get_mac_size(this->mac)];
 
 	if (signature.len != this->truncation)
 	{
 		return FALSE;
 	}
-
-	ret = this->mac->get_mac(this->mac, data, mac);
-	if (!ret)
-		return ret;
-printf("\n====================================================\n\tmac: ");
-for (i = 0; i < this->truncation; i++) {
-	printf("%02X", mac[i]);
-}
-printf("\n====================================================\n");	
-	return memeq(signature.ptr, mac, this->truncation);
+	return this->mac->get_mac(this->mac, data, mac) &&
+		   memeq_const(signature.ptr, mac, this->truncation);
 }
 
 METHOD(signer_t, get_key_size, size_t,
@@ -146,4 +136,3 @@ signer_t *mac_signer_create(mac_t *mac, size_t len)
 
 	return &this->public;
 }
-

@@ -1,6 +1,6 @@
-/* C code produced by gperf version 3.0.3 */
+/* C code produced by gperf version 3.0.4 */
 /* Command-line: /usr/bin/gperf -m 10 -C -G -D -t  */
-/* Computed positions: -k'1-2,6,$' */
+/* Computed positions: -k'2-3,6,$' */
 
 #if !((' ' == 32) && ('!' == 33) && ('"' == 34) && ('#' == 35) \
       && ('%' == 37) && ('&' == 38) && ('\'' == 39) && ('(' == 40) \
@@ -32,7 +32,7 @@ error "gperf generated tables don't work with this execution character set. Plea
 
 /*
  * Copyright (C) 2005 Andreas Steffen
- * Hochschule fuer Technik Rapperswil, Switzerland
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -47,6 +47,7 @@ error "gperf generated tables don't work with this execution character set. Plea
 
 #include <string.h>
 
+#define IN_GPERF_GENERATED_FILE
 #include "keywords.h"
 
 struct kw_entry {
@@ -317,7 +318,7 @@ static const short lookup[] =
 
 #ifdef __GNUC__
 __inline
-#ifdef __GNUC_STDC_INLINE__
+#if defined __GNUC_STDC_INLINE__ || defined __GNUC_GNU_INLINE__
 __attribute__ ((__gnu_inline__))
 #endif
 #endif

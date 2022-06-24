@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007-2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,6 +21,7 @@
 #ifndef MYSQL_DATABASE_H_
 #define MYSQL_DATABASE_H_
 
+#include <library.h>
 #include <database/database.h>
 
 typedef struct mysql_database_t mysql_database_t;

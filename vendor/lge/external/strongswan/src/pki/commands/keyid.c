@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * Copyright (C) 2017 Andreas Steffen
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -26,11 +27,11 @@
 static int keyid()
 {
 	credential_type_t type = CRED_PRIVATE_KEY;
-	int subtype = KEY_RSA;
+	int subtype = KEY_ANY;
 	certificate_t *cert;
 	private_key_t *private;
 	public_key_t *public;
-	char *file = NULL;
+	char *file = NULL, *keyid = NULL;
 	void *cred;
 	chunk_t id;
 	char *arg;
@@ -42,15 +43,28 @@ static int keyid()
 			case 'h':
 				return command_usage(NULL);
 			case 't':
-				if (streq(arg, "rsa-priv"))
+				if (streq(arg, "rsa") ||
+					streq(arg, "rsa-priv"))
 				{
 					type = CRED_PRIVATE_KEY;
 					subtype = KEY_RSA;
 				}
-				else if (streq(arg, "ecdsa-priv"))
+				else if (streq(arg, "ecdsa") ||
+						 streq(arg, "ecdsa-priv"))
 				{
 					type = CRED_PRIVATE_KEY;
 					subtype = KEY_ECDSA;
+				}
+				else if (streq(arg, "bliss") ||
+						 streq(arg, "bliss-priv"))
+				{
+					type = CRED_PRIVATE_KEY;
+					subtype = KEY_BLISS;
+				}
+				else if (streq(arg, "priv"))
+				{
+					type = CRED_PRIVATE_KEY;
+					subtype = KEY_ANY;
 				}
 				else if (streq(arg, "pub"))
 				{
@@ -75,6 +89,9 @@ static int keyid()
 			case 'i':
 				file = arg;
 				continue;
+			case 'x':
+				keyid = arg;
+				continue;
 			case EOF:
 				break;
 			default:
@@ -87,10 +104,20 @@ static int keyid()
 		cred = lib->creds->create(lib->creds, type, subtype,
 								  BUILD_FROM_FILE, file, BUILD_END);
 	}
+	else if (keyid)
+	{
+		chunk_t chunk;
+
+		chunk = chunk_from_hex(chunk_create(keyid, strlen(keyid)), NULL);
+		cred = lib->creds->create(lib->creds, CRED_PRIVATE_KEY, KEY_ANY,
+								  BUILD_PKCS11_KEYID, chunk, BUILD_END);
+		free(chunk.ptr);
+	}
 	else
 	{
 		chunk_t chunk;
 
+		set_file_mode(stdin, CERT_ASN1_DER);
 		if (!chunk_from_fd(0, &chunk))
 		{
 			fprintf(stderr, "reading input failed: %s\n", strerror(errno));
@@ -163,11 +190,12 @@ static void __attribute__ ((constructor))reg()
 	command_register((command_t)
 		{ keyid, 'k', "keyid",
 		"calculate key identifiers of a key/certificate",
-		{"[--in file] [--type rsa-priv|ecdsa-priv|pub|pkcs10|x509]"},
+		{"[--in file|--keyid hex] [--type priv|rsa|ecdsa|bliss|pub|pkcs10|x509]"},
 		{
 			{"help",	'h', 0, "show usage information"},
 			{"in",		'i', 1, "input file, default: stdin"},
-			{"type",	't', 1, "type of key, default: rsa-priv"},
+			{"keyid",	'x', 1, "smartcard or TPM private key object handle"},
+			{"type",	't', 1, "type of key, default: priv"},
 		}
 	});
 }

@@ -18,6 +18,7 @@
 #include <daemon.h>
 #include <sa/ikev1/keymat_v1.h>
 #include <encoding/payloads/hash_payload.h>
+#include <credentials/certificates/x509.h>
 
 typedef struct private_pubkey_v1_authenticator_t private_pubkey_v1_authenticator_t;
 
@@ -94,11 +95,15 @@ METHOD(authenticator_t, build, status_t,
 		return NOT_FOUND;
 	}
 
-	this->dh->get_my_public_value(this->dh, &dh);
+	if (!this->dh->get_my_public_value(this->dh, &dh))
+	{
+		private->destroy(private);
+		return FAILED;
+	}
 	keymat = (keymat_v1_t*)this->ike_sa->get_keymat(this->ike_sa);
 	if (!keymat->get_hash(keymat, this->initiator, dh, this->dh_value,
 					this->ike_sa->get_id(this->ike_sa), this->sa_payload,
-					this->id_payload, &hash))
+					this->id_payload, &hash, &scheme))
 	{
 		private->destroy(private);
 		free(dh.ptr);
@@ -106,9 +111,9 @@ METHOD(authenticator_t, build, status_t,
 	}
 	free(dh.ptr);
 
-	if (private->sign(private, scheme, hash, &sig))
+	if (private->sign(private, scheme, NULL, hash, &sig))
 	{
-		sig_payload = hash_payload_create(SIGNATURE_V1);
+		sig_payload = hash_payload_create(PLV1_SIGNATURE);
 		sig_payload->set_hash(sig_payload, sig);
 		free(sig.ptr);
 		message->add_payload(message, &sig_payload->payload_interface);
@@ -124,6 +129,29 @@ METHOD(authenticator_t, build, status_t,
 	free(hash.ptr);
 
 	return status;
+}
+
+/**
+ * Check if the end-entity certificate, if any, is compliant with RFC 4945
+ */
+static bool is_compliant_cert(auth_cfg_t *auth)
+{
+	certificate_t *cert;
+	x509_t *x509;
+
+	cert = auth->get(auth, AUTH_RULE_SUBJECT_CERT);
+	if (!cert || cert->get_type(cert) != CERT_X509)
+	{
+		return TRUE;
+	}
+	x509 = (x509_t*)cert;
+	if (x509->get_flags(x509) & X509_IKE_COMPLIANT)
+	{
+		return TRUE;
+	}
+	DBG1(DBG_IKE, "rejecting certificate without digitalSignature or "
+		 "nonRepudiation keyUsage flags");
+	return FALSE;
 }
 
 METHOD(authenticator_t, process, status_t,
@@ -144,7 +172,7 @@ METHOD(authenticator_t, process, status_t,
 		scheme = SIGN_ECDSA_WITH_NULL;
 	}
 
-	sig_payload = (hash_payload_t*)message->get_payload(message, SIGNATURE_V1);
+	sig_payload = (hash_payload_t*)message->get_payload(message, PLV1_SIGNATURE);
 	if (!sig_payload)
 	{
 		DBG1(DBG_IKE, "SIG payload missing in message");
@@ -152,11 +180,14 @@ METHOD(authenticator_t, process, status_t,
 	}
 
 	id = this->ike_sa->get_other_id(this->ike_sa);
-	this->dh->get_my_public_value(this->dh, &dh);
+	if (!this->dh->get_my_public_value(this->dh, &dh))
+	{
+		return FAILED;
+	}
 	keymat = (keymat_v1_t*)this->ike_sa->get_keymat(this->ike_sa);
 	if (!keymat->get_hash(keymat, !this->initiator, this->dh_value, dh,
 					this->ike_sa->get_id(this->ike_sa), this->sa_payload,
-					this->id_payload, &hash))
+					this->id_payload, &hash, &scheme))
 	{
 		free(dh.ptr);
 		return FAILED;
@@ -166,13 +197,14 @@ METHOD(authenticator_t, process, status_t,
 	sig = sig_payload->get_hash(sig_payload);
 	auth = this->ike_sa->get_auth_cfg(this->ike_sa, FALSE);
 	enumerator = lib->credmgr->create_public_enumerator(lib->credmgr, this->type,
-														id, auth);
+														id, auth, TRUE);
 	while (enumerator->enumerate(enumerator, &public, &current_auth))
 	{
-		if (public->verify(public, scheme, hash, sig))
+		if (public->verify(public, scheme, NULL, hash, sig) &&
+			is_compliant_cert(current_auth))
 		{
 			DBG1(DBG_IKE, "authentication of '%Y' with %N successful",
-				 id, key_type_names, this->type);
+				 id, signature_scheme_names, scheme);
 			status = SUCCESS;
 			auth->merge(auth, current_auth, FALSE);
 			auth->add(auth, AUTH_RULE_AUTH_CLASS, AUTH_CLASS_PUBKEY);

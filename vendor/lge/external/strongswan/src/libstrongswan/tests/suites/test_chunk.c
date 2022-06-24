@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -57,6 +57,32 @@ START_TEST(test_chunk_equals)
 
 	chunk_b = chunk_from_str("chunk");
 	ck_assert(chunk_equals(chunk_a, chunk_b));
+}
+END_TEST
+
+/*******************************************************************************
+ * equals_const
+ */
+
+START_TEST(test_chunk_equals_const)
+{
+	chunk_t chunk = chunk_from_str("chunk");
+	chunk_t chunk_a, chunk_b;
+
+	chunk_a = chunk_empty;
+	chunk_b = chunk_empty;
+	ck_assert(!chunk_equals_const(chunk_a, chunk_b));
+
+	chunk_a = chunk;
+	ck_assert(!chunk_equals_const(chunk_a, chunk_b));
+	chunk_b = chunk;
+	ck_assert(chunk_equals_const(chunk_a, chunk_b));
+
+	chunk_b = chunk_from_str("asdf");
+	ck_assert(!chunk_equals_const(chunk_a, chunk_b));
+
+	chunk_b = chunk_from_str("chunk");
+	ck_assert(chunk_equals_const(chunk_a, chunk_b));
 }
 END_TEST
 
@@ -117,10 +143,13 @@ START_TEST(test_chunk_clear)
 	}
 	chunk_clear(&chunk);
 	/* check memory area of freed chunk. We can't use ck_assert() for this
-	 * test directly, as it might allocate data at the freed area. */
-	for (i = 0; i < 64; i++)
+	 * test directly, as it might allocate data at the freed area.  comparing
+	 * two bytes at once reduces the chances of conflicts if memory got
+	 * overwritten already */
+	for (i = 0; i < 64; i += 2)
 	{
-		if (ptr[i] != 0 && ptr[i] == i)
+		if (ptr[i] != 0 && ptr[i] == i &&
+			ptr[i+1] != 0 && ptr[i+1] == i+1)
 		{
 			cleared = FALSE;
 			break;
@@ -287,11 +316,11 @@ START_TEST(test_chunk_skip)
 	foobar = chunk_from_str("foobar");
 	a = foobar;
 	a = chunk_skip(a, 0);
-	ck_assert(chunk_equals(a, foobar));
+	ck_assert_chunk_eq(a, foobar);
 	a = chunk_skip(a, 1);
-	ck_assert(chunk_equals(a, chunk_from_str("oobar")));
+	ck_assert_chunk_eq(a, chunk_from_str("oobar"));
 	a = chunk_skip(a, 2);
-	ck_assert(chunk_equals(a, chunk_from_str("bar")));
+	ck_assert_chunk_eq(a, chunk_from_str("bar"));
 	a = chunk_skip(a, 3);
 	assert_chunk_empty(a);
 
@@ -309,20 +338,24 @@ START_TEST(test_chunk_skip_zero)
 {
 	chunk_t foobar, a;
 
-	a = chunk_empty;
-	a = chunk_skip_zero(a);
+	a = chunk_skip_zero(chunk_empty);
 	assert_chunk_empty(a);
 
 	foobar = chunk_from_str("foobar");
-	a = foobar;
-	a = chunk_skip_zero(a);
-	ck_assert(chunk_equals(a, foobar));
+	a = chunk_skip_zero(foobar);
+	ck_assert_chunk_eq(a, foobar);
 
-	a = chunk_from_chars(0x00, 0xaa, 0xbb, 0xcc);
+	foobar = chunk_from_chars(0x00);
+	a = chunk_skip_zero(foobar);
+	ck_assert_chunk_eq(a, foobar);
+
+	a = chunk_skip_zero(chunk_from_chars(0x00, 0xaa, 0xbb, 0xcc));
+	ck_assert_chunk_eq(a, chunk_from_chars(0xaa, 0xbb, 0xcc));
 	a = chunk_skip_zero(a);
-	ck_assert(chunk_equals(a, chunk_from_chars(0xaa, 0xbb, 0xcc)));
-	a = chunk_skip_zero(a);
-	ck_assert(chunk_equals(a, chunk_from_chars(0xaa, 0xbb, 0xcc)));
+	ck_assert_chunk_eq(a, chunk_from_chars(0xaa, 0xbb, 0xcc));
+
+	a = chunk_skip_zero(chunk_from_chars(0x00, 0x00, 0xaa, 0xbb, 0xcc));
+	ck_assert_chunk_eq(a, chunk_from_chars(0xaa, 0xbb, 0xcc));
 }
 END_TEST
 
@@ -364,15 +397,15 @@ START_TEST(test_base16)
 		{FALSE, "fooba", "666f6f6261"},
 		{FALSE, "foobar", "666f6f626172"},
 	};
-	testdata_t test_colon[] = {
-		{TRUE,  "", ""},
-		{TRUE,  "f", "66"},
+	testdata_t test_prefix_colon[] = {
+		{TRUE,  "", "0x"},
+		{TRUE,  "f", "0x66"},
 		{TRUE,  "fo", "66:6F"},
-		{TRUE,  "foo", "66:6F:6F"},
+		{TRUE,  "foo", "0x66:6F:6F"},
 		{FALSE, "foob", "66:6f:6f:62"},
-		{FALSE, "fooba", "66:6f:6f:62:61"},
+		{FALSE, "fooba", "0x66:6f:6f:62:61"},
 		{FALSE, "foobar", "66:6f:6f:62:61:72"},
-		{FALSE, "foobar", "66:6f6f:6261:72"},
+		{FALSE, "foobar", "0x66:6f6f:6261:72"},
 	};
 	int i;
 
@@ -397,14 +430,15 @@ START_TEST(test_base16)
 		free(out.ptr);
 	}
 
-	for (i = 0; i < countof(test_colon); i++)
+	for (i = 0; i < countof(test_prefix_colon); i++)
 	{
 		chunk_t out;
 
-		out = chunk_from_hex(chunk_create(test_colon[i].out, strlen(test_colon[i].out)), NULL);
-		fail_unless(strneq(out.ptr, test_colon[i].in, out.len),
+		out = chunk_from_hex(chunk_create(test_prefix_colon[i].out,
+							 strlen(test_prefix_colon[i].out)), NULL);
+		fail_unless(strneq(out.ptr, test_prefix_colon[i].in, out.len),
 					"base16 conversion error - should '%s', is %#B",
-					test_colon[i].in, &out);
+					test_prefix_colon[i].in, &out);
 		free(out.ptr);
 	}
 }
@@ -707,7 +741,7 @@ START_TEST(test_chunk_mac)
 {
 	chunk_t in;
 	u_char key[16];
-	u_int64_t out;
+	uint64_t out;
 	int i, count;
 
 	count = countof(sip_vectors);
@@ -736,7 +770,7 @@ END_TEST
 START_TEST(test_chunk_hash)
 {
 	chunk_t chunk;
-	u_int32_t hash_a, hash_b, hash_c;
+	uint32_t hash_a, hash_b, hash_c;
 
 	chunk = chunk_from_str("asdf");
 
@@ -758,7 +792,7 @@ END_TEST
 START_TEST(test_chunk_hash_static)
 {
 	chunk_t in;
-	u_int32_t out, hash_a, hash_b, hash_inc = 0x7b891a95;
+	uint32_t out, hash_a, hash_b, hash_inc = 0x7b891a95;
 	int i, count;
 
 	count = countof(sip_vectors);
@@ -781,13 +815,67 @@ START_TEST(test_chunk_hash_static)
 END_TEST
 
 /*******************************************************************************
+ * test for chunk_internet_checksum[_inc]()
+ */
+
+static inline uint16_t compensate_alignment(uint16_t val)
+{
+	return ((val & 0xff) << 8) | (val >> 8);
+}
+
+START_TEST(test_chunk_internet_checksum)
+{
+	chunk_t chunk;
+	uint16_t sum;
+
+	chunk = chunk_from_chars(0x45,0x00,0x00,0x30,0x44,0x22,0x40,0x00,0x80,0x06,
+							 0x00,0x00,0x8c,0x7c,0x19,0xac,0xae,0x24,0x1e,0x2b);
+
+	sum = chunk_internet_checksum(chunk);
+	ck_assert_int_eq(0x442e, ntohs(sum));
+
+	sum = chunk_internet_checksum(chunk_create(chunk.ptr, 10));
+	sum = chunk_internet_checksum_inc(chunk_create(chunk.ptr+10, 10), sum);
+	ck_assert_int_eq(0x442e, ntohs(sum));
+
+	/* need to compensate for even/odd alignment */
+	sum = chunk_internet_checksum(chunk_create(chunk.ptr, 9));
+	sum = compensate_alignment(sum);
+	sum = chunk_internet_checksum_inc(chunk_create(chunk.ptr+9, 11), sum);
+	sum = compensate_alignment(sum);
+	ck_assert_int_eq(0x442e, ntohs(sum));
+
+	chunk = chunk_from_chars(0x45,0x00,0x00,0x30,0x44,0x22,0x40,0x00,0x80,0x06,
+							 0x00,0x00,0x8c,0x7c,0x19,0xac,0xae,0x24,0x1e);
+
+	sum = chunk_internet_checksum(chunk);
+	ck_assert_int_eq(0x4459, ntohs(sum));
+
+	sum = chunk_internet_checksum(chunk_create(chunk.ptr, 10));
+	sum = chunk_internet_checksum_inc(chunk_create(chunk.ptr+10, 9), sum);
+	ck_assert_int_eq(0x4459, ntohs(sum));
+
+	/* need to compensate for even/odd alignment */
+	sum = chunk_internet_checksum(chunk_create(chunk.ptr, 9));
+	sum = compensate_alignment(sum);
+	sum = chunk_internet_checksum_inc(chunk_create(chunk.ptr+9, 10), sum);
+	sum = compensate_alignment(sum);
+	ck_assert_int_eq(0x4459, ntohs(sum));
+}
+END_TEST
+
+/*******************************************************************************
  * test for chunk_map and friends
  */
 
 START_TEST(test_chunk_map)
 {
 	chunk_t *map, contents = chunk_from_chars(0x01,0x02,0x03,0x04,0x05);
+#ifdef WIN32
+	char *path = "C:\\Windows\\Temp\\strongswan-chunk-map-test";
+#else
 	char *path = "/tmp/strongswan-chunk-map-test";
+#endif
 
 	ck_assert(chunk_write(contents, path, 022, TRUE));
 
@@ -824,7 +912,11 @@ END_TEST
 START_TEST(test_chunk_from_fd_file)
 {
 	chunk_t in, contents = chunk_from_chars(0x01,0x02,0x03,0x04,0x05);
+#ifdef WIN32
+	char *path = "C:\\Windows\\Temp\\strongswan-chunk-fd-test";
+#else
 	char *path = "/tmp/strongswan-chunk-fd-test";
+#endif
 	int fd;
 
 	ck_assert(chunk_write(contents, path, 022, TRUE));
@@ -846,7 +938,7 @@ START_TEST(test_chunk_from_fd_skt)
 	int s[2];
 
 	ck_assert(socketpair(AF_UNIX, SOCK_STREAM, 0, s) == 0);
-	ck_assert(write(s[1], contents.ptr, contents.len) == contents.len);
+	ck_assert_int_eq(send(s[1], contents.ptr, contents.len, 0), contents.len);
 	close(s[1]);
 	ck_assert_msg(chunk_from_fd(s[0], &in), "%s", strerror(errno));
 	close(s[0]);
@@ -863,7 +955,7 @@ void *chunk_from_fd_run(void *data)
 
 	for (i = 0; i < FROM_FD_COUNT; i++)
 	{
-		ck_assert(write(fd, &i, sizeof(i)) == sizeof(i));
+		ck_assert(send(fd, &i, sizeof(i), 0) == sizeof(i));
 	}
 	close(fd);
 	return NULL;
@@ -933,7 +1025,7 @@ START_TEST(test_printf_hook)
 	int len;
 
 	/* %B should be the same as %b, which is what we check, comparing the
-	 * acutal result could be tricky as %b prints the chunk's memory address */
+	 * actual result could be tricky as %b prints the chunk's memory address */
 	len = snprintf(buf, sizeof(buf), "%B", &printf_hook_data[_i].in);
 	ck_assert(len >= 0 && len < sizeof(buf));
 	len = snprintf(mem, sizeof(mem), "%b", printf_hook_data[_i].in.ptr,
@@ -952,6 +1044,7 @@ Suite *chunk_suite_create()
 
 	tc = tcase_create("equals");
 	tcase_add_test(tc, test_chunk_equals);
+	tcase_add_test(tc, test_chunk_equals_const);
 	suite_add_tcase(s, tc);
 
 	tc = tcase_create("chunk_compare");
@@ -1005,6 +1098,10 @@ Suite *chunk_suite_create()
 
 	tc = tcase_create("chunk_hash_static");
 	tcase_add_test(tc, test_chunk_hash_static);
+	suite_add_tcase(s, tc);
+
+	tc = tcase_create("chunk_internet_checksum");
+	tcase_add_test(tc, test_chunk_internet_checksum);
 	suite_add_tcase(s, tc);
 
 	tc = tcase_create("chunk_map");

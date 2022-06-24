@@ -1,7 +1,8 @@
 /*
- * Copyrigth (C) 2012 Reto Buerki
+ * Copyright (C) 2015 Tobias Brunner
+ * Copyright (C) 2012 Reto Buerki
  * Copyright (C) 2012 Adrian-Ken Rueegsegger
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,6 +18,7 @@
 #include <daemon.h>
 #include <tkm/constants.h>
 #include <tkm/client.h>
+#include <crypto/hashers/hash_algorithm_set.h>
 
 #include "tkm.h"
 #include "tkm_types.h"
@@ -71,6 +73,10 @@ struct private_tkm_keymat_t {
 	 */
 	chunk_t other_init_msg;
 
+	/**
+	 * Set of hash algorithms supported by peer for signature authentication
+	 */
+	hash_algorithm_set_t *hash_algorithms;
 };
 
 /**
@@ -90,12 +96,13 @@ struct private_tkm_keymat_t {
 static void aead_create_from_keys(aead_t **in, aead_t **out,
 	   const chunk_t * const sk_ai, const chunk_t * const sk_ar,
 	   const chunk_t * const sk_ei, const chunk_t * const sk_er,
-	   const u_int16_t enc_alg, const u_int16_t int_alg,
-	   const u_int16_t key_size, bool initiator)
+	   const uint16_t enc_alg, const uint16_t int_alg,
+	   const uint16_t key_size, bool initiator)
 {
 	*in = *out = NULL;
 	signer_t *signer_i, *signer_r;
 	crypter_t *crypter_i, *crypter_r;
+	iv_gen_t *ivg_i, *ivg_r;
 
 	signer_i = lib->crypto->create_signer(lib->crypto, int_alg);
 	signer_r = lib->crypto->create_signer(lib->crypto, int_alg);
@@ -139,15 +146,21 @@ static void aead_create_from_keys(aead_t **in, aead_t **out,
 		return;
 	}
 
+	ivg_i = iv_gen_create_for_alg(enc_alg);
+	ivg_r = iv_gen_create_for_alg(enc_alg);
+	if (!ivg_i || !ivg_r)
+	{
+		return;
+	}
 	if (initiator)
 	{
-		*in = aead_create(crypter_r, signer_r);
-		*out = aead_create(crypter_i, signer_i);
+		*in = aead_create(crypter_r, signer_r, ivg_r);
+		*out = aead_create(crypter_i, signer_i, ivg_i);
 	}
 	else
 	{
-		*in = aead_create(crypter_i, signer_i);
-		*out = aead_create(crypter_r, signer_r);
+		*in = aead_create(crypter_i, signer_i, ivg_i);
+		*out = aead_create(crypter_r, signer_r, ivg_r);
 	}
 }
 
@@ -174,8 +187,8 @@ METHOD(keymat_v2_t, derive_ike_keys, bool,
 	chunk_t nonce_i, chunk_t nonce_r, ike_sa_id_t *id,
 	pseudo_random_function_t rekey_function, chunk_t rekey_skd)
 {
-	u_int16_t enc_alg, int_alg, key_size;
-	u_int64_t nc_id, spi_loc, spi_rem;
+	uint16_t enc_alg, int_alg, key_size;
+	uint64_t nc_id, spi_loc, spi_rem;
 	chunk_t *nonce, c_ai, c_ar, c_ei, c_er;
 	tkm_diffie_hellman_t *tkm_dh;
 	dh_id_type dh_id;
@@ -266,8 +279,15 @@ METHOD(keymat_v2_t, derive_ike_keys, bool,
 		}
 		isa_info = *((isa_info_t *)(rekey_skd.ptr));
 		DBG1(DBG_IKE, "deriving IKE keys (parent_isa: %llu, ae: %llu, nc: %llu,"
-			 "dh: %llu, spi_loc: %llx, spi_rem: %llx)", isa_info.parent_isa_id,
+			 " dh: %llu, spi_loc: %llx, spi_rem: %llx)", isa_info.parent_isa_id,
 			 isa_info.ae_id, nc_id, dh_id, spi_loc, spi_rem);
+
+		if (!tkm->idmgr->acquire_ref(tkm->idmgr, TKM_CTX_AE, isa_info.ae_id))
+		{
+			DBG1(DBG_IKE, "unable to acquire reference for ae: %llu",
+				 isa_info.ae_id);
+			return FALSE;
+		}
 		this->ae_ctx_id = isa_info.ae_id;
 		res = ike_isa_create_child(this->isa_ctx_id, isa_info.parent_isa_id, 1,
 								   dh_id, nc_id, nonce_rem, this->initiator,
@@ -365,7 +385,8 @@ METHOD(keymat_t, get_aead, aead_t*,
 
 METHOD(keymat_v2_t, get_auth_octets, bool,
 	private_tkm_keymat_t *this, bool verify, chunk_t ike_sa_init,
-	chunk_t nonce, identification_t *id, char reserved[3], chunk_t *octets)
+	chunk_t nonce, chunk_t ppk, identification_t *id, char reserved[3],
+	chunk_t *octets, array_t *schemes)
 {
 	sign_info_t *sign;
 
@@ -402,19 +423,35 @@ METHOD(keymat_v2_t, get_skd, pseudo_random_function_t,
 
 	*skd = chunk_create((u_char *)isa_info, sizeof(isa_info_t));
 
-	/*
-	 * remove ae context id, since control has now been handed over to the new
-	 * IKE SA keymat
-	 */
-	this->ae_ctx_id = 0;
 	return PRF_HMAC_SHA2_512;
 }
 
 METHOD(keymat_v2_t, get_psk_sig, bool,
 	private_tkm_keymat_t *this, bool verify, chunk_t ike_sa_init, chunk_t nonce,
-	chunk_t secret, identification_t *id, char reserved[3], chunk_t *sig)
+	chunk_t secret, chunk_t ppk, identification_t *id, char reserved[3],
+	chunk_t *sig)
 {
 	return FALSE;
+}
+
+METHOD(keymat_v2_t, hash_algorithm_supported, bool,
+	private_tkm_keymat_t *this, hash_algorithm_t hash)
+{
+	if (!this->hash_algorithms)
+	{
+		return FALSE;
+	}
+	return this->hash_algorithms->contains(this->hash_algorithms, hash);
+}
+
+METHOD(keymat_v2_t, add_hash_algorithm, void,
+	private_tkm_keymat_t *this, hash_algorithm_t hash)
+{
+	if (!this->hash_algorithms)
+	{
+		this->hash_algorithms = hash_algorithm_set_create();
+	}
+	this->hash_algorithms->add(this->hash_algorithms, hash);
 }
 
 METHOD(keymat_t, destroy, void,
@@ -428,13 +465,15 @@ METHOD(keymat_t, destroy, void,
 	/* only reset ae context if set */
 	if (this->ae_ctx_id != 0)
 	{
-		if (ike_ae_reset(this->ae_ctx_id) != TKM_OK)
+		int count;
+		count = tkm->idmgr->release_id(tkm->idmgr, TKM_CTX_AE, this->ae_ctx_id);
+		if (count == 0 && ike_ae_reset(this->ae_ctx_id) != TKM_OK)
 		{
 			DBG1(DBG_IKE, "failed to reset AE context %d", this->ae_ctx_id);
 		}
-		tkm->idmgr->release_id(tkm->idmgr, TKM_CTX_AE, this->ae_ctx_id);
 	}
 
+	DESTROY_IF(this->hash_algorithms);
 	DESTROY_IF(this->aead_in);
 	DESTROY_IF(this->aead_out);
 	chunk_free(&this->auth_payload);
@@ -484,10 +523,13 @@ tkm_keymat_t *tkm_keymat_create(bool initiator)
 					.destroy = _destroy,
 				},
 				.derive_ike_keys = _derive_ike_keys,
+				.derive_ike_keys_ppk = (void*)return_false,
 				.derive_child_keys = _derive_child_keys,
 				.get_skd = _get_skd,
 				.get_auth_octets = _get_auth_octets,
 				.get_psk_sig = _get_psk_sig,
+				.add_hash_algorithm = _add_hash_algorithm,
+				.hash_algorithm_supported = _hash_algorithm_supported,
 			},
 			.get_isa_id = _get_isa_id,
 			.set_auth_payload = _set_auth_payload,

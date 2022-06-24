@@ -55,10 +55,10 @@ void
 _gcry_mpi_normalize( gcry_mpi_t a )
 {
     if( mpi_is_opaque(a) )
-	return;
+    return;
 
     for( ; a->nlimbs && !a->d[a->nlimbs-1]; a->nlimbs-- )
-	;
+    ;
 }
 
 
@@ -72,20 +72,20 @@ gcry_mpi_get_nbits( gcry_mpi_t a )
     unsigned n;
 
     if( mpi_is_opaque(a) ) {
-	return a->sign; /* which holds the number of bits */
+    return a->sign; /* which holds the number of bits */
     }
 
     _gcry_mpi_normalize( a );
     if( a->nlimbs ) {
-	mpi_limb_t alimb = a->d[a->nlimbs-1];
-	if( alimb )
-	    count_leading_zeros( n, alimb );
-	else
-	    n = BITS_PER_MPI_LIMB;
-	n = BITS_PER_MPI_LIMB - n + (a->nlimbs-1) * BITS_PER_MPI_LIMB;
+    mpi_limb_t alimb = a->d[a->nlimbs-1];
+    if( alimb )
+        count_leading_zeros( n, alimb );
+    else
+        n = BITS_PER_MPI_LIMB;
+    n = BITS_PER_MPI_LIMB - n + (a->nlimbs-1) * BITS_PER_MPI_LIMB;
     }
     else
-	n = 0;
+    n = 0;
     return n;
 }
 
@@ -103,7 +103,7 @@ gcry_mpi_test_bit( gcry_mpi_t a, unsigned int n )
     bitno  = n % BITS_PER_MPI_LIMB;
 
     if( limbno >= a->nlimbs )
-	return 0; /* too far left: this is a 0 */
+    return 0; /* too far left: this is a 0 */
     limb = a->d[limbno];
     return (limb & (A_LIMB_1 << bitno))? 1: 0;
 }
@@ -162,11 +162,11 @@ gcry_mpi_clear_highbit( gcry_mpi_t a, unsigned int n )
     bitno  = n % BITS_PER_MPI_LIMB;
 
     if( limbno >= a->nlimbs )
-	return; /* not allocated, therefore no need to clear bits
-		   :-) */
+    return; /* not allocated, therefore no need to clear bits
+           :-) */
 
     for( ; bitno < BITS_PER_MPI_LIMB; bitno++ )
-	a->d[limbno] &= ~(A_LIMB_1 << bitno);
+    a->d[limbno] &= ~(A_LIMB_1 << bitno);
     a->nlimbs = limbno+1;
 }
 
@@ -182,7 +182,7 @@ gcry_mpi_clear_bit( gcry_mpi_t a, unsigned int n )
     bitno  = n % BITS_PER_MPI_LIMB;
 
     if( limbno >= a->nlimbs )
-	return; /* don't need to clear this bit, it's to far to left */
+    return; /* don't need to clear this bit, it's to far to left */
     a->d[limbno] &= ~(A_LIMB_1 << bitno);
 }
 
@@ -199,12 +199,12 @@ _gcry_mpi_rshift_limbs( gcry_mpi_t a, unsigned int count )
     unsigned int i;
 
     if( count >= n ) {
-	a->nlimbs = 0;
-	return;
+    a->nlimbs = 0;
+    return;
     }
 
     for( i = 0; i < n - count; i++ )
-	ap[i] = ap[i+count];
+    ap[i] = ap[i+count];
     ap[i] = 0;
     a->nlimbs -= count;
 }

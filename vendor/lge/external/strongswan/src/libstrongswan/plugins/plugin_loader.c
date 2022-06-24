@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2010-2014 Tobias Brunner
  * Copyright (C) 2007 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,7 +21,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string.h>
+#ifdef HAVE_DLADDR
 #include <dlfcn.h>
+#endif
 #include <limits.h>
 #include <stdio.h>
 
@@ -37,6 +39,13 @@ typedef struct private_plugin_loader_t private_plugin_loader_t;
 typedef struct registered_feature_t registered_feature_t;
 typedef struct provided_feature_t provided_feature_t;
 typedef struct plugin_entry_t plugin_entry_t;
+
+#ifdef STATIC_PLUGIN_CONSTRUCTORS
+/**
+ * Statically registered constructors
+ */
+static hashtable_t *plugin_constructors = NULL;
+#endif
 
 /**
  * private data of plugin_loader
@@ -105,7 +114,7 @@ struct registered_feature_t {
 /**
  * Hash a registered feature
  */
-static bool registered_feature_hash(registered_feature_t *this)
+static u_int registered_feature_hash(registered_feature_t *this)
 {
 	return plugin_feature_hash(this->feature);
 }
@@ -216,6 +225,16 @@ typedef struct {
 	char *name;
 
 	/**
+	 * Optional reload function for features
+	 */
+	bool (*reload)(void *data);
+
+	/**
+	 * User data to pass to reload function
+	 */
+	void *reload_data;
+
+	/**
 	 * Static plugin features
 	 */
 	plugin_feature_t *features;
@@ -240,6 +259,16 @@ METHOD(plugin_t, get_static_features, int,
 	return this->count;
 }
 
+METHOD(plugin_t, static_reload, bool,
+	static_features_t *this)
+{
+	if (this->reload)
+	{
+		return this->reload(this->reload_data);
+	}
+	return FALSE;
+}
+
 METHOD(plugin_t, static_destroy, void,
 	static_features_t *this)
 {
@@ -252,7 +281,8 @@ METHOD(plugin_t, static_destroy, void,
  * Create a wrapper around static plugin features.
  */
 static plugin_t *static_features_create(const char *name,
-										plugin_feature_t features[], int count)
+										plugin_feature_t features[], int count,
+										bool (*reload)(void*), void *reload_data)
 {
 	static_features_t *this;
 
@@ -260,9 +290,12 @@ static plugin_t *static_features_create(const char *name,
 		.public = {
 			.get_name = _get_static_name,
 			.get_features = _get_static_features,
+			.reload = _static_reload,
 			.destroy = _static_destroy,
 		},
 		.name = strdup(name),
+		.reload = reload,
+		.reload_data = reload_data,
 		.features = calloc(count, sizeof(plugin_feature_t)),
 		.count = count,
 	);
@@ -271,6 +304,46 @@ static plugin_t *static_features_create(const char *name,
 
 	return &this->public;
 }
+
+#ifdef STATIC_PLUGIN_CONSTRUCTORS
+/*
+ * Described in header.
+ */
+void plugin_constructor_register(char *name, void *constructor)
+{
+	bool old = FALSE;
+
+	if (lib && lib->leak_detective)
+	{
+		old = lib->leak_detective->set_state(lib->leak_detective, FALSE);
+	}
+
+	if (!plugin_constructors)
+	{
+		chunk_hash_seed();
+		plugin_constructors = hashtable_create(hashtable_hash_str,
+											   hashtable_equals_str, 32);
+	}
+	if (constructor)
+	{
+		plugin_constructors->put(plugin_constructors, name, constructor);
+	}
+	else
+	{
+		plugin_constructors->remove(plugin_constructors, name);
+		if (!plugin_constructors->get_count(plugin_constructors))
+		{
+			plugin_constructors->destroy(plugin_constructors);
+			plugin_constructors = NULL;
+		}
+	}
+
+	if (lib && lib->leak_detective)
+	{
+		lib->leak_detective->set_state(lib->leak_detective, old);
+	}
+}
+#endif
 
 /**
  * create a plugin
@@ -283,7 +356,7 @@ static status_t create_plugin(private_plugin_loader_t *this, void *handle,
 {
 	char create[128];
 	plugin_t *plugin;
-	plugin_constructor_t constructor;
+	plugin_constructor_t constructor = NULL;
 
 	if (snprintf(create, sizeof(create), "%s_plugin_create",
 				 name) >= sizeof(create))
@@ -291,8 +364,17 @@ static status_t create_plugin(private_plugin_loader_t *this, void *handle,
 		return FAILED;
 	}
 	translate(create, "-", "_");
-	constructor = dlsym(handle, create);
-	if (constructor == NULL)
+#ifdef STATIC_PLUGIN_CONSTRUCTORS
+	if (plugin_constructors)
+	{
+		constructor = plugin_constructors->get(plugin_constructors, name);
+	}
+	if (!constructor)
+#endif
+	{
+		constructor = dlsym(handle, create);
+	}
+	if (!constructor)
 	{
 		return NOT_FOUND;
 	}
@@ -330,6 +412,7 @@ static plugin_entry_t *load_plugin(private_plugin_loader_t *this, char *name,
 {
 	plugin_entry_t *entry;
 	void *handle;
+	int flag = RTLD_LAZY;
 
 	switch (create_plugin(this, RTLD_DEFAULT, name, FALSE, critical, &entry))
 	{
@@ -354,7 +437,19 @@ static plugin_entry_t *load_plugin(private_plugin_loader_t *this, char *name,
 			return NULL;
 		}
 	}
-	handle = dlopen(file, RTLD_LAZY);
+	if (lib->settings->get_bool(lib->settings, "%s.dlopen_use_rtld_now",
+								FALSE, lib->ns))
+	{
+		flag = RTLD_NOW;
+	}
+#ifdef RTLD_NODELETE
+	/* If supported, do not unload the library when unloading a plugin. It
+	 * really doesn't matter in productive systems, but causes many (dependency)
+	 * library reloads during unit tests. Some libraries can't handle that, e.g.
+	 * GnuTLS leaks file descriptors in its library load/unload functions. */
+	flag |= RTLD_NODELETE;
+#endif
+	handle = dlopen(file, flag);
 	if (handle == NULL)
 	{
 		DBG1(DBG_LIB, "plugin '%s' failed to load: %s", name, dlerror());
@@ -370,34 +465,48 @@ static plugin_entry_t *load_plugin(private_plugin_loader_t *this, char *name,
 	return entry;
 }
 
-/**
- * Convert enumerated provided_feature_t to plugin_feature_t
- */
-static bool feature_filter(void *null, provided_feature_t **provided,
-						   plugin_feature_t **feature)
+CALLBACK(feature_filter, bool,
+	void *null, enumerator_t *orig, va_list args)
 {
-	*feature = (*provided)->feature;
-	return (*provided)->loaded;
+	provided_feature_t *provided;
+	plugin_feature_t **feature;
+
+	VA_ARGS_VGET(args, feature);
+
+	while (orig->enumerate(orig, &provided))
+	{
+		if (provided->loaded)
+		{
+			*feature = provided->feature;
+			return TRUE;
+		}
+	}
+	return FALSE;
 }
 
-/**
- * Convert enumerated entries to plugin_t
- */
-static bool plugin_filter(void *null, plugin_entry_t **entry, plugin_t **plugin,
-						  void *in, linked_list_t **list)
+CALLBACK(plugin_filter, bool,
+	void *null, enumerator_t *orig, va_list args)
 {
-	plugin_entry_t *this = *entry;
+	plugin_entry_t *entry;
+	linked_list_t **list;
+	plugin_t **plugin;
 
-	*plugin = this->plugin;
-	if (list)
+	VA_ARGS_VGET(args, plugin, list);
+
+	if (orig->enumerate(orig, &entry))
 	{
-		enumerator_t *features;
-		features = enumerator_create_filter(
-							this->features->create_enumerator(this->features),
-							(void*)feature_filter, NULL, NULL);
-		*list = linked_list_create_from_enumerator(features);
+		*plugin = entry->plugin;
+		if (list)
+		{
+			enumerator_t *features;
+			features = enumerator_create_filter(
+							entry->features->create_enumerator(entry->features),
+							feature_filter, NULL, NULL);
+			*list = linked_list_create_from_enumerator(features);
+		}
+		return TRUE;
 	}
-	return TRUE;
+	return FALSE;
 }
 
 METHOD(plugin_loader_t, create_plugin_enumerator, enumerator_t*,
@@ -405,7 +514,7 @@ METHOD(plugin_loader_t, create_plugin_enumerator, enumerator_t*,
 {
 	return enumerator_create_filter(
 							this->plugins->create_enumerator(this->plugins),
-							(void*)plugin_filter, NULL, NULL);
+							plugin_filter, NULL, NULL);
 }
 
 METHOD(plugin_loader_t, has_feature, bool,
@@ -497,18 +606,14 @@ static void load_provided(private_plugin_loader_t *this,
 						  provided_feature_t *provided,
 						  int level);
 
-/**
- * Used to find a loaded feature
- */
-static bool is_feature_loaded(provided_feature_t *item)
+CALLBACK(is_feature_loaded, bool,
+	provided_feature_t *item, va_list args)
 {
 	return item->loaded;
 }
 
-/**
- * Used to find a loadable feature
- */
-static bool is_feature_loadable(provided_feature_t *item)
+CALLBACK(is_feature_loadable, bool,
+	provided_feature_t *item, va_list args)
 {
 	return !item->loading && !item->loaded && !item->failed;
 }
@@ -521,8 +626,7 @@ static bool loaded_feature_matches(registered_feature_t *a,
 {
 	if (plugin_feature_matches(a->feature, b->feature))
 	{
-		return b->plugins->find_first(b->plugins, (void*)is_feature_loaded,
-									  NULL) == SUCCESS;
+		return b->plugins->find_first(b->plugins, is_feature_loaded, NULL);
 	}
 	return FALSE;
 }
@@ -535,8 +639,7 @@ static bool loadable_feature_equals(registered_feature_t *a,
 {
 	if (plugin_feature_equals(a->feature, b->feature))
 	{
-		return b->plugins->find_first(b->plugins, (void*)is_feature_loadable,
-									  NULL) == SUCCESS;
+		return b->plugins->find_first(b->plugins, is_feature_loadable, NULL);
 	}
 	return FALSE;
 }
@@ -549,8 +652,7 @@ static bool loadable_feature_matches(registered_feature_t *a,
 {
 	if (plugin_feature_matches(a->feature, b->feature))
 	{
-		return b->plugins->find_first(b->plugins, (void*)is_feature_loadable,
-									  NULL) == SUCCESS;
+		return b->plugins->find_first(b->plugins, is_feature_loadable, NULL);
 	}
 	return FALSE;
 }
@@ -596,7 +698,6 @@ static bool load_dependencies(private_plugin_loader_t *this,
 							  int level)
 {
 	registered_feature_t *registered, lookup;
-	int indent = level * 2;
 	int i;
 
 	/* first entry is provided feature, followed by dependencies */
@@ -635,8 +736,11 @@ static bool load_dependencies(private_plugin_loader_t *this,
 
 		if (!find_compatible_feature(this, &provided->feature[i]))
 		{
-			char *name, *provide, *depend;
 			bool soft = provided->feature[i].kind == FEATURE_SDEPEND;
+
+#ifndef USE_FUZZING
+			char *name, *provide, *depend;
+			int indent = level * 2;
 
 			name = provided->entry->plugin->get_name(provided->entry->plugin);
 			provide = plugin_feature_get_string(&provided->feature[0]);
@@ -658,6 +762,8 @@ static bool load_dependencies(private_plugin_loader_t *this,
 			}
 			free(provide);
 			free(depend);
+#endif /* !USE_FUZZING */
+
 			if (soft)
 			{	/* it's ok if we can't resolve soft dependencies */
 				continue;
@@ -677,8 +783,6 @@ static void load_feature(private_plugin_loader_t *this,
 {
 	if (load_dependencies(this, provided, level))
 	{
-		char *name, *provide;
-
 		if (plugin_feature_load(provided->entry->plugin, provided->feature,
 								provided->reg))
 		{
@@ -687,6 +791,9 @@ static void load_feature(private_plugin_loader_t *this,
 			this->loaded->insert_first(this->loaded, provided);
 			return;
 		}
+
+#ifndef USE_FUZZING
+		char *name, *provide;
 
 		name = provided->entry->plugin->get_name(provided->entry->plugin);
 		provide = plugin_feature_get_string(&provided->feature[0]);
@@ -701,6 +808,7 @@ static void load_feature(private_plugin_loader_t *this,
 				 provide, name);
 		}
 		free(provide);
+#endif /* !USE_FUZZING */
 	}
 	else
 	{	/* TODO: we could check the current level and set a different flag when
@@ -720,13 +828,16 @@ static void load_provided(private_plugin_loader_t *this,
 						  provided_feature_t *provided,
 						  int level)
 {
-	char *name, *provide;
-	int indent = level * 2;
 
 	if (provided->loaded || provided->failed)
 	{
 		return;
 	}
+
+#ifndef USE_FUZZING
+	char *name, *provide;
+	int indent = level * 2;
+
 	name = provided->entry->plugin->get_name(provided->entry->plugin);
 	provide = plugin_feature_get_string(provided->feature);
 	if (provided->loading)
@@ -739,6 +850,12 @@ static void load_provided(private_plugin_loader_t *this,
 	DBG3(DBG_LIB, "%*sloading feature %s in plugin '%s'",
 		 indent, "", provide, name);
 	free(provide);
+#else
+	if (provided->loading)
+	{
+		return;
+	}
+#endif /* USE_FUZZING */
 
 	provided->loading = TRUE;
 	load_feature(this, provided, level + 1);
@@ -887,8 +1004,8 @@ static void purge_plugins(private_plugin_loader_t *this)
 		{	/* feature interface not supported */
 			continue;
 		}
-		if (entry->features->find_first(entry->features,
-									(void*)is_feature_loaded, NULL) != SUCCESS)
+		if (!entry->features->find_first(entry->features, is_feature_loaded,
+										 NULL))
 		{
 			DBG2(DBG_LIB, "unloading plugin '%s' without loaded features",
 				 entry->plugin->get_name(entry->plugin));
@@ -902,12 +1019,13 @@ static void purge_plugins(private_plugin_loader_t *this)
 
 METHOD(plugin_loader_t, add_static_features, void,
 	private_plugin_loader_t *this, const char *name,
-	plugin_feature_t features[], int count, bool critical)
+	plugin_feature_t features[], int count, bool critical,
+	bool (*reload)(void*), void *reload_data)
 {
 	plugin_entry_t *entry;
 	plugin_t *plugin;
 
-	plugin = static_features_create(name, features, count);
+	plugin = static_features_create(name, features, count, reload, reload_data);
 
 	INIT(entry,
 		.plugin = plugin,
@@ -935,6 +1053,15 @@ static bool find_plugin(char *path, char *name, char *buf, char **file)
 		}
 	}
 	return FALSE;
+}
+
+CALLBACK(find_plugin_cb, bool,
+	char *path, va_list args)
+{
+	char *name, *buf, **file;
+
+	VA_ARGS_VGET(args, name, buf, file);
+	return find_plugin(path, name, buf, file);
 }
 
 /**
@@ -984,6 +1111,21 @@ static int plugin_priority_cmp(const plugin_priority_t *a,
 	return diff;
 }
 
+CALLBACK(plugin_priority_filter, bool,
+	void *null, enumerator_t *orig, va_list args)
+{
+	plugin_priority_t *prio;
+	char **name;
+
+	VA_ARGS_VGET(args, name);
+
+	if (orig->enumerate(orig, &prio))
+	{
+		*name = prio->name;
+		return TRUE;
+	}
+	return FALSE;
+}
 
 /**
  * Determine the list of plugins to load via load option in each plugin's
@@ -996,12 +1138,7 @@ static char *modular_pluginlist(char *list)
 	plugin_priority_t item, *current, found;
 	char *plugin, *plugins = NULL;
 	int i = 0, max_prio;
-
-	if (!lib->settings->get_bool(lib->settings, "%s.load_modular", FALSE,
-								 lib->ns))
-	{
-		return list;
-	}
+	bool load_def = FALSE;
 
 	given = array_create(sizeof(plugin_priority_t), 0);
 	final = array_create(sizeof(plugin_priority_t), 0);
@@ -1018,16 +1155,26 @@ static char *modular_pluginlist(char *list)
 	/* the maximum priority used for plugins not found in this list */
 	max_prio = i + 1;
 
-	enumerator = lib->settings->create_section_enumerator(lib->settings,
+	if (lib->settings->get_bool(lib->settings, "%s.load_modular", FALSE,
+								lib->ns))
+	{
+		enumerator = lib->settings->create_section_enumerator(lib->settings,
 														"%s.plugins", lib->ns);
+	}
+	else
+	{
+		enumerator = enumerator_create_filter(array_create_enumerator(given),
+										plugin_priority_filter, NULL, NULL);
+		load_def = TRUE;
+	}
 	while (enumerator->enumerate(enumerator, &plugin))
 	{
 		item.prio = lib->settings->get_int(lib->settings,
-								"%s.plugins.%s.load", 0, lib->ns, plugin);
+							"%s.plugins.%s.load", 0, lib->ns, plugin);
 		if (!item.prio)
 		{
 			if (!lib->settings->get_bool(lib->settings,
-								"%s.plugins.%s.load", FALSE, lib->ns, plugin))
+							"%s.plugins.%s.load", load_def, lib->ns, plugin))
 			{
 				continue;
 			}
@@ -1043,10 +1190,10 @@ static char *modular_pluginlist(char *list)
 		array_insert(final, ARRAY_TAIL, &item);
 	}
 	enumerator->destroy(enumerator);
-	array_destroy_function(given, (void*)plugin_priority_free, NULL);
 
 	array_sort(final, (void*)plugin_priority_cmp, NULL);
 
+	plugins = strdup("");
 	enumerator = array_create_enumerator(final);
 	while (enumerator->enumerate(enumerator, &current))
 	{
@@ -1059,6 +1206,7 @@ static char *modular_pluginlist(char *list)
 		free(prev);
 	}
 	enumerator->destroy(enumerator);
+	array_destroy_function(given, (void*)plugin_priority_free, NULL);
 	array_destroy(final);
 	return plugins;
 }
@@ -1098,8 +1246,8 @@ METHOD(plugin_loader_t, load_plugins, bool,
 		}
 		if (this->paths)
 		{
-			this->paths->find_first(this->paths, (void*)find_plugin, NULL,
-									token, buf, &file);
+			this->paths->find_first(this->paths, find_plugin_cb, NULL, token,
+									buf, &file);
 		}
 		if (!file)
 		{
@@ -1255,9 +1403,9 @@ METHOD(plugin_loader_t, status, void,
 
 		if (this->stats.failed)
 		{
-			dbg(DBG_LIB, level, "unable to load %d plugin feature%s (%d due to "
-				"unmet dependencies)", this->stats.failed,
-				this->stats.failed == 1 ? "" : "s", this->stats.depends);
+			DBG2(DBG_LIB, "unable to load %d plugin feature%s (%d due to unmet "
+				 "dependencies)", this->stats.failed,
+				 this->stats.failed == 1 ? "" : "s", this->stats.depends);
 		}
 	}
 }
@@ -1312,7 +1460,7 @@ void plugin_loader_add_plugindirs(char *basedir, char *plugins)
 	enumerator_t *enumerator;
 	char *name, path[PATH_MAX], dir[64];
 
-	enumerator = enumerator_create_token(plugins, " ", "");
+	enumerator = enumerator_create_token(plugins, " ", "!");
 	while (enumerator->enumerate(enumerator, &name))
 	{
 		snprintf(dir, sizeof(dir), "%s", name);

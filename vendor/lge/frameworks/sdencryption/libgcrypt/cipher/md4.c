@@ -60,7 +60,7 @@
 
 
 typedef struct {
-    u32 A,B,C,D;	  /* chaining variables */
+    u32 A,B,C,D;      /* chaining variables */
     u32  nblocks;
     byte buf[64];
     int  count;
@@ -104,10 +104,10 @@ transform ( MD4_CONTEXT *ctx, const unsigned char *data )
     byte *p2, *p1;
     for(i=0, p1=data, p2=(byte*)in; i < 16; i++, p2 += 4 )
       {
-	p2[3] = *p1++;
-	p2[2] = *p1++;
-	p2[1] = *p1++;
-	p2[0] = *p1++;
+    p2[3] = *p1++;
+    p2[2] = *p1++;
+    p2[1] = *p1++;
+    p2[0] = *p1++;
       }
   }
 #else
@@ -275,11 +275,11 @@ md4_final( void *context )
       memset(hd->buf, 0, 56 ); /* fill next block with zeroes */
     }
   /* append the 64 bit count */
-  hd->buf[56] = lsb	   ;
+  hd->buf[56] = lsb       ;
   hd->buf[57] = lsb >>  8;
   hd->buf[58] = lsb >> 16;
   hd->buf[59] = lsb >> 24;
-  hd->buf[60] = msb	   ;
+  hd->buf[60] = msb       ;
   hd->buf[61] = msb >>  8;
   hd->buf[62] = msb >> 16;
   hd->buf[63] = msb >> 24;
@@ -289,7 +289,7 @@ md4_final( void *context )
   p = hd->buf;
 #ifdef WORDS_BIGENDIAN
 #define X(a) do { *p++ = hd->a      ; *p++ = hd->a >> 8;      \
-		  *p++ = hd->a >> 16; *p++ = hd->a >> 24; } while(0)
+          *p++ = hd->a >> 16; *p++ = hd->a >> 24; } while(0)
 #else /* little endian */
 #define X(a) do { *(u32*)p = (*hd).a ; p += 4; } while(0)
 #endif

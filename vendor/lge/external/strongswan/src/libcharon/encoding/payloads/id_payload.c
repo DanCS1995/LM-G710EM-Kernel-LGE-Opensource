@@ -3,7 +3,7 @@
  * Copyright (C) 2010 revosec AG
  * Copyright (C) 2007-2011 Tobias Brunner
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -38,7 +38,7 @@ struct private_id_payload_t {
 	/**
 	 * Next payload type.
 	 */
-	u_int8_t next_payload;
+	uint8_t next_payload;
 
 	/**
 	 * Critical flag.
@@ -53,17 +53,17 @@ struct private_id_payload_t {
 	/**
 	 * Reserved bytes
 	 */
-	u_int8_t reserved_byte[3];
+	uint8_t reserved_byte[3];
 
 	/**
 	 * Length of this payload.
 	 */
-	u_int16_t payload_length;
+	uint16_t payload_length;
 
 	/**
 	 * Type of the ID Data.
 	 */
-	u_int8_t id_type;
+	uint8_t id_type;
 
 	/**
 	 * The contained id data value.
@@ -73,15 +73,15 @@ struct private_id_payload_t {
 	/**
 	 * Tunneled protocol ID for IKEv1 quick modes.
 	 */
-	u_int8_t protocol_id;
+	uint8_t protocol_id;
 
 	/**
 	 * Tunneled port for IKEv1 quick modes.
 	 */
-	u_int16_t port;
+	uint16_t port;
 
 	/**
-	 * one of ID_INITIATOR, ID_RESPONDER, IDv1 and NAT_OA_V1
+	 * one of PLV2_ID_INITIATOR, PLV2_ID_RESPONDER, IDv1 and PLV1_NAT_OA
 	 */
 	payload_type_t type;
 };
@@ -165,7 +165,7 @@ METHOD(payload_t, verify, status_t,
 {
 	bool bad_length = FALSE;
 
-	if ((this->type == NAT_OA_V1 || this->type == NAT_OA_DRAFT_00_03_V1) &&
+	if ((this->type == PLV1_NAT_OA || this->type == PLV1_NAT_OA_DRAFT_00_03) &&
 		this->id_type != ID_IPV4_ADDR && this->id_type != ID_IPV6_ADDR)
 	{
 		DBG1(DBG_ENC, "invalid ID type %N for %N payload", id_type_names,
@@ -195,8 +195,8 @@ METHOD(payload_t, verify, status_t,
 METHOD(payload_t, get_encoding_rules, int,
 	private_id_payload_t *this, encoding_rule_t **rules)
 {
-	if (this->type == ID_V1 ||
-		this->type == NAT_OA_V1 || this->type == NAT_OA_DRAFT_00_03_V1)
+	if (this->type == PLV1_ID ||
+		this->type == PLV1_NAT_OA || this->type == PLV1_NAT_OA_DRAFT_00_03)
 	{
 		*rules = encodings_v1;
 		return countof(encodings_v1);
@@ -258,17 +258,20 @@ static traffic_selector_t *get_ts_from_range(private_id_payload_t *this,
 static traffic_selector_t *get_ts_from_subnet(private_id_payload_t *this,
 											  ts_type_t type)
 {
+	traffic_selector_t *ts;
 	chunk_t net, netmask;
 	int i;
 
 	net = chunk_create(this->id_data.ptr, this->id_data.len / 2);
-	netmask = chunk_skip(this->id_data, this->id_data.len / 2);
+	netmask = chunk_clone(chunk_skip(this->id_data, this->id_data.len / 2));
 	for (i = 0; i < net.len; i++)
 	{
 		netmask.ptr[i] = (netmask.ptr[i] ^ 0xFF) | net.ptr[i];
 	}
-	return traffic_selector_create_from_bytes(this->protocol_id, type,
+	ts = traffic_selector_create_from_bytes(this->protocol_id, type,
 								net, this->port, netmask, this->port ?: 65535);
+	chunk_free(&netmask);
+	return ts;
 }
 
 /**
@@ -331,7 +334,7 @@ METHOD(id_payload_t, get_ts, traffic_selector_t*,
 METHOD(id_payload_t, get_encoded, chunk_t,
 	private_id_payload_t *this)
 {
-	u_int16_t port = htons(this->port);
+	uint16_t port = htons(this->port);
 	return chunk_cat("cccc", chunk_from_thing(this->id_type),
 					 chunk_from_thing(this->protocol_id),
 					 chunk_from_thing(port), this->id_data);
@@ -368,7 +371,7 @@ id_payload_t *id_payload_create(payload_type_t type)
 			.get_ts = _get_ts,
 			.destroy = _destroy,
 		},
-		.next_payload = NO_PAYLOAD,
+		.next_payload = PL_NONE,
 		.payload_length = get_header_length(this),
 		.type = type,
 	);
@@ -397,10 +400,10 @@ id_payload_t *id_payload_create_from_identification(payload_type_t type,
 id_payload_t *id_payload_create_from_ts(traffic_selector_t *ts)
 {
 	private_id_payload_t *this;
-	u_int8_t mask;
+	uint8_t mask;
 	host_t *net;
 
-	this = (private_id_payload_t*)id_payload_create(ID_V1);
+	this = (private_id_payload_t*)id_payload_create(PLV1_ID);
 
 	if (ts->is_host(ts, NULL))
 	{
@@ -416,7 +419,7 @@ id_payload_t *id_payload_create_from_ts(traffic_selector_t *ts)
 	}
 	else if (ts->to_subnet(ts, &net, &mask))
 	{
-		u_int8_t netmask[16], len, byte;
+		uint8_t netmask[16], len, byte;
 
 		if (ts->get_type(ts) == TS_IPV4_ADDR_RANGE)
 		{

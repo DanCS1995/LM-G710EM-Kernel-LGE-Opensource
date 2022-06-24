@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2007 Martin Willi
  * Copyright (C) 2006-2007 Fabian Hartmann, Noah Heusser
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,7 +17,6 @@
 #include "ike_config.h"
 
 #include <daemon.h>
-#include <hydra.h>
 #include <utils/cust_settings.h>
 #include <encoding/payloads/cp_payload.h>
 
@@ -119,12 +118,12 @@ static configuration_attribute_t *build_vip(host_t *vip)
 			chunk = chunk_cata("cc", chunk, prefix);
 		}
 	}
-	return configuration_attribute_create_chunk(CONFIGURATION_ATTRIBUTE,
+	return configuration_attribute_create_chunk(PLV2_CONFIGURATION_ATTRIBUTE,
 												type, chunk);
 }
 
 /**
- * build PCSCF_IPV4/6_ADDRESS attribute from pcscf
+* build PCSCF_IPV4/6_ADDRESS attribute from pcscf
  */
 static configuration_attribute_t *build_pcscf(host_t *pcscf, int slotid)
 {
@@ -161,7 +160,7 @@ static configuration_attribute_t *build_pcscf(host_t *pcscf, int slotid)
 		}
 	}
 	DBG1(DBG_IKE, "building %N attribute",  configuration_attribute_type_names, type);
-	return configuration_attribute_create_chunk(CONFIGURATION_ATTRIBUTE, type, chunk);
+	return configuration_attribute_create_chunk(PLV2_CONFIGURATION_ATTRIBUTE, type, chunk);
 }
 
 static configuration_attribute_t *build_imei(const char *imei, int slotid)
@@ -192,7 +191,7 @@ static configuration_attribute_t *build_imei(const char *imei, int slotid)
 
 	chunk = chunk_create(bin, 9);
 	DBG1(DBG_IKE, "building %N attribute",  configuration_attribute_type_names, type);
-	return configuration_attribute_create_chunk(CONFIGURATION_ATTRIBUTE, type, chunk);
+	return configuration_attribute_create_chunk(PLV2_CONFIGURATION_ATTRIBUTE, type, chunk);
 }
 
 /**
@@ -218,7 +217,7 @@ static configuration_attribute_t *build_intnetmask(host_t *intnetmask)
 	}
 
 	DBG1(DBG_IKE, "building %N attribute",  configuration_attribute_type_names, type);
-	return configuration_attribute_create_chunk(CONFIGURATION_ATTRIBUTE, type, chunk);
+	return configuration_attribute_create_chunk(PLV2_CONFIGURATION_ATTRIBUTE, type, chunk);
 }
 
 /**
@@ -258,7 +257,7 @@ static configuration_attribute_t *build_intsubnet(host_t *intsubnet)
 	}
 
 	DBG1(DBG_IKE, "building %N attribute",  configuration_attribute_type_names, type);
-	return configuration_attribute_create_chunk(CONFIGURATION_ATTRIBUTE, type, chunk);
+	return configuration_attribute_create_chunk(PLV2_CONFIGURATION_ATTRIBUTE, type, chunk);
 }
 
 
@@ -287,14 +286,10 @@ static void handle_attribute(private_ike_config_t *this,
 	enumerator->destroy(enumerator);
 
 	/* and pass it to the handle function */
-	handler = hydra->attributes->handle(hydra->attributes,
-							this->ike_sa->get_other_id(this->ike_sa), handler,
-							ca->get_type(ca), ca->get_chunk(ca));
-	if (handler)
-	{
-		this->ike_sa->add_configuration_attribute(this->ike_sa,
-				handler, ca->get_type(ca), ca->get_chunk(ca));
-	}
+	handler = charon->attributes->handle(charon->attributes,
+					this->ike_sa, handler, ca->get_type(ca), ca->get_chunk(ca));
+	this->ike_sa->add_configuration_attribute(this->ike_sa,
+							handler, ca->get_type(ca), ca->get_chunk(ca));
 }
 
 /**
@@ -327,9 +322,8 @@ static void process_attribute(private_ike_config_t *this,
 					uint8_t prefix = addr.ptr[16];
 					ip = host_create_from_chunk_with_prefix(family, addr, prefix);
 					addr.len--;
-				}
-				else {
-					ip = host_create_from_chunk(family, addr, 0);
+				} else {
+				    ip = host_create_from_chunk(family, addr, 0);
 				}
 
 				int slotid = get_slotid(this->ike_sa->get_name(this->ike_sa));
@@ -355,6 +349,7 @@ static void process_attribute(private_ike_config_t *this,
 			}
 			break;
 		}
+
 		case INTERNAL_IP4_NETMASK:
 		{
 			family = AF_INET;
@@ -420,6 +415,7 @@ static void process_attribute(private_ike_config_t *this,
 			break;
 		}
 #endif
+
 		case INTERNAL_IP4_SERVER:
 		case INTERNAL_IP6_SERVER:
 			/* assume it's a Windows client if we see proprietary attributes */
@@ -487,7 +483,7 @@ static void process_payloads(private_ike_config_t *this, message_t *message)
 	enumerator = message->create_payload_enumerator(message);
 	while (enumerator->enumerate(enumerator, &payload))
 	{
-		if (payload->get_type(payload) == CONFIGURATION)
+		if (payload->get_type(payload) == PLV2_CONFIGURATION)
 		{
 			cp_payload_t *cp = (cp_payload_t*)payload;
 			configuration_attribute_t *ca;
@@ -500,7 +496,7 @@ static void process_payloads(private_ike_config_t *this, message_t *message)
 					attributes = cp->create_attribute_enumerator(cp);
 					while (attributes->enumerate(attributes, &ca))
 					{
-						DBG1(DBG_IKE, "processing %N attribute",
+						DBG1 (DBG_IKE, "processing %N attribute",
 							 configuration_attribute_type_names, ca->get_type(ca));
 						process_attribute(this, ca);
 					}
@@ -555,7 +551,7 @@ METHOD(task_t, build_i, status_t,
 
 		if (vips->get_count(vips))
 		{
-			cp = cp_payload_create_type(CONFIGURATION, CFG_REQUEST);
+			cp = cp_payload_create_type(PLV2_CONFIGURATION, CFG_REQUEST);
 			enumerator = vips->create_enumerator(vips);
 			while (enumerator->enumerate(enumerator, &host))
 			{
@@ -564,21 +560,21 @@ METHOD(task_t, build_i, status_t,
 			enumerator->destroy(enumerator);
 		}
 
-		enumerator = hydra->attributes->create_initiator_enumerator(
-								hydra->attributes,
-								this->ike_sa->get_other_id(this->ike_sa), vips);
+		enumerator = charon->attributes->create_initiator_enumerator(
+										charon->attributes, this->ike_sa, vips);
 		while (enumerator->enumerate(enumerator, &handler, &type, &data))
 		{
 			configuration_attribute_t *ca;
 			entry_t *entry;
+
 			/* create configuration attribute */
 			DBG1(DBG_IKE, "building %N attribute",
 				 configuration_attribute_type_names, type);
-			ca = configuration_attribute_create_chunk(CONFIGURATION_ATTRIBUTE,
+			ca = configuration_attribute_create_chunk(PLV2_CONFIGURATION_ATTRIBUTE,
 													  type, data);
 			if (!cp)
 			{
-				cp = cp_payload_create_type(CONFIGURATION, CFG_REQUEST);
+				cp = cp_payload_create_type(PLV2_CONFIGURATION, CFG_REQUEST);
 			}
 			cp->add_attribute(cp, ca);
 
@@ -590,6 +586,7 @@ METHOD(task_t, build_i, status_t,
 			this->requested->insert_last(this->requested, entry);
 		}
 		enumerator->destroy(enumerator);
+
 		vips->destroy(vips);
 
 		//	add pcscf to request payload
@@ -605,7 +602,7 @@ METHOD(task_t, build_i, status_t,
 		if (pcscfs->get_count(pcscfs))
 		{
 			if (!cp) {
-				cp = cp_payload_create_type(CONFIGURATION, CFG_REQUEST);
+				cp = cp_payload_create_type(PLV2_CONFIGURATION, CFG_REQUEST);
 			}
 			enumerator = pcscfs->create_enumerator(pcscfs);
 			while (enumerator->enumerate(enumerator, &host))
@@ -620,7 +617,7 @@ METHOD(task_t, build_i, status_t,
 		if (config->get_imei(config)) {
 			DBG1(DBG_IKE, "get_imei: [%s]", config->get_imei(config));
 			if(!cp) {
-				cp = cp_payload_create_type(CONFIGURATION, CFG_REQUEST);
+				cp = cp_payload_create_type(PLV2_CONFIGURATION, CFG_REQUEST);
 			}
 			int slotid = get_slotid(this->ike_sa->get_name(this->ike_sa));
 			cp->add_attribute(cp, build_imei(config->get_imei(config), slotid));
@@ -638,7 +635,7 @@ METHOD(task_t, build_i, status_t,
 		if (intnetmasks->get_count(intnetmasks))
 		{
 			if (!cp) {
-				cp = cp_payload_create_type(CONFIGURATION, CFG_REQUEST);
+				cp = cp_payload_create_type(PLV2_CONFIGURATION, CFG_REQUEST);
 			}
 			enumerator = intnetmasks->create_enumerator(intnetmasks);
 			while (enumerator->enumerate(enumerator, &host))
@@ -662,7 +659,7 @@ METHOD(task_t, build_i, status_t,
 		if (intsubnets ->get_count(intsubnets))
 		{
 			if (!cp) {
-				cp = cp_payload_create_type(CONFIGURATION, CFG_REQUEST);
+				cp = cp_payload_create_type(PLV2_CONFIGURATION, CFG_REQUEST);
 			}
 			enumerator = intsubnets->create_enumerator(intsubnets );
 			while (enumerator->enumerate(enumerator, &host))
@@ -672,6 +669,7 @@ METHOD(task_t, build_i, status_t,
 			enumerator->destroy(enumerator);
 		}
 		intsubnets->destroy(intsubnets);
+
 		if (cp)
 		{
 			message->add_payload(message, (payload_t*)cp);
@@ -725,15 +723,15 @@ METHOD(task_t, build_r, status_t,
 			/* query all pools until we get an address */
 			DBG1(DBG_IKE, "peer requested virtual IP %H", requested);
 
-			found = hydra->attributes->acquire_address(hydra->attributes,
-													   pools, id, requested);
+			found = charon->attributes->acquire_address(charon->attributes,
+												pools, this->ike_sa, requested);
 			if (found)
 			{
 				DBG1(DBG_IKE, "assigning virtual IP %H to peer '%Y'", found, id);
 				this->ike_sa->add_virtual_ip(this->ike_sa, FALSE, found);
 				if (!cp)
 				{
-					cp = cp_payload_create_type(CONFIGURATION, CFG_REPLY);
+					cp = cp_payload_create_type(PLV2_CONFIGURATION, CFG_REPLY);
 				}
 				cp->add_attribute(cp, build_vip(found));
 				vips->insert_last(vips, found);
@@ -771,18 +769,18 @@ METHOD(task_t, build_r, status_t,
 		}
 
 		/* query registered providers for additional attributes to include */
-		enumerator = hydra->attributes->create_responder_enumerator(
-											hydra->attributes, pools, id, vips);
+		enumerator = charon->attributes->create_responder_enumerator(
+								charon->attributes, pools, this->ike_sa, vips);
 		while (enumerator->enumerate(enumerator, &type, &value))
 		{
 			if (!cp)
 			{
-				cp = cp_payload_create_type(CONFIGURATION, CFG_REPLY);
+				cp = cp_payload_create_type(PLV2_CONFIGURATION, CFG_REPLY);
 			}
 			DBG2(DBG_IKE, "building %N attribute",
 				 configuration_attribute_type_names, type);
 			cp->add_attribute(cp,
-				configuration_attribute_create_chunk(CONFIGURATION_ATTRIBUTE,
+				configuration_attribute_create_chunk(PLV2_CONFIGURATION_ATTRIBUTE,
 													 type, value));
 		}
 		enumerator->destroy(enumerator);
@@ -863,6 +861,7 @@ METHOD(task_t, process_i, status_t,
 		}
 		enumerator->destroy(enumerator);
 
+		charon->bus->handle_vips(charon->bus, this->ike_sa, TRUE);
 		return SUCCESS;
 	}
 	return NEED_MORE;

@@ -8,7 +8,6 @@ EXTRA_PROGRAMS = checksum_builder
 checksum_builder_SOURCES = checksum_builder.c
 checksum_builder_LDADD = \
 	$(top_builddir)/src/libstrongswan/libstrongswan.la \
-	$(top_builddir)/src/libhydra/libhydra.la \
 	$(top_builddir)/src/libcharon/libcharon.la \
 	$(DLLIB)
 checksum_builder_LDFLAGS = -rpath '$(DESTDIR)$(ipseclibdir)'
@@ -17,12 +16,11 @@ CLEANFILES = checksum.c $(EXTRA_PROGRAMS)
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/libstrongswan \
-	-I$(top_srcdir)/src/libhydra \
 	-I$(top_srcdir)/src/libcharon \
 	-DPLUGINDIR=\"${DESTDIR}${plugindir}\"
 
 AM_CFLAGS = \
-	-rdynamic
+	$(PLUGIN_CFLAGS)
 
 # we keep track of build dependencies in deps and use libs to store the paths
 # to the installed libraries. for executables we use the built files directly
@@ -33,14 +31,6 @@ exes =
 
 if !MONOLITHIC
   AM_CPPFLAGS += -DS_PLUGINS=\""${s_plugins}\""
-endif
-
-if USE_LIBHYDRA
-  deps += $(top_builddir)/src/libhydra/libhydra.la
-  libs += $(DESTDIR)$(ipseclibdir)/libhydra.so
-if !MONOLITHIC
-  AM_CPPFLAGS += -DH_PLUGINS=\""${h_plugins}\""
-endif
 endif
 
 if USE_LIBIPSEC
@@ -58,9 +48,23 @@ if USE_RADIUS
   libs += $(DESTDIR)$(ipseclibdir)/libradius.so
 endif
 
+if USE_LIBNTTFFT
+  deps += $(top_builddir)/src/libstrongswan/math/libnttfft/libnttfft.la
+  libs += $(DESTDIR)$(ipseclibdir)/libnttfft.so
+endif
+
 if USE_LIBPTTLS
   deps += $(top_builddir)/src/libpttls/libpttls.la
   libs += $(DESTDIR)$(ipseclibdir)/libpttls.so
+endif
+
+if USE_LIBTPMTSS
+  deps += $(top_builddir)/src/libtpmtss/libtpmtss.la
+  libs += $(DESTDIR)$(ipseclibdir)/libtpmtss.so
+if !MONOLITHIC
+  AM_CPPFLAGS += -DP_PLUGINS=\""${p_plugins}\""
+endif
+
 endif
 
 if USE_LIBTNCCS
@@ -81,11 +85,6 @@ if USE_IMCV
   libs += $(DESTDIR)$(ipseclibdir)/libimcv.so
 endif
 
-if USE_PTS
-  deps += $(top_builddir)/src/libpts/libpts.la
-  libs += $(DESTDIR)$(ipseclibdir)/libpts.so
-endif
-
 if USE_CHARON
   deps += $(top_builddir)/src/libcharon/libcharon.la
   libs += $(DESTDIR)$(ipseclibdir)/libcharon.so
@@ -99,10 +98,20 @@ if USE_CMD
   exes += $(DESTDIR)$(sbindir)/charon-cmd
 endif
 
-if USE_TOOLS
-  exes += $(DESTDIR)$(ipsecdir)/openac
+if USE_SYSTEMD
+  exes += $(DESTDIR)$(sbindir)/charon-systemd
+endif
+
+if USE_SCEPCLIENT
   exes += $(DESTDIR)$(ipsecdir)/scepclient
+endif
+
+if USE_PKI
   exes += $(DESTDIR)$(bindir)/pki
+endif
+
+if USE_SWANCTL
+  exes += $(DESTDIR)$(sbindir)/swanctl
 endif
 
 if USE_ATTR_SQL
@@ -111,6 +120,18 @@ endif
 
 if USE_IMV_ATTESTATION
   exes += $(DESTDIR)$(ipsecdir)/attest
+endif
+
+if USE_LIBPTTLS
+  exes += $(DESTDIR)$(bindir)/pt-tls-client
+endif
+
+if USE_IMC_SWIMA
+  exes += $(DESTDIR)$(sbindir)/sw-collector
+endif
+
+if USE_IMV_SWIMA
+  exes += $(DESTDIR)$(sbindir)/sec-updater
 endif
 
 checksum.c : checksum_builder $(deps) $(exes)

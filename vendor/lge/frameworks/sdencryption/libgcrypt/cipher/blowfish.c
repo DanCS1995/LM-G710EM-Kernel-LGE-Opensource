@@ -1,5 +1,5 @@
 /* blowfish.c  -  Blowfish encryption
- *	Copyright (C) 1998, 2001, 2002, 2003 Free Software Foundation, Inc.
+ *    Copyright (C) 1998, 2001, 2002, 2003 Free Software Foundation, Inc.
  *
  * This file is part of Libgcrypt.
  *
@@ -23,7 +23,7 @@
  */
 
 /* Test values:
- * key	  "abcdefghijklmnopqrstuvwxyz";
+ * key      "abcdefghijklmnopqrstuvwxyz";
  * plain  "BLOWFISH"
  * cipher 32 4E D0 FE F4 13 A2 03
  *
@@ -264,11 +264,11 @@ function_F( BLOWFISH_context *bc, u32 x )
 #endif
 
 #ifdef WORDS_BIGENDIAN
-#define F(x) ((( s0[((byte*)&x)[0]] + s1[((byte*)&x)[1]])	 \
-		   ^ s2[((byte*)&x)[2]]) + s3[((byte*)&x)[3]] )
+#define F(x) ((( s0[((byte*)&x)[0]] + s1[((byte*)&x)[1]])     \
+           ^ s2[((byte*)&x)[2]]) + s3[((byte*)&x)[3]] )
 #else
-#define F(x) ((( s0[((byte*)&x)[3]] + s1[((byte*)&x)[2]])	 \
-		   ^ s2[((byte*)&x)[1]]) + s3[((byte*)&x)[0]] )
+#define F(x) ((( s0[((byte*)&x)[3]] + s1[((byte*)&x)[2]])     \
+           ^ s2[((byte*)&x)[1]]) + s3[((byte*)&x)[0]] )
 #endif
 #define R(l,r,i)  do { l ^= p[i]; r ^= F(l); } while(0)
 
@@ -287,16 +287,16 @@ do_encrypt ( BLOWFISH_context *bc, u32 *ret_xl, u32 *ret_xr )
   s2 = bc->s2;
   s3 = bc->s3;
 
-  R( xl, xr,	0);
-  R( xr, xl,	1);
-  R( xl, xr,	2);
-  R( xr, xl,	3);
-  R( xl, xr,	4);
-  R( xr, xl,	5);
-  R( xl, xr,	6);
-  R( xr, xl,	7);
-  R( xl, xr,	8);
-  R( xr, xl,	9);
+  R( xl, xr,    0);
+  R( xr, xl,    1);
+  R( xl, xr,    2);
+  R( xr, xl,    3);
+  R( xl, xr,    4);
+  R( xr, xl,    5);
+  R( xl, xr,    6);
+  R( xr, xl,    7);
+  R( xl, xr,    8);
+  R( xr, xl,    9);
   R( xl, xr, 10);
   R( xr, xl, 11);
   R( xl, xr, 12);
@@ -361,14 +361,14 @@ decrypt ( BLOWFISH_context *bc, u32 *ret_xl, u32 *ret_xr )
   R( xr, xl, 12);
   R( xl, xr, 11);
   R( xr, xl, 10);
-  R( xl, xr,	9);
-  R( xr, xl,	8);
-  R( xl, xr,	7);
-  R( xr, xl,	6);
-  R( xl, xr,	5);
-  R( xr, xl,	4);
-  R( xl, xr,	3);
-  R( xr, xl,	2);
+  R( xl, xr,    9);
+  R( xr, xl,    8);
+  R( xl, xr,    7);
+  R( xr, xl,    6);
+  R( xl, xr,    5);
+  R( xr, xl,    4);
+  R( xl, xr,    3);
+  R( xr, xl,    2);
 
   xl ^= p[1];
   xr ^= p[0];
@@ -418,12 +418,12 @@ do_encrypt_block ( BLOWFISH_context *bc, byte *outbuf, const byte *inbuf )
   do_encrypt( bc, &d1, &d2 );
   outbuf[0] = (d1 >> 24) & 0xff;
   outbuf[1] = (d1 >> 16) & 0xff;
-  outbuf[2] = (d1 >>	8) & 0xff;
-  outbuf[3] =  d1	   & 0xff;
+  outbuf[2] = (d1 >>    8) & 0xff;
+  outbuf[3] =  d1       & 0xff;
   outbuf[4] = (d2 >> 24) & 0xff;
   outbuf[5] = (d2 >> 16) & 0xff;
-  outbuf[6] = (d2 >>	8) & 0xff;
-  outbuf[7] =  d2	   & 0xff;
+  outbuf[6] = (d2 >>    8) & 0xff;
+  outbuf[7] =  d2       & 0xff;
 }
 
 static void
@@ -445,12 +445,12 @@ do_decrypt_block (BLOWFISH_context *bc, byte *outbuf, const byte *inbuf)
   decrypt( bc, &d1, &d2 );
   outbuf[0] = (d1 >> 24) & 0xff;
   outbuf[1] = (d1 >> 16) & 0xff;
-  outbuf[2] = (d1 >>	8) & 0xff;
-  outbuf[3] =  d1	   & 0xff;
+  outbuf[2] = (d1 >>    8) & 0xff;
+  outbuf[3] =  d1       & 0xff;
   outbuf[4] = (d2 >> 24) & 0xff;
   outbuf[5] = (d2 >> 16) & 0xff;
-  outbuf[6] = (d2 >>	8) & 0xff;
-  outbuf[7] =  d2	   & 0xff;
+  outbuf[6] = (d2 >>    8) & 0xff;
+  outbuf[7] =  d2       & 0xff;
 }
 
 static void
@@ -545,7 +545,7 @@ do_bf_setkey (BLOWFISH_context *c, const byte *key, unsigned keylen)
       c->p[i]   = datal;
       c->p[i+1] = datar;
     }
-  for(i=0; i < 256; i += 2 )	
+  for(i=0; i < 256; i += 2 )    
     {
       do_encrypt( c, &datal, &datar );
       c->s0[i]   = datal;

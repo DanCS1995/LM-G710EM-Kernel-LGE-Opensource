@@ -1,6 +1,7 @@
 /*
+ * Copyright (C) 2016-2018 Tobias Brunner
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -13,38 +14,140 @@
  * for more details.
  */
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <errno.h>
 
 #include "pki.h"
 
 #include <credentials/certificates/certificate.h>
 #include <credentials/certificates/x509.h>
+#include <credentials/sets/mem_cred.h>
+
+/**
+ * Load a CA or CRL and add it to the credential set
+ */
+static bool load_cert(mem_cred_t *creds, char *path, certificate_type_t subtype)
+{
+	certificate_t *cert;
+	char *credname;
+
+	switch (subtype)
+	{
+		case CERT_X509:
+			credname = "CA certificate";
+			break;
+		case CERT_X509_CRL:
+			credname = "CRL";
+			break;
+		default:
+			return FALSE;
+	}
+	cert = lib->creds->create(lib->creds,
+							  CRED_CERTIFICATE, subtype,
+							  BUILD_FROM_FILE, path, BUILD_END);
+	if (!cert)
+	{
+		fprintf(stderr, "parsing %s from '%s' failed\n", credname, path);
+		return FALSE;
+	}
+	if (subtype == CERT_X509_CRL)
+	{
+		creds->add_crl(creds, (crl_t*)cert);
+	}
+	else
+	{
+		creds->add_cert(creds, TRUE, cert);
+	}
+	return TRUE;
+}
+
+/**
+ * Load CA cert or CRL either from a file or a path
+ */
+static bool load_certs(mem_cred_t *creds, char *path,
+					   certificate_type_t subtype)
+{
+	enumerator_t *enumerator;
+	struct stat st;
+	bool loaded = FALSE;
+
+	if (stat(path, &st))
+	{
+		fprintf(stderr, "failed to access '%s': %s\n", path, strerror(errno));
+		return FALSE;
+	}
+	if (S_ISDIR(st.st_mode))
+	{
+		enumerator = enumerator_create_directory(path);
+		if (!enumerator)
+		{
+			fprintf(stderr, "directory '%s' can not be opened: %s",
+					path, strerror(errno));
+			return FALSE;
+		}
+		while (enumerator->enumerate(enumerator, NULL, &path, &st))
+		{
+			if (S_ISREG(st.st_mode) && load_cert(creds, path, subtype))
+			{
+				loaded = TRUE;
+			}
+		}
+		enumerator->destroy(enumerator);
+	}
+	else
+	{
+		loaded = load_cert(creds, path, subtype);
+	}
+	return loaded;
+}
 
 /**
  * Verify a certificate signature
  */
 static int verify()
 {
-	certificate_t *cert, *ca;
-	char *file = NULL, *cafile = NULL;
-	bool good = FALSE;
-	char *arg;
+	bool trusted = FALSE, valid = FALSE, revoked = FALSE;
+	bool has_ca = FALSE, online = FALSE;
+	certificate_t *cert;
+	enumerator_t *enumerator;
+	auth_cfg_t *auth;
+	mem_cred_t *creds;
+	char *arg, *file = NULL;
+
+	creds = mem_cred_create();
+	lib->credmgr->add_set(lib->credmgr, &creds->set);
 
 	while (TRUE)
 	{
 		switch (command_getopt(&arg))
 		{
 			case 'h':
+				creds->destroy(creds);
 				return command_usage(NULL);
 			case 'i':
 				file = arg;
 				continue;
 			case 'c':
-				cafile = arg;
+				if (load_certs(creds, arg, CERT_X509))
+				{
+					has_ca = TRUE;
+				}
+				continue;
+			case 'l':
+				if (load_certs(creds, arg, CERT_X509_CRL))
+				{
+					online = TRUE;
+				}
+				continue;
+			case 'o':
+				online = TRUE;
 				continue;
 			case EOF:
 				break;
 			default:
+				creds->destroy(creds);
 				return command_usage("invalid --verify option");
 		}
 		break;
@@ -59,10 +162,11 @@ static int verify()
 	{
 		chunk_t chunk;
 
+		set_file_mode(stdin, CERT_ASN1_DER);
 		if (!chunk_from_fd(0, &chunk))
 		{
 			fprintf(stderr, "reading certificate failed: %s\n", strerror(errno));
-			return 1;
+			goto end;
 		}
 		cert = lib->creds->create(lib->creds, CRED_CERTIFICATE, CERT_X509,
 								  BUILD_BLOB, chunk, BUILD_END);
@@ -71,60 +175,77 @@ static int verify()
 	if (!cert)
 	{
 		fprintf(stderr, "parsing certificate failed\n");
-		return 1;
+		goto end;
 	}
-	if (cafile)
+	cert = creds->add_cert_ref(creds, !has_ca, cert);
+
+	enumerator = lib->credmgr->create_trusted_enumerator(lib->credmgr,
+									KEY_ANY, cert->get_subject(cert), online);
+	if (enumerator->enumerate(enumerator, &cert, &auth))
 	{
-		ca = lib->creds->create(lib->creds, CRED_CERTIFICATE, CERT_X509,
-								BUILD_FROM_FILE, cafile, BUILD_END);
-		if (!ca)
-		{
-			fprintf(stderr, "parsing CA certificate failed\n");
-			return 1;
-		}
-	}
-	else
-	{
-		ca = cert;
-	}
-	if (cert->issued_by(cert, ca, NULL))
-	{
+		trusted = TRUE;
 		if (cert->get_validity(cert, NULL, NULL, NULL))
 		{
-			if (cafile)
-			{
-				if (ca->get_validity(ca, NULL, NULL, NULL))
-				{
-					printf("signature good, certificates valid\n");
-					good = TRUE;
-				}
-				else
-				{
-					printf("signature good, CA certificates not valid now\n");
-				}
-			}
-			else
-			{
-				printf("signature good, certificate valid\n");
-				good = TRUE;
-			}
+			printf("certificate trusted, lifetimes valid");
+			valid = TRUE;
 		}
 		else
 		{
-			printf("certificate not valid now\n");
+			printf("certificate trusted, but no valid lifetime");
 		}
+		if (online)
+		{
+			switch ((uintptr_t)auth->get(auth, AUTH_RULE_CRL_VALIDATION))
+			{
+				case VALIDATION_GOOD:
+					printf(", certificate not revoked");
+					break;
+				case VALIDATION_SKIPPED:
+					printf(", no revocation information");
+					break;
+				case VALIDATION_STALE:
+					printf(", revocation information stale");
+					break;
+				case VALIDATION_FAILED:
+					printf(", revocation checking failed");
+					break;
+				case VALIDATION_ON_HOLD:
+					printf(", certificate revocation on hold");
+					revoked = TRUE;
+					break;
+				case VALIDATION_REVOKED:
+					printf(", certificate revoked");
+					revoked = TRUE;
+					break;
+			}
+		}
+		printf("\n");
 	}
-	else
-	{
-		printf("signature invalid\n");
-	}
-	if (cafile)
-	{
-		ca->destroy(ca);
-	}
+	enumerator->destroy(enumerator);
 	cert->destroy(cert);
 
-	return good ? 0 : 2;
+	if (!trusted)
+	{
+		printf("certificate untrusted\n");
+	}
+
+end:
+	lib->credmgr->remove_set(lib->credmgr, &creds->set);
+	creds->destroy(creds);
+
+	if (!trusted)
+	{
+		return 1;
+	}
+	if (!valid)
+	{
+		return 2;
+	}
+	if (revoked)
+	{
+		return 3;
+	}
+	return 0;
 }
 
 /**
@@ -135,11 +256,13 @@ static void __attribute__ ((constructor))reg()
 	command_register((command_t) {
 		verify, 'v', "verify",
 		"verify a certificate using the CA certificate",
-		{"[--in file] [--cacert file]"},
+		{"[--in file] [--cacert file] [--crl file]"},
 		{
 			{"help",	'h', 0, "show usage information"},
 			{"in",		'i', 1, "X.509 certificate to verify, default: stdin"},
-			{"cacert",	'c', 1, "CA certificate, default: verify self signed"},
+			{"cacert",	'c', 1, "CA certificate for trustchain verification"},
+			{"crl",		'l', 1, "CRL for trustchain verification"},
+			{"online",	'o', 0, "enable online CRL/OCSP revocation checking"},
 		}
 	});
 }

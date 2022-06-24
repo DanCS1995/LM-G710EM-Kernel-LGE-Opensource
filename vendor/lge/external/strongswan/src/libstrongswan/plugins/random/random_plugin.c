@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -88,6 +88,11 @@ static bool open_dev(char *file, int *fd)
 	{
 		DBG1(DBG_LIB, "opening \"%s\" failed: %s", file, strerror(errno));
 		return FALSE;
+	}
+	if (fcntl(*fd, F_SETFD, FD_CLOEXEC) == -1)
+	{
+		DBG1(DBG_LIB, "setting FD_CLOEXEC for \"%s\" failed: %s",
+			 file, strerror(errno));
 	}
 	return TRUE;
 }

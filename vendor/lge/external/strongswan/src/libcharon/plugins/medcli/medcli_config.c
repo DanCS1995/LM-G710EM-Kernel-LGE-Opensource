@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,6 +22,11 @@
 #include <processing/jobs/callback_job.h>
 
 typedef struct private_medcli_config_t private_medcli_config_t;
+
+/**
+ * Name of the mediation connection
+ */
+#define MEDIATION_CONN_NAME "medcli-mediation"
 
 /**
  * Private data of an medcli_config_t object
@@ -72,23 +77,19 @@ static traffic_selector_t *ts_from_string(char *str)
 	return traffic_selector_create_dynamic(0, 0, 65535);
 }
 
-METHOD(backend_t, get_peer_cfg_by_name, peer_cfg_t*,
-	private_medcli_config_t *this, char *name)
+/**
+ * Build a mediation config
+ */
+static peer_cfg_t *build_mediation_config(private_medcli_config_t *this,
+										  peer_cfg_create_t *defaults)
 {
 	enumerator_t *e;
-	peer_cfg_t *peer_cfg, *med_cfg;
 	auth_cfg_t *auth;
 	ike_cfg_t *ike_cfg;
-	child_cfg_t *child_cfg;
+	peer_cfg_t *med_cfg;
+	peer_cfg_create_t peer = *defaults;
 	chunk_t me, other;
-	char *address, *local_net, *remote_net;
-	lifetime_cfg_t lifetime = {
-		.time = {
-			.life = this->rekey * 60 + this->rekey,
-			.rekey = this->rekey,
-			.jitter = this->rekey
-		}
-	};
+	char *address;
 
 	/* query mediation server config:
 	 * - build ike_cfg/peer_cfg for mediation connection on-the-fly
@@ -106,14 +107,10 @@ METHOD(backend_t, get_peer_cfg_by_name, peer_cfg_t*,
 							 charon->socket->get_port(charon->socket, FALSE),
 							 address, IKEV2_UDP_PORT, FRAGMENTATION_NO, 0);
 	ike_cfg->add_proposal(ike_cfg, proposal_create_default(PROTO_IKE));
-	med_cfg = peer_cfg_create(
-		"mediation", ike_cfg,
-		CERT_NEVER_SEND, UNIQUE_REPLACE,
-		1, this->rekey*60, 0,			/* keytries, rekey, reauth */
-		this->rekey*5, this->rekey*3,	/* jitter, overtime */
-		TRUE, FALSE, TRUE,				/* mobike, aggressive, pull */
-		this->dpd, 0,					/* DPD delay, timeout */
-		TRUE, NULL, NULL);				/* mediation, med by, peer id */
+	ike_cfg->add_proposal(ike_cfg, proposal_create_default_aead(PROTO_IKE));
+
+	peer.mediation = TRUE;
+	med_cfg = peer_cfg_create(MEDIATION_CONN_NAME, ike_cfg, &peer);
 	e->destroy(e);
 
 	auth = auth_cfg_create();
@@ -126,6 +123,42 @@ METHOD(backend_t, get_peer_cfg_by_name, peer_cfg_t*,
 	auth->add(auth, AUTH_RULE_IDENTITY,
 			  identification_create_from_encoding(ID_KEY_ID, other));
 	med_cfg->add_auth_cfg(med_cfg, auth, FALSE);
+	return med_cfg;
+}
+
+METHOD(backend_t, get_peer_cfg_by_name, peer_cfg_t*,
+	private_medcli_config_t *this, char *name)
+{
+	enumerator_t *e;
+	auth_cfg_t *auth;
+	peer_cfg_t *peer_cfg;
+	child_cfg_t *child_cfg;
+	chunk_t me, other;
+	char *local_net, *remote_net;
+	peer_cfg_create_t peer = {
+		.cert_policy = CERT_NEVER_SEND,
+		.unique = UNIQUE_REPLACE,
+		.keyingtries = 1,
+		.rekey_time = this->rekey * 60,
+		.jitter_time = this->rekey * 5,
+		.over_time = this->rekey * 3,
+		.dpd = this->dpd,
+	};
+	child_cfg_create_t child = {
+		.lifetime = {
+			.time = {
+				.life = this->rekey * 60 + this->rekey,
+				.rekey = this->rekey,
+				.jitter = this->rekey
+			},
+		},
+		.mode = MODE_TUNNEL,
+	};
+
+	if (streq(name, "medcli-mediation"))
+	{
+		return build_mediation_config(this, &peer);
+	}
 
 	/* query mediated config:
 	 * - use any-any ike_cfg
@@ -143,15 +176,9 @@ METHOD(backend_t, get_peer_cfg_by_name, peer_cfg_t*,
 		DESTROY_IF(e);
 		return NULL;
 	}
-	peer_cfg = peer_cfg_create(
-		name, this->ike->get_ref(this->ike),
-		CERT_NEVER_SEND, UNIQUE_REPLACE,
-		1, this->rekey*60, 0,			/* keytries, rekey, reauth */
-		this->rekey*5, this->rekey*3,	/* jitter, overtime */
-		TRUE, FALSE, TRUE,				/* mobike, aggressive, pull */
-		this->dpd, 0,					/* DPD delay, timeout */
-		FALSE, med_cfg,					/* mediation, med by */
-		identification_create_from_encoding(ID_KEY_ID, other));
+	peer.mediated_by = MEDIATION_CONN_NAME;
+	peer.peer_id = identification_create_from_encoding(ID_KEY_ID, other);
+	peer_cfg = peer_cfg_create(name, this->ike->get_ref(this->ike), &peer);
 
 	auth = auth_cfg_create();
 	auth->add(auth, AUTH_RULE_AUTH_CLASS, AUTH_CLASS_PUBKEY);
@@ -164,10 +191,9 @@ METHOD(backend_t, get_peer_cfg_by_name, peer_cfg_t*,
 			  identification_create_from_encoding(ID_KEY_ID, other));
 	peer_cfg->add_auth_cfg(peer_cfg, auth, FALSE);
 
-	child_cfg = child_cfg_create(name, &lifetime, NULL, TRUE, MODE_TUNNEL,
-								 ACTION_NONE, ACTION_NONE, ACTION_NONE, FALSE,
-								 0, 0, NULL, NULL, 0);
+	child_cfg = child_cfg_create(name, &child);
 	child_cfg->add_proposal(child_cfg, proposal_create_default(PROTO_ESP));
+	child_cfg->add_proposal(child_cfg, proposal_create_default_aead(PROTO_ESP));
 	child_cfg->add_traffic_selector(child_cfg, TRUE, ts_from_string(local_net));
 	child_cfg->add_traffic_selector(child_cfg, FALSE, ts_from_string(remote_net));
 	peer_cfg->add_child_cfg(peer_cfg, child_cfg);
@@ -197,19 +223,34 @@ typedef struct {
 } peer_enumerator_t;
 
 METHOD(enumerator_t, peer_enumerator_enumerate, bool,
-	peer_enumerator_t *this, peer_cfg_t **cfg)
+	peer_enumerator_t *this, va_list args)
 {
 	char *name, *local_net, *remote_net;
 	chunk_t me, other;
+	peer_cfg_t **cfg;
 	child_cfg_t *child_cfg;
 	auth_cfg_t *auth;
-	lifetime_cfg_t lifetime = {
-		.time = {
-			.life = this->rekey * 60 + this->rekey,
-			.rekey = this->rekey,
-			.jitter = this->rekey
-		}
+	peer_cfg_create_t peer = {
+		.cert_policy = CERT_NEVER_SEND,
+		.unique = UNIQUE_REPLACE,
+		.keyingtries = 1,
+		.rekey_time = this->rekey * 60,
+		.jitter_time = this->rekey * 5,
+		.over_time = this->rekey * 3,
+		.dpd = this->dpd,
 	};
+	child_cfg_create_t child = {
+		.lifetime = {
+			.time = {
+				.life = this->rekey * 60 + this->rekey,
+				.rekey = this->rekey,
+				.jitter = this->rekey
+			},
+		},
+		.mode = MODE_TUNNEL,
+	};
+
+	VA_ARGS_VGET(args, cfg);
 
 	DESTROY_IF(this->current);
 	if (!this->inner->enumerate(this->inner, &name, &me, &other,
@@ -218,14 +259,7 @@ METHOD(enumerator_t, peer_enumerator_enumerate, bool,
 		this->current = NULL;
 		return FALSE;
 	}
-	this->current = peer_cfg_create(
-				name, this->ike->get_ref(this->ike),
-				CERT_NEVER_SEND, UNIQUE_REPLACE,
-				1, this->rekey*60, 0,			/* keytries, rekey, reauth */
-				this->rekey*5, this->rekey*3,	/* jitter, overtime */
-				TRUE, FALSE, TRUE,				/* mobike, aggressive, pull */
-				this->dpd, 0,					/* DPD delay, timeout */
-				FALSE, NULL, NULL);				/* mediation, med by, peer id */
+	this->current = peer_cfg_create(name, this->ike->get_ref(this->ike), &peer);
 
 	auth = auth_cfg_create();
 	auth->add(auth, AUTH_RULE_AUTH_CLASS, AUTH_CLASS_PUBKEY);
@@ -238,10 +272,9 @@ METHOD(enumerator_t, peer_enumerator_enumerate, bool,
 			  identification_create_from_encoding(ID_KEY_ID, other));
 	this->current->add_auth_cfg(this->current, auth, FALSE);
 
-	child_cfg = child_cfg_create(name, &lifetime, NULL, TRUE, MODE_TUNNEL,
-								 ACTION_NONE, ACTION_NONE, ACTION_NONE, FALSE,
-								 0, 0, NULL, NULL, 0);
+	child_cfg = child_cfg_create(name, &child);
 	child_cfg->add_proposal(child_cfg, proposal_create_default(PROTO_ESP));
+	child_cfg->add_proposal(child_cfg, proposal_create_default_aead(PROTO_ESP));
 	child_cfg->add_traffic_selector(child_cfg, TRUE, ts_from_string(local_net));
 	child_cfg->add_traffic_selector(child_cfg, FALSE, ts_from_string(remote_net));
 	this->current->add_child_cfg(this->current, child_cfg);
@@ -265,7 +298,8 @@ METHOD(backend_t, create_peer_cfg_enumerator, enumerator_t*,
 
 	INIT(e,
 		.public = {
-			.enumerate = (void*)_peer_enumerator_enumerate,
+			.enumerate = enumerator_enumerate_default,
+			.venumerate = _peer_enumerator_enumerate,
 			.destroy = _peer_enumerator_destroy,
 		},
 		.ike = this->ike,
@@ -311,7 +345,7 @@ static job_requeue_t initiate_config(peer_cfg_t *peer_cfg)
 		peer_cfg->get_ref(peer_cfg);
 		enumerator->destroy(enumerator);
 		charon->controller->initiate(charon->controller,
-									 peer_cfg, child_cfg, NULL, NULL, 0);
+									 peer_cfg, child_cfg, NULL, NULL, 0, FALSE);
 	}
 	else
 	{
@@ -382,6 +416,7 @@ medcli_config_t *medcli_config_create(database_t *db)
 							  FRAGMENTATION_NO, 0),
 	);
 	this->ike->add_proposal(this->ike, proposal_create_default(PROTO_IKE));
+	this->ike->add_proposal(this->ike, proposal_create_default_aead(PROTO_IKE));
 
 	schedule_autoinit(this);
 

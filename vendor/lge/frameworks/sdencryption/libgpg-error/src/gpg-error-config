@@ -23,11 +23,11 @@ usage()
     cat <<EOF
 Usage: gpg-error-config [OPTIONS]
 Options:
-	[--prefix]
-	[--exec-prefix]
-	[--version]
-	[--libs]
-	[--cflags]
+    [--prefix]
+    [--exec-prefix]
+    [--version]
+    [--libs]
+    [--cflags]
 EOF
     exit $1
 }
@@ -38,45 +38,45 @@ fi
 
 while test $# -gt 0; do
     case "$1" in
-	-*=*)
-	    optarg=`echo "$1" | sed 's/[-_a-zA-Z0-9]*=//'`
-	    ;;
-	*)
-	    optarg=
-	    ;;
+    -*=*)
+        optarg=`echo "$1" | sed 's/[-_a-zA-Z0-9]*=//'`
+        ;;
+    *)
+        optarg=
+        ;;
     esac
 
     case $1 in
         --prefix)
-	    output="$output $prefix"
-	    ;;
+        output="$output $prefix"
+        ;;
         --exec-prefix)
-	    output="$output $exec_prefix"
-	    ;;
+        output="$output $exec_prefix"
+        ;;
         --version)
             echo "1.10"
-	    exit 0
-	    ;;
+        exit 0
+        ;;
         --cflags)
-	    if test "x$includedir" != "x/usr/include" -a "x$includedir" != "x/include"; then
-		output="$output -I$includedir"
-	    fi
+        if test "x$includedir" != "x/usr/include" -a "x$includedir" != "x/include"; then
+        output="$output -I$includedir"
+        fi
             # Note: -idirafter is a gcc extension.  It is only used on
             #       systems where gcc is the only compiler we support.
             for i in $isubdirafter; do
                 output="$output -idirafter ${includedir}/${i}"
             done
-	    output="$output "
-	    ;;
-	--libs)
-	    if test "x$libdir" != "x/usr/lib" -a "x$libdir" != "x/lib"; then
-		output="$output -L$libdir"
-	    fi
-	    output="$output -lgpg-error"
-	    ;;
-	*)
+        output="$output "
+        ;;
+    --libs)
+        if test "x$libdir" != "x/usr/lib" -a "x$libdir" != "x/lib"; then
+        output="$output -L$libdir"
+        fi
+        output="$output -lgpg-error"
+        ;;
+    *)
             usage 1 1>&2
-	    ;;
+        ;;
     esac
     shift
 done

@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * Copyright (C) 2015-2017 Andreas Steffen
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,6 +22,7 @@
 #include <collections/linked_list.h>
 #include <credentials/certificates/certificate.h>
 #include <credentials/certificates/x509.h>
+#include <selectors/traffic_selector.h>
 #include <asn1/asn1.h>
 
 /**
@@ -48,23 +50,29 @@ static void destroy_policy_mapping(x509_policy_mapping_t *mapping)
 static int self()
 {
 	cred_encoding_type_t form = CERT_ASN1_DER;
-	key_type_t type = KEY_RSA;
-	hash_algorithm_t digest = HASH_SHA1;
+	key_type_t type = KEY_ANY;
+	hash_algorithm_t digest = HASH_UNKNOWN;
+	signature_params_t *scheme = NULL;
 	certificate_t *cert = NULL;
 	private_key_t *private = NULL;
 	public_key_t *public = NULL;
 	char *file = NULL, *dn = NULL, *hex = NULL, *error = NULL, *keyid = NULL;
 	identification_t *id = NULL;
 	linked_list_t *san, *ocsp, *permitted, *excluded, *policies, *mappings;
+	linked_list_t *addrblocks;
 	int pathlen = X509_NO_CONSTRAINT, inhibit_any = X509_NO_CONSTRAINT;
-	int inhibit_mapping = X509_NO_CONSTRAINT, require_explicit = X509_NO_CONSTRAINT;
+	int inhibit_mapping = X509_NO_CONSTRAINT;
+	int require_explicit = X509_NO_CONSTRAINT;
 	chunk_t serial = chunk_empty;
 	chunk_t encoding = chunk_empty;
-	time_t lifetime = 1095;
-	time_t not_before, not_after;
+	time_t not_before, not_after, lifetime = 1095 * 24 * 60 * 60;
+	char *datenb = NULL, *datena = NULL, *dateform = NULL;
 	x509_flag_t flags = 0;
 	x509_cert_policy_t *policy = NULL;
+	traffic_selector_t *ts;
 	char *arg;
+	bool pss = lib->settings->get_bool(lib->settings, "%s.rsa_pss", FALSE,
+									   lib->ns);
 
 	san = linked_list_create();
 	ocsp = linked_list_create();
@@ -72,6 +80,7 @@ static int self()
 	excluded = linked_list_create();
 	policies = linked_list_create();
 	mappings = linked_list_create();
+	addrblocks = linked_list_create();
 
 	while (TRUE)
 	{
@@ -88,6 +97,18 @@ static int self()
 				{
 					type = KEY_ECDSA;
 				}
+				else if (streq(arg, "ed25519"))
+				{
+					type = KEY_ED25519;
+				}
+				else if (streq(arg, "bliss"))
+				{
+					type = KEY_BLISS;
+				}
+				else if (streq(arg, "priv"))
+				{
+					type = KEY_ANY;
+				}
 				else
 				{
 					error = "invalid input type";
@@ -95,10 +116,20 @@ static int self()
 				}
 				continue;
 			case 'g':
-				digest = enum_from_name(hash_algorithm_short_names, arg);
-				if (digest == -1)
+				if (!enum_from_name(hash_algorithm_short_names, arg, &digest))
 				{
 					error = "invalid --digest type";
+					goto usage;
+				}
+				continue;
+			case 'R':
+				if (streq(arg, "pss"))
+				{
+					pss = TRUE;
+				}
+				else if (!streq(arg, "pkcs1"))
+				{
+					error = "invalid RSA padding";
 					goto usage;
 				}
 				continue;
@@ -115,12 +146,21 @@ static int self()
 				san->insert_last(san, identification_create_from_string(arg));
 				continue;
 			case 'l':
-				lifetime = atoi(arg);
+				lifetime = atoi(arg) * 24 * 60 * 60;
 				if (!lifetime)
 				{
 					error = "invalid --lifetime value";
 					goto usage;
 				}
+				continue;
+			case 'D':
+				dateform = arg;
+				continue;
+			case 'F':
+				datenb = arg;
+				continue;
+			case 'T':
+				datena = arg;
 				continue;
 			case 's':
 				hex = arg;
@@ -130,6 +170,15 @@ static int self()
 				continue;
 			case 'p':
 				pathlen = atoi(arg);
+				continue;
+			case 'B':
+				ts = parse_ts(arg);
+				if (!ts)
+				{
+					error = "invalid addressBlock";
+					goto usage;
+				}
+				addrblocks->insert_last(addrblocks, ts);
 				continue;
 			case 'n':
 				permitted->insert_last(permitted,
@@ -225,6 +274,10 @@ static int self()
 				{
 					flags |= X509_OCSP_SIGNER;
 				}
+				else if (streq(arg, "msSmartcardLogon"))
+				{
+					flags |= X509_MS_SMARTCARD_LOGON;
+				}
 				continue;
 			case 'f':
 				if (!get_form(arg, &form, CRED_CERTIFICATE))
@@ -248,6 +301,12 @@ static int self()
 	if (!dn)
 	{
 		error = "--dn is required";
+		goto usage;
+	}
+	if (!calculate_lifetime(dateform, datenb, datena, lifetime,
+							&not_before, &not_after))
+	{
+		error = "invalid --not-before/after datetime";
 		goto usage;
 	}
 	id = identification_create_from_string(dn);
@@ -274,6 +333,7 @@ static int self()
 	{
 		chunk_t chunk;
 
+		set_file_mode(stdin, CERT_ASN1_DER);
 		if (!chunk_from_fd(0, &chunk))
 		{
 			fprintf(stderr, "%s: ", strerror(errno));
@@ -314,16 +374,18 @@ static int self()
 			rng->destroy(rng);
 			goto end;
 		}
+		serial.ptr[0] &= 0x7F;
 		rng->destroy(rng);
 	}
-	not_before = time(NULL);
-	not_after = not_before + lifetime * 24 * 60 * 60;
+	scheme = get_signature_scheme(private, digest, pss);
+
 	cert = lib->creds->create(lib->creds, CRED_CERTIFICATE, CERT_X509,
 						BUILD_SIGNING_KEY, private, BUILD_PUBLIC_KEY, public,
 						BUILD_SUBJECT, id, BUILD_NOT_BEFORE_TIME, not_before,
 						BUILD_NOT_AFTER_TIME, not_after, BUILD_SERIAL, serial,
-						BUILD_DIGEST_ALG, digest, BUILD_X509_FLAG, flags,
+						BUILD_SIGNATURE_SCHEME, scheme, BUILD_X509_FLAG, flags,
 						BUILD_PATHLEN, pathlen, BUILD_SUBJECT_ALTNAMES, san,
+						BUILD_ADDRBLOCKS, addrblocks,
 						BUILD_OCSP_ACCESS_LOCATIONS, ocsp,
 						BUILD_PERMITTED_NAME_CONSTRAINTS, permitted,
 						BUILD_EXCLUDED_NAME_CONSTRAINTS, excluded,
@@ -343,6 +405,7 @@ static int self()
 		error = "encoding certificate failed";
 		goto end;
 	}
+	set_file_mode(stdout, form);
 	if (fwrite(encoding.ptr, encoding.len, 1, stdout) != 1)
 	{
 		error = "writing certificate key failed";
@@ -357,9 +420,11 @@ end:
 	san->destroy_offset(san, offsetof(identification_t, destroy));
 	permitted->destroy_offset(permitted, offsetof(identification_t, destroy));
 	excluded->destroy_offset(excluded, offsetof(identification_t, destroy));
+	addrblocks->destroy_offset(addrblocks, offsetof(traffic_selector_t, destroy));
 	policies->destroy_function(policies, (void*)destroy_cert_policy);
 	mappings->destroy_function(mappings, (void*)destroy_policy_mapping);
 	ocsp->destroy(ocsp);
+	signature_params_destroy(scheme);
 	free(encoding.ptr);
 	free(serial.ptr);
 
@@ -374,6 +439,7 @@ usage:
 	san->destroy_offset(san, offsetof(identification_t, destroy));
 	permitted->destroy_offset(permitted, offsetof(identification_t, destroy));
 	excluded->destroy_offset(excluded, offsetof(identification_t, destroy));
+	addrblocks->destroy_offset(addrblocks, offsetof(traffic_selector_t, destroy));
 	policies->destroy_function(policies, (void*)destroy_cert_policy);
 	mappings->destroy_function(mappings, (void*)destroy_policy_mapping);
 	ocsp->destroy(ocsp);
@@ -388,26 +454,32 @@ static void __attribute__ ((constructor))reg()
 	command_register((command_t) {
 		self, 's', "self",
 		"create a self signed certificate",
-		{" [--in file|--keyid hex] [--type rsa|ecdsa]",
+		{"[--in file|--keyid hex] [--type rsa|ecdsa|ed25519|bliss|priv]",
 		 " --dn distinguished-name [--san subjectAltName]+",
 		 "[--lifetime days] [--serial hex] [--ca] [--ocsp uri]+",
-		 "[--flag serverAuth|clientAuth|crlSign|ocspSigning]+",
+		 "[--flag serverAuth|clientAuth|crlSign|ocspSigning|msSmartcardLogon]+",
 		 "[--nc-permitted name] [--nc-excluded name]",
 		 "[--policy-map issuer-oid:subject-oid]",
 		 "[--policy-explicit len] [--policy-inhibit len] [--policy-any len]",
 		 "[--cert-policy oid [--cps-uri uri] [--user-notice text]]+",
-		 "[--digest md5|sha1|sha224|sha256|sha384|sha512] [--outform der|pem]"},
+		 "[--digest md5|sha1|sha224|sha256|sha384|sha512|sha3_224|sha3_256|sha3_384|sha3_512]",
+		 "[--rsa-padding pkcs1|pss]",
+		 "[--outform der|pem]"},
 		{
 			{"help",			'h', 0, "show usage information"},
 			{"in",				'i', 1, "private key input file, default: stdin"},
-			{"keyid",			'x', 1, "keyid on smartcard of private key"},
-			{"type",			't', 1, "type of input key, default: rsa"},
+			{"keyid",			'x', 1, "smartcard or TPM private key object handle"},
+			{"type",			't', 1, "type of input key, default: priv"},
 			{"dn",				'd', 1, "subject and issuer distinguished name"},
 			{"san",				'a', 1, "subjectAltName to include in certificate"},
 			{"lifetime",		'l', 1, "days the certificate is valid, default: 1095"},
+			{"not-before",		'F', 1, "date/time the validity of the cert starts"},
+			{"not-after",		'T', 1, "date/time the validity of the cert ends"},
+			{"dateform",		'D', 1, "strptime(3) input format, default: %d.%m.%y %T"},
 			{"serial",			's', 1, "serial number in hex, default: random"},
 			{"ca",				'b', 0, "include CA basicConstraint, default: no"},
 			{"pathlen",			'p', 1, "set path length constraint"},
+			{"addrblock",		'B', 1, "RFC 3779 addrBlock to include"},
 			{"nc-permitted",	'n', 1, "add permitted NameConstraint"},
 			{"nc-excluded",		'N', 1, "add excluded NameConstraint"},
 			{"cert-policy",		'P', 1, "certificatePolicy OID to include"},
@@ -419,7 +491,8 @@ static void __attribute__ ((constructor))reg()
 			{"policy-any",		'A', 1, "inhibitAnyPolicy constraint"},
 			{"flag",			'e', 1, "include extendedKeyUsage flag"},
 			{"ocsp",			'o', 1, "OCSP AuthorityInfoAccess URI to include"},
-			{"digest",			'g', 1, "digest for signature creation, default: sha1"},
+			{"digest",			'g', 1, "digest for signature creation, default: key-specific"},
+			{"rsa-padding",		'R', 1, "padding for RSA signatures, default: pkcs1"},
 			{"outform",			'f', 1, "encoding of generated cert, default: der"},
 		}
 	});

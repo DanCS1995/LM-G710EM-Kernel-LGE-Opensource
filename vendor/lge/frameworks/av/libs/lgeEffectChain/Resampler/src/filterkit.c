@@ -559,7 +559,7 @@ BOOL Query(char *prompt, BOOL deflt, char *help)
       sprintf(s,"\n%s%s", prompt, (*help) ? " (Type ? for help)" : "");
       getstr(s,(deflt)?"yes":"no",s);
       if (*s=='?' && *help)
-      {
+      {        
 //         printf(help);
       }
       if (*s=='Y' || *s=='y')

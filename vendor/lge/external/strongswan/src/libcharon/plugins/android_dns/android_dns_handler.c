@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2010-2013 Tobias Brunner
  * Copyright (C) 2010 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -128,7 +128,7 @@ static bool set_dns_server(private_android_dns_handler_t *this, int index,
 }
 
 METHOD(attribute_handler_t, handle, bool,
-	private_android_dns_handler_t *this, identification_t *id,
+	private_android_dns_handler_t *this, ike_sa_t *ike_sa,
 	configuration_attribute_type_t type, chunk_t data)
 {
 	switch (type)
@@ -158,7 +158,7 @@ METHOD(attribute_handler_t, handle, bool,
 }
 
 METHOD(attribute_handler_t, release, void,
-	private_android_dns_handler_t *this, identification_t *server,
+	private_android_dns_handler_t *this, ike_sa_t *ike_sa,
 	configuration_attribute_type_t type, chunk_t data)
 {
 	if (type == INTERNAL_IP4_DNS)
@@ -182,23 +182,27 @@ METHOD(attribute_handler_t, release, void,
 }
 
 METHOD(enumerator_t, enumerate_dns, bool,
-	enumerator_t *this, configuration_attribute_type_t *type, chunk_t *data)
+	enumerator_t *this, va_list args)
 {
-		*type = INTERNAL_IP4_DNS;
-		*data = chunk_empty;
-	/* stop enumeration */
-	this->enumerate = (void*)return_false;
+	configuration_attribute_type_t *type;
+	chunk_t *data;
+
+	VA_ARGS_VGET(args, type, data);
+	*type = INTERNAL_IP4_DNS;
+	*data = chunk_empty;
+	this->venumerate = return_false;
 	return TRUE;
 }
 
 METHOD(attribute_handler_t, create_attribute_enumerator, enumerator_t *,
-	private_android_dns_handler_t *this, identification_t *id,
+	private_android_dns_handler_t *this, ike_sa_t *ike_sa,
 	linked_list_t *vips)
 {
 	enumerator_t *enumerator;
 
 	INIT(enumerator,
-		.enumerate = (void*)_enumerate_dns,
+		.enumerate = enumerator_enumerate_default,
+		.venumerate = _enumerate_dns,
 		.destroy = (void*)free,
 	);
 	return enumerator;
@@ -232,4 +236,3 @@ android_dns_handler_t *android_dns_handler_create()
 
 	return &this->public;
 }
-

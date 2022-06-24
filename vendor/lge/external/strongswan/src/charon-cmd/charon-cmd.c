@@ -3,7 +3,7 @@
  * Copyright (C) 2005-2013 Martin Willi
  * Copyright (C) 2006 Daniel Roethlisberger
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,17 +17,15 @@
  */
 
 #include <stdio.h>
-#define _POSIX_PTHREAD_SEMANTICS /* for two param sigwait on OpenSolaris */
 #include <signal.h>
-#undef _POSIX_PTHREAD_SEMANTICS
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <errno.h>
 
 #include <library.h>
-#include <hydra.h>
 #include <daemon.h>
 #include <utils/backtrace.h>
 #include <threading/thread.h>
@@ -40,11 +38,6 @@
  * Default loglevel
  */
 static level_t default_loglevel = LEVEL_CTRL;
-
-/**
- * Loglevel configuration
- */
-static level_t levels[DBG_MAX];
 
 /**
  * Connection to initiate
@@ -112,12 +105,15 @@ static int run()
 	while (TRUE)
 	{
 		int sig;
-		int error;
 
-		error = sigwait(&set, &sig);
-		if (error)
+		sig = sigwaitinfo(&set, NULL);
+		if (sig == -1)
 		{
-			DBG1(DBG_DMN, "error %d while waiting for a signal", error);
+			if (errno == EINTR)
+			{	/* ignore signals we didn't wait for */
+				continue;
+			}
+			DBG1(DBG_DMN, "waiting for signal failed: %s", strerror(errno));
 			return 1;
 		}
 		switch (sig)
@@ -126,9 +122,9 @@ static int run()
 			{
 				DBG1(DBG_DMN, "signal of type SIGHUP received. Reloading "
 					 "configuration");
-				if (lib->settings->load_files(lib->settings, NULL, FALSE))
+				if (lib->settings->load_files(lib->settings, lib->conf, FALSE))
 				{
-					charon->load_loggers(charon, levels, TRUE);
+					charon->load_loggers(charon);
 					lib->plugins->reload(lib->plugins, NULL);
 				}
 				else
@@ -153,11 +149,6 @@ static int run()
 			{	/* an error occurred */
 				charon->bus->alert(charon->bus, ALERT_SHUTDOWN_SIGNAL, sig);
 				return 1;
-			}
-			default:
-			{
-				DBG1(DBG_DMN, "unknown signal %d received. Ignored", sig);
-				break;
 			}
 		}
 	}
@@ -315,6 +306,7 @@ int main(int argc, char *argv[])
 {
 	struct sigaction action;
 	struct utsname utsname;
+	level_t levels[DBG_MAX];
 	int group;
 
 	/* handle simple arguments */
@@ -333,11 +325,6 @@ int main(int argc, char *argv[])
 			exit(SS_RC_DAEMON_INTEGRITY);
 		}
 	}
-	atexit(libhydra_deinit);
-	if (!libhydra_init())
-	{
-		exit(SS_RC_INITIALIZATION_FAILED);
-	}
 	atexit(libcharon_deinit);
 	if (!libcharon_init())
 	{
@@ -347,7 +334,8 @@ int main(int argc, char *argv[])
 	{
 		levels[group] = default_loglevel;
 	}
-	charon->load_loggers(charon, levels, TRUE);
+	charon->set_default_loggers(charon, levels, TRUE);
+	charon->load_loggers(charon);
 
 	if (!lookup_uid_gid())
 	{
@@ -382,7 +370,7 @@ int main(int argc, char *argv[])
 	lib->plugins->status(lib->plugins, LEVEL_CTRL);
 
 	/* add handler for SEGV and ILL,
-	 * INT, TERM and HUP are handled by sigwait() in run() */
+	 * INT, TERM and HUP are handled by sigwaitinfo() in run() */
 	action.sa_handler = segv_handler;
 	action.sa_flags = 0;
 	sigemptyset(&action.sa_mask);

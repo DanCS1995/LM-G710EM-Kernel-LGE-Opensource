@@ -2,7 +2,7 @@
  * Copyright (C) 2012 Tobias Brunner
  * Copyright (C) 2005-2010 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -38,7 +38,7 @@ struct private_eap_payload_t {
 	/**
 	 * Next payload type.
 	 */
-	u_int8_t  next_payload;
+	uint8_t  next_payload;
 
 	/**
 	 * Critical flag.
@@ -53,7 +53,7 @@ struct private_eap_payload_t {
 	/**
 	 * Length of this payload.
 	 */
-	u_int16_t payload_length;
+	uint16_t payload_length;
 
 	/**
 	 * EAP message data, if available
@@ -107,8 +107,8 @@ static encoding_rule_t encodings[] = {
 METHOD(payload_t, verify, status_t,
 	private_eap_payload_t *this)
 {
-	u_int16_t length;
-	u_int8_t code;
+	uint16_t length;
+	uint8_t code;
 
 	if (this->data.len < 4)
 	{
@@ -167,7 +167,7 @@ METHOD(payload_t, get_header_length, int,
 METHOD(payload_t, get_payload_type, payload_type_t,
 	private_eap_payload_t *this)
 {
-	return EXTENSIBLE_AUTHENTICATION;
+	return PLV2_EAP;
 }
 
 METHOD(payload_t, get_next_type, payload_type_t,
@@ -213,7 +213,7 @@ METHOD(eap_payload_t, get_code, eap_code_t,
 	return 0;
 }
 
-METHOD(eap_payload_t, get_identifier, u_int8_t,
+METHOD(eap_payload_t, get_identifier, uint8_t,
 	private_eap_payload_t *this)
 {
 	if (this->data.len > 1)
@@ -229,7 +229,7 @@ METHOD(eap_payload_t, get_identifier, u_int8_t,
  * @return	the new offset or 0 if failed
  */
 static size_t extract_type(private_eap_payload_t *this, size_t offset,
-					       eap_type_t *type, u_int32_t *vendor)
+					       eap_type_t *type, uint32_t *vendor)
 {
 	if (this->data.len > offset)
 	{
@@ -250,7 +250,7 @@ static size_t extract_type(private_eap_payload_t *this, size_t offset,
 }
 
 METHOD(eap_payload_t, get_type, eap_type_t,
-	private_eap_payload_t *this, u_int32_t *vendor)
+	private_eap_payload_t *this, uint32_t *vendor)
 {
 	eap_type_t type;
 
@@ -275,8 +275,12 @@ typedef struct {
 } type_enumerator_t;
 
 METHOD(enumerator_t, enumerate_types, bool,
-	type_enumerator_t *this, eap_type_t *type, u_int32_t *vendor)
+	type_enumerator_t *this, va_list args)
 {
+	eap_type_t *type;
+	uint32_t *vendor;
+
+	VA_ARGS_VGET(args, type, vendor);
 	this->offset = extract_type(this->payload, this->offset, type, vendor);
 	return this->offset;
 }
@@ -286,7 +290,7 @@ METHOD(eap_payload_t, get_types, enumerator_t*,
 {
 	type_enumerator_t *enumerator;
 	eap_type_t type;
-	u_int32_t vendor;
+	uint32_t vendor;
 	size_t offset;
 
 	offset = extract_type(this, 4, &type, &vendor);
@@ -294,7 +298,8 @@ METHOD(eap_payload_t, get_types, enumerator_t*,
 	{
 		INIT(enumerator,
 			.public = {
-				.enumerate = (void*)_enumerate_types,
+				.enumerate = enumerator_enumerate_default,
+				.venumerate = _enumerate_types,
 				.destroy = (void*)free,
 			},
 			.payload = this,
@@ -360,7 +365,7 @@ eap_payload_t *eap_payload_create()
 			.set_name = _set_name,
 			.destroy = _destroy,
 		},
-		.next_payload = NO_PAYLOAD,
+		.next_payload = PL_NONE,
 		.payload_length = get_header_length(this),
 	);
 	return &this->public;
@@ -392,7 +397,7 @@ eap_payload_t *eap_payload_create_data_own(chunk_t data)
 /*
  * Described in header
  */
-eap_payload_t *eap_payload_create_code(eap_code_t code, u_int8_t identifier)
+eap_payload_t *eap_payload_create_code(eap_code_t code, uint8_t identifier)
 {
 	chunk_t data;
 
@@ -404,7 +409,7 @@ eap_payload_t *eap_payload_create_code(eap_code_t code, u_int8_t identifier)
 /**
  * Write the given type either expanded or not
  */
-static void write_type(bio_writer_t *writer, eap_type_t type, u_int32_t vendor,
+static void write_type(bio_writer_t *writer, eap_type_t type, uint32_t vendor,
 					   bool expanded)
 {
 	if (expanded)
@@ -422,12 +427,12 @@ static void write_type(bio_writer_t *writer, eap_type_t type, u_int32_t vendor,
 /*
  * Described in header
  */
-eap_payload_t *eap_payload_create_nak(u_int8_t identifier, eap_type_t type,
-									  u_int32_t vendor, bool expanded)
+eap_payload_t *eap_payload_create_nak(uint8_t identifier, eap_type_t type,
+									  uint32_t vendor, bool expanded)
 {
 	enumerator_t *enumerator;
 	eap_type_t reg_type;
-	u_int32_t reg_vendor;
+	uint32_t reg_vendor;
 	bio_writer_t *writer;
 	chunk_t data;
 	bool added_any = FALSE, found_vendor = FALSE;
@@ -455,7 +460,7 @@ eap_payload_t *eap_payload_create_nak(u_int8_t identifier, eap_type_t type,
 			added_any = TRUE;
 		}
 		else if (reg_vendor)
-		{	/* found vendor specifc method, but this is not an expanded Nak */
+		{	/* found vendor specific method, but this is not an expanded Nak */
 			found_vendor = TRUE;
 		}
 	}

@@ -2,7 +2,7 @@
  * Copyright (C) 2005-2010 Martin Willi
  * Copyright (C) 2010 revosec AG
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -44,7 +44,7 @@ struct private_cp_payload_t {
 	/**
 	 * Next payload type.
 	 */
-	u_int8_t next_payload;
+	uint8_t next_payload;
 
 	/**
 	 * Critical flag.
@@ -59,17 +59,17 @@ struct private_cp_payload_t {
 	/**
 	 * Reserved bytes
 	 */
-	u_int8_t reserved_byte[3];
+	uint8_t reserved_byte[3];
 
 	/**
 	 * Length of this payload.
 	 */
-	u_int16_t payload_length;
+	uint16_t payload_length;
 
 	/**
 	 * Identifier field, IKEv1 only
 	 */
-	u_int16_t identifier;
+	uint16_t identifier;
 
 	/**
 	 * List of attributes, as configuration_attribute_t
@@ -79,10 +79,10 @@ struct private_cp_payload_t {
 	/**
 	 * Config Type.
 	 */
-	u_int8_t cfg_type;
+	uint8_t cfg_type;
 
 	/**
-	 * CONFIGURATION or CONFIGURATION_V1
+	 * PLV2_CONFIGURATION or PLV1_CONFIGURATION
 	 */
 	payload_type_t type;
 };
@@ -111,7 +111,7 @@ static encoding_rule_t encodings_v2[] = {
 	{ RESERVED_BYTE,	offsetof(private_cp_payload_t, reserved_byte[1])},
 	{ RESERVED_BYTE,	offsetof(private_cp_payload_t, reserved_byte[2])},
 	/* list of configuration attributes in a list */
-	{ PAYLOAD_LIST + CONFIGURATION_ATTRIBUTE,
+	{ PAYLOAD_LIST + PLV2_CONFIGURATION_ATTRIBUTE,
 						offsetof(private_cp_payload_t, attributes)		},
 };
 
@@ -152,7 +152,7 @@ static encoding_rule_t encodings_v1[] = {
 	{ RESERVED_BYTE,	offsetof(private_cp_payload_t, reserved_byte[0])},
 	{ U_INT_16,			offsetof(private_cp_payload_t, identifier)},
 	/* list of configuration attributes in a list */
-	{ PAYLOAD_LIST + CONFIGURATION_ATTRIBUTE_V1,
+	{ PAYLOAD_LIST + PLV1_CONFIGURATION_ATTRIBUTE,
 						offsetof(private_cp_payload_t, attributes)		},
 };
 
@@ -193,7 +193,7 @@ METHOD(payload_t, verify, status_t,
 METHOD(payload_t, get_encoding_rules, int,
 	private_cp_payload_t *this, encoding_rule_t **rules)
 {
-	if (this->type == CONFIGURATION)
+	if (this->type == PLV2_CONFIGURATION)
 	{
 		*rules = encodings_v2;
 		return countof(encodings_v2);
@@ -269,13 +269,13 @@ METHOD(cp_payload_t, get_config_type, config_type_t,
 	return this->cfg_type;
 }
 
-METHOD(cp_payload_t, get_identifier, u_int16_t,
+METHOD(cp_payload_t, get_identifier, uint16_t,
 			 private_cp_payload_t *this)
 {
 	return this->identifier;
 }
 METHOD(cp_payload_t, set_identifier, void,
-			 private_cp_payload_t *this, u_int16_t identifier)
+			 private_cp_payload_t *this, uint16_t identifier)
 {
 	this->identifier = identifier;
 }
@@ -314,7 +314,7 @@ cp_payload_t *cp_payload_create_type(payload_type_t type, config_type_t cfg_type
 			.set_identifier = _set_identifier,
 			.destroy = _destroy,
 		},
-		.next_payload = NO_PAYLOAD,
+		.next_payload = PL_NONE,
 		.payload_length = get_header_length(this),
 		.attributes = linked_list_create(),
 		.cfg_type = cfg_type,

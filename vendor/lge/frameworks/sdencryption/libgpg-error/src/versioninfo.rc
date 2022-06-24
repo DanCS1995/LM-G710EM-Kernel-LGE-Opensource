@@ -1,6 +1,6 @@
 /* versioninfo.rc.in - for libgpg-error
  *    Copyright (C) 2005 g10 Code GmbH
- * 
+ *
  * This file is free software; as a special exception the author gives
  * unlimited permission to copy and/or distribute it, with or without
  * modifications, as long as this notice is preserved.
@@ -9,7 +9,7 @@
  * WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
  * implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
- 
+
 /* This file is processed by configure to create versioninfo.rc */
 
 #line __LINE__ "versioninfo.rc.in"
@@ -18,8 +18,8 @@
 
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 
- PRODUCTVERSION 
+ FILEVERSION
+ PRODUCTVERSION
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x21L

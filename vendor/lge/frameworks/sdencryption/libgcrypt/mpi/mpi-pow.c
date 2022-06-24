@@ -18,10 +18,10 @@
  * License along with this program; if not, see <http://www.gnu.org/licenses/>.
  *
  * Note: This code is heavily based on the GNU MP Library.
- *	 Actually it's the same code with only minor changes in the
- *	 way the data is stored; this is to support the abstraction
- *	 of an optional secure memory allocation which may be used
- *	 to avoid revealing of sensitive data due to paging etc.
+ *     Actually it's the same code with only minor changes in the
+ *     way the data is stored; this is to support the abstraction
+ *     of an optional secure memory allocation which may be used
+ *     to avoid revealing of sensitive data due to paging etc.
  */
 
 #include <config.h>
@@ -77,7 +77,7 @@ gcry_mpi_powm (gcry_mpi_t res,
   ep = expo->d;
 
   if (!msize)
-    msize = 1 / msize;	    /* Provoke a signal.  */
+    msize = 1 / msize;        /* Provoke a signal.  */
 
   if (!esize) 
     {
@@ -117,7 +117,7 @@ gcry_mpi_powm (gcry_mpi_t res,
       _gcry_mpih_divrem( bp + msize, 0, bp, bsize, mp, msize );
       bsize = msize;
       /* Canonicalize the base, since we are going to multiply with it
-	 quite a few times.  */
+     quite a few times.  */
       MPN_NORMALIZE( bp, bsize );
     }
   else

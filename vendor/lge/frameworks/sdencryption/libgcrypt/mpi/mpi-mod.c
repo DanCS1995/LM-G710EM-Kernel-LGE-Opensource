@@ -115,7 +115,7 @@ _gcry_mpi_barrett_free (mpi_barrett_t ctx)
 
    We assume that these conditions are met:
    Input:  x =(x_2k-1 ...x_0)_b
- 	   m =(m_k-1 ....m_0)_b	  with m_k-1 != 0
+        m =(m_k-1 ....m_0)_b      with m_k-1 != 0
    Output: r = x mod m
  */
 void
@@ -145,8 +145,8 @@ _gcry_mpi_mod_barrett (gcry_mpi_t r, gcry_mpi_t x, mpi_barrett_t ctx)
   mpi_rshift_limbs ( r2, k+1 );
 
   /* 2. r1 = x mod b^k+1
-   *	r2 = q3 * m mod b^k+1
-   *	r  = r1 - r2
+   *    r2 = q3 * m mod b^k+1
+   *    r  = r1 - r2
    * 3. if r < 0 then  r = r + b^k+1
    */
   mpi_set ( r1, x );

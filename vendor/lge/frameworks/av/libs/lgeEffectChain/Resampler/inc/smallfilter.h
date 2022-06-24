@@ -1,8 +1,8 @@
 /* Included by resamplesubs.c */
 #define SMALL_FILTER_NMULT ((HWORD)13)
-#define SMALL_FILTER_SCALE 13128 /* Unity-gain scale factor */
+#define SMALL_FILTER_SCALE 13128 /* Unity-gain scale factor */  //13128/16384 = 0.80126953125
 #define SMALL_FILTER_NWING 1536 /* Filter table length */
-static HWORD SMALL_FILTER_IMP[] /* Impulse response */ = {
+static HWORD SMALL_FILTER_IMP[] /* Impulse response */ = {   // 16 : 1.0.15
 32767,
 32766,
 32764,
@@ -4615,3 +4615,4 @@ static HWORD SMALL_FILTER_IMPD[] = {
 0,
 1
 };
+

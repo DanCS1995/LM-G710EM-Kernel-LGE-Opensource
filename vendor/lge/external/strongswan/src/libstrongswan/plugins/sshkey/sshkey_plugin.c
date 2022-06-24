@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * Copyright (C) 2013-2014 Tobias Brunner
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -44,6 +44,8 @@ METHOD(plugin_t, get_features, int,
 	static plugin_feature_t f[] = {
 		PLUGIN_REGISTER(PUBKEY, sshkey_public_key_load, FALSE),
 			PLUGIN_PROVIDE(PUBKEY, KEY_ANY),
+		PLUGIN_REGISTER(CERT_DECODE, sshkey_certificate_load, FALSE),
+			PLUGIN_PROVIDE(CERT_DECODE, CERT_TRUSTED_PUBKEY),
 	};
 	*features = f;
 	return countof(f);

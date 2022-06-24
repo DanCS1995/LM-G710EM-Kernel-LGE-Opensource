@@ -1,9 +1,9 @@
 /*
- * Copyright (C) 2006-2012 Tobias Brunner
+ * Copyright (C) 2006-2017 Tobias Brunner
  * Copyright (C) 2005-2009 Martin Willi
  * Copyright (C) 2006 Daniel Roethlisberger
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,8 +16,34 @@
  * for more details.
  */
 
+/*
+ * Copyright (C) 2016 secunet Security Networks AG
+ * Copyright (C) 2016 Thomas Egerer
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
 /**
  * @defgroup libcharon libcharon
+ *
+ * @defgroup attributes attributes
+ * @ingroup libcharon
  *
  * @defgroup bus bus
  * @ingroup libcharon
@@ -37,7 +63,7 @@
  * @defgroup payloads payloads
  * @ingroup encoding
  *
- * @defgroup ckernel kernel
+ * @defgroup kernel kernel
  * @ingroup libcharon
  *
  * @defgroup network network
@@ -143,7 +169,7 @@
  * IKE_SA.
  *
  * The controller, credential_manager, bus and backend_manager (config) are
- * places where a plugin ca register itself to privide information or observe
+ * places where a plugin ca register itself to provide information or observe
  * and control the daemon.
  */
 
@@ -152,12 +178,16 @@
 
 typedef struct daemon_t daemon_t;
 
+#include <attributes/attribute_manager.h>
+#include <kernel/kernel_interface.h>
 #include <network/sender.h>
 #include <network/receiver.h>
 #include <network/socket_manager.h>
 #include <control/controller.h>
 #include <bus/bus.h>
+#include <bus/listeners/custom_logger.h>
 #include <sa/ike_sa_manager.h>
+#include <sa/child_sa_manager.h>
 #include <sa/trap_manager.h>
 #include <sa/shunt_manager.h>
 #include <sa/redirect_manager.h>
@@ -211,9 +241,19 @@ struct daemon_t {
 	socket_manager_t *socket;
 
 	/**
+	 * Kernel interface to communicate with kernel
+	 */
+	kernel_interface_t *kernel;
+
+	/**
 	 * A ike_sa_manager_t instance.
 	 */
 	ike_sa_manager_t *ike_sa_manager;
+
+	/**
+	 * A child_sa_manager_t instance.
+	 */
+	child_sa_manager_t *child_sa_manager;
 
 	/**
 	 * Manager for triggering policies, called traps
@@ -244,6 +284,11 @@ struct daemon_t {
 	 * The Receiver-Thread.
 	 */
 	receiver_t *receiver;
+
+	/**
+	 * Manager for IKE configuration attributes
+	 */
+	attribute_manager_t *attributes;
 
 	/**
 	 * The signaling bus.
@@ -293,17 +338,27 @@ struct daemon_t {
 	/**
 	 * Load/Reload loggers defined in strongswan.conf
 	 *
-	 * @param levels	optional debug levels used to create default loggers
-	 * 					if none are defined in strongswan.conf
-	 * @param to_stderr	TRUE to log to stderr/stdout if no loggers are defined
-	 * 					in strongswan.conf
+	 * If none are defined in strongswan.conf default loggers configured via
+	 * set_default_loggers() are loaded.
 	 */
-	void (*load_loggers)(daemon_t *this, level_t levels[DBG_MAX],
-						 bool to_stderr);
+	void (*load_loggers)(daemon_t *this);
 
 	/**
-	 * Set the log level for the given log group for all configured file- and
-	 * syslog-loggers.
+	 * Configure default loggers if none are defined in strongswan.conf
+	 *
+	 * @param levels	debug levels used to create default loggers if none are
+	 *					defined in strongswan.conf (NULL to disable)
+	 * @param to_stderr	TRUE to log to stderr/stdout if no loggers are defined
+	 * 					in strongswan.conf (logging to syslog is always enabled)
+	 */
+	void (*set_default_loggers)(daemon_t *this, level_t levels[DBG_MAX],
+								bool to_stderr);
+
+	/**
+	 * Set the log level for the given log group for all loaded loggers.
+	 *
+	 * This change is not persistent and gets reset if loggers are reloaded
+	 * via load_loggers().
 	 *
 	 * @param group		log group
 	 * @param level		log level
@@ -335,5 +390,16 @@ bool libcharon_init();
  * Deinitialize libcharon and destroy the "charon" instance of daemon_t.
  */
 void libcharon_deinit();
+
+/**
+ * Register a custom logger constructor.
+ *
+ * To be called from __attribute__((constructor)) functions.
+ *
+ * @param name				name of the logger (also used for loglevel config)
+ * @param constructor		constructor to create custom logger
+ */
+void register_custom_logger(char *name,
+							custom_logger_constructor_t constructor);
 
 #endif /** DAEMON_H_ @}*/

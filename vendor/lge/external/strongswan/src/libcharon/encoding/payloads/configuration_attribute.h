@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2005-2009 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -57,7 +57,7 @@ struct configuration_attribute_t {
 	 *
 	 * @return 		attribute value
 	 */
-	u_int16_t (*get_value) (configuration_attribute_t *this);
+	uint16_t (*get_value) (configuration_attribute_t *this);
 
 	/**
 	 * Destroys an configuration_attribute_t object.
@@ -68,7 +68,7 @@ struct configuration_attribute_t {
 /**
  * Creates an empty configuration attribute.
  *
- * @param type		CONFIGURATION_ATTRIBUTE or CONFIGURATION_ATTRIBUTE_V1
+ * @param type		PLV2_CONFIGURATION_ATTRIBUTE or PLV1_CONFIGURATION_ATTRIBUTE
  * @return			created configuration attribute
  */
 configuration_attribute_t *configuration_attribute_create(payload_type_t type);
@@ -76,7 +76,7 @@ configuration_attribute_t *configuration_attribute_create(payload_type_t type);
 /**
  * Creates a configuration attribute with type and value.
  *
- * @param type		CONFIGURATION_ATTRIBUTE or CONFIGURATION_ATTRIBUTE_V1
+ * @param type		PLV2_CONFIGURATION_ATTRIBUTE or PLV1_CONFIGURATION_ATTRIBUTE
  * @param attr_type	type of configuration attribute
  * @param chunk		attribute value, gets cloned
  * @return			created configuration attribute
@@ -89,9 +89,9 @@ configuration_attribute_t *configuration_attribute_create_chunk(
  *
  * @param attr_type	type of configuration attribute
  * @param value		attribute value, gets cloned
- * @return			created CONFIGURATION_ATTRIBUTE_V1 configuration attribute
+ * @return			created PLV1_CONFIGURATION_ATTRIBUTE configuration attribute
  */
 configuration_attribute_t *configuration_attribute_create_value(
-					configuration_attribute_type_t attr_type, u_int16_t value);
+					configuration_attribute_type_t attr_type, uint16_t value);
 
 #endif /** CONFIGURATION_ATTRIBUTE_H_ @}*/

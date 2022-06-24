@@ -200,14 +200,14 @@ transform (SHA512_CONTEXT *hd, const unsigned char *data)
 
     for (i = 0, p2 = (byte *) w; i < 16; i++, p2 += 8)
       {
-	p2[7] = *data++;
-	p2[6] = *data++;
-	p2[5] = *data++;
-	p2[4] = *data++;
-	p2[3] = *data++;
-	p2[2] = *data++;
-	p2[1] = *data++;
-	p2[0] = *data++;
+    p2[7] = *data++;
+    p2[6] = *data++;
+    p2[5] = *data++;
+    p2[4] = *data++;
+    p2[3] = *data++;
+    p2[2] = *data++;
+    p2[1] = *data++;
+    p2[0] = *data++;
       }
   }
 #endif
@@ -310,7 +310,7 @@ sha512_write (void *context, const void *inbuf_arg, size_t inlen)
   SHA512_CONTEXT *hd = context;
 
   if (hd->count == 128)
-    {				/* flush the buffer */
+    {                /* flush the buffer */
       transform (hd, hd->buf);
       _gcry_burn_stack (768);
       hd->count = 0;
@@ -321,10 +321,10 @@ sha512_write (void *context, const void *inbuf_arg, size_t inlen)
   if (hd->count)
     {
       for (; inlen && hd->count < 128; inlen--)
-	hd->buf[hd->count++] = *inbuf++;
+    hd->buf[hd->count++] = *inbuf++;
       sha512_write (context, NULL, 0);
       if (!inlen)
-	return;
+    return;
     }
 
   while (inlen >= 128)
@@ -373,18 +373,18 @@ sha512_final (void *context)
   msb |= t >> 61;
 
   if (hd->count < 112)
-    {				/* enough room */
-      hd->buf[hd->count++] = 0x80;	/* pad */
+    {                /* enough room */
+      hd->buf[hd->count++] = 0x80;    /* pad */
       while (hd->count < 112)
-	hd->buf[hd->count++] = 0;	/* pad */
+    hd->buf[hd->count++] = 0;    /* pad */
     }
   else
-    {				/* need one extra block */
-      hd->buf[hd->count++] = 0x80;	/* pad character */
+    {                /* need one extra block */
+      hd->buf[hd->count++] = 0x80;    /* pad character */
       while (hd->count < 128)
-	hd->buf[hd->count++] = 0;
+    hd->buf[hd->count++] = 0;
       sha512_write (context, NULL, 0); /* flush */ ;
-      memset (hd->buf, 0, 112);	/* fill next block with zeroes */
+      memset (hd->buf, 0, 112);    /* fill next block with zeroes */
     }
   /* append the 128 bit count */
   hd->buf[112] = msb >> 56;
@@ -411,9 +411,9 @@ sha512_final (void *context)
 #ifdef WORDS_BIGENDIAN
 #define X(a) do { *(u64*)p = hd->h##a ; p += 8; } while (0)
 #else /* little endian */
-#define X(a) do { *p++ = hd->h##a >> 56; *p++ = hd->h##a >> 48;	      \
-                  *p++ = hd->h##a >> 40; *p++ = hd->h##a >> 32;	      \
-                  *p++ = hd->h##a >> 24; *p++ = hd->h##a >> 16;	      \
+#define X(a) do { *p++ = hd->h##a >> 56; *p++ = hd->h##a >> 48;          \
+                  *p++ = hd->h##a >> 40; *p++ = hd->h##a >> 32;          \
+                  *p++ = hd->h##a >> 24; *p++ = hd->h##a >> 16;          \
                   *p++ = hd->h##a >> 8;  *p++ = hd->h##a; } while (0)
 #endif
   X (0);
@@ -572,7 +572,7 @@ run_selftests (int algo, int extended, selftest_report_func_t report)
 
 
 
-static byte sha512_asn[] =	/* Object ID is 2.16.840.1.101.3.4.2.3 */
+static byte sha512_asn[] =    /* Object ID is 2.16.840.1.101.3.4.2.3 */
   {
     0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86,
     0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03, 0x05,
@@ -600,7 +600,7 @@ md_extra_spec_t _gcry_digest_extraspec_sha512 =
     run_selftests
   };
 
-static byte sha384_asn[] =	/* Object ID is 2.16.840.1.101.3.4.2.2 */
+static byte sha384_asn[] =    /* Object ID is 2.16.840.1.101.3.4.2.2 */
   {
     0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86,
     0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02, 0x05,

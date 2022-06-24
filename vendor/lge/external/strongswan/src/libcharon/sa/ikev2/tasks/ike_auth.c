@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2012 Tobias Brunner
+ * Copyright (C) 2012-2018 Tobias Brunner
  * Copyright (C) 2005-2009 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,12 +24,12 @@
 #include <encoding/payloads/auth_payload.h>
 #include <encoding/payloads/eap_payload.h>
 #include <encoding/payloads/nonce_payload.h>
+#include <sa/ikev2/keymat_v2.h>
 #include <sa/ikev2/authenticators/eap_authenticator.h>
 #include <processing/jobs/delete_ike_sa_job.h>
 #include <utils/cust_settings.h>
 
 #include <libpatchcodeid.h>
-
 typedef struct private_ike_auth_t private_ike_auth_t;
 
 /**
@@ -61,6 +61,16 @@ struct private_ike_auth_t {
 	 * Nonce chosen by peer in ike_init
 	 */
 	chunk_t other_nonce;
+
+	/**
+	 * PPK_ID sent or received
+	 */
+	identification_t *ppk_id;
+
+	/**
+	 * Optional PPK to use
+	 */
+	chunk_t ppk;
 
 	/**
 	 * IKE_SA_INIT message sent by us
@@ -118,6 +128,11 @@ struct private_ike_auth_t {
 	bool initial_contact;
 
 	/**
+	 * Is EAP acceptable, did we strictly authenticate peer?
+	 */
+	bool eap_acceptable;
+
+	/**
 	 * Gateway ID if redirected
 	 */
 	identification_t *redirect_to;
@@ -141,8 +156,8 @@ static status_t collect_my_init_data(private_ike_auth_t *this,
 	nonce_payload_t *nonce;
 
 	/* get the nonce that was generated in ike_init */
-	nonce = (nonce_payload_t*)message->get_payload(message, NONCE);
-	if (nonce == NULL)
+	nonce = (nonce_payload_t*)message->get_payload(message, PLV2_NONCE);
+	if (!nonce)
 	{
 		return FAILED;
 	}
@@ -167,8 +182,8 @@ static status_t collect_other_init_data(private_ike_auth_t *this,
 	nonce_payload_t *nonce;
 
 	/* get the nonce that was generated in ike_init */
-	nonce = (nonce_payload_t*)message->get_payload(message, NONCE);
-	if (nonce == NULL)
+	nonce = (nonce_payload_t*)message->get_payload(message, PLV2_NONCE);
+	if (!nonce)
 	{
 		return FAILED;
 	}
@@ -184,7 +199,7 @@ static status_t collect_other_init_data(private_ike_auth_t *this,
  */
 static void get_reserved_id_bytes(private_ike_auth_t *this, id_payload_t *id)
 {
-	u_int8_t *byte;
+	uint8_t *byte;
 	int i;
 
 	for (i = 0; i < countof(this->reserved); i++)
@@ -277,19 +292,47 @@ static bool do_another_auth(private_ike_auth_t *this)
 }
 
 /**
+ * Check if this is the first authentication round
+ */
+static bool is_first_round(private_ike_auth_t *this, bool local)
+{
+	enumerator_t *done;
+	auth_cfg_t *cfg;
+
+	if (!this->ike_sa->supports_extension(this->ike_sa, EXT_MULTIPLE_AUTH))
+	{
+		return TRUE;
+	}
+
+	done = this->ike_sa->create_auth_cfg_enumerator(this->ike_sa, local);
+	if (done->enumerate(done, &cfg))
+	{
+		done->destroy(done);
+		return FALSE;
+	}
+	done->destroy(done);
+	return TRUE;
+}
+
+/**
  * Get peer configuration candidates from backends
  */
 static bool load_cfg_candidates(private_ike_auth_t *this)
 {
 	enumerator_t *enumerator;
 	peer_cfg_t *peer_cfg;
+	ike_cfg_t *ike_cfg;
 	host_t *me, *other;
 	identification_t *my_id, *other_id;
+	proposal_t *ike_proposal;
+	bool private;
 
 	me = this->ike_sa->get_my_host(this->ike_sa);
 	other = this->ike_sa->get_other_host(this->ike_sa);
 	my_id = this->ike_sa->get_my_id(this->ike_sa);
 	other_id = this->ike_sa->get_other_id(this->ike_sa);
+	ike_proposal = this->ike_sa->get_proposal(this->ike_sa);
+	private = this->ike_sa->supports_extension(this->ike_sa, EXT_STRONGSWAN);
 
 	DBG1(DBG_CFG, "looking for peer configs matching %H[%Y]...%H[%Y]",
 		 me, my_id, other, other_id);
@@ -297,11 +340,18 @@ static bool load_cfg_candidates(private_ike_auth_t *this)
 											me, other, my_id, other_id, IKEV2);
 	while (enumerator->enumerate(enumerator, &peer_cfg))
 	{
+		/* ignore all configs that have no matching IKE proposal */
+		ike_cfg = peer_cfg->get_ike_cfg(peer_cfg);
+		if (!ike_cfg->has_proposal(ike_cfg, ike_proposal, private))
+		{
+			DBG2(DBG_CFG, "ignore candidate '%s' without matching IKE proposal",
+				 peer_cfg->get_name(peer_cfg));
+			continue;
+		}
 		peer_cfg->get_ref(peer_cfg);
-		if (this->peer_cfg == NULL)
+		if (!this->peer_cfg)
 		{	/* best match */
 			this->peer_cfg = peer_cfg;
-			this->ike_sa->set_peer_cfg(this->ike_sa, peer_cfg);
 		}
 		else
 		{
@@ -311,6 +361,7 @@ static bool load_cfg_candidates(private_ike_auth_t *this)
 	enumerator->destroy(enumerator);
 	if (this->peer_cfg)
 	{
+		this->ike_sa->set_peer_cfg(this->ike_sa, this->peer_cfg);
 		DBG1(DBG_CFG, "selected peer config '%s'",
 			 this->peer_cfg->get_name(this->peer_cfg));
 		return TRUE;
@@ -367,7 +418,7 @@ static bool update_cfg_candidates(private_ike_auth_t *this, bool strict)
 			{
 				break;
 			}
-			DBG1(DBG_CFG, "selected peer config '%s' inacceptable: %s",
+			DBG1(DBG_CFG, "selected peer config '%s' unacceptable: %s",
 				 this->peer_cfg->get_name(this->peer_cfg), comply_error);
 			this->peer_cfg->destroy(this->peer_cfg);
 		}
@@ -389,18 +440,174 @@ static bool update_cfg_candidates(private_ike_auth_t *this, bool strict)
 	return this->peer_cfg != NULL;
 }
 
+/**
+ * Currently defined PPK_ID types
+ */
+#define PPK_ID_OPAQUE 1
+#define PPK_ID_FIXED 2
+
+/**
+ * Parse the payload data of the given PPK_IDENTITY notify
+ */
+static bool parse_ppk_identity(notify_payload_t *notify, identification_t **id)
+{
+	chunk_t data;
+
+	data = notify->get_notification_data(notify);
+	if (data.len < 2)
+	{
+		return FALSE;
+	}
+	switch (data.ptr[0])
+	{
+		case PPK_ID_FIXED:
+			data = chunk_skip(data, 1);
+			break;
+		default:
+			return FALSE;
+	}
+	*id = identification_create_from_data(data);
+	return TRUE;
+}
+
+/**
+ * Add a PPK_IDENTITY with the given PPK_ID to the given message
+ */
+static void add_ppk_identity(identification_t *id, message_t *msg)
+{
+	chunk_t data;
+	uint8_t type = PPK_ID_FIXED;
+
+	/* we currently only support one type */
+	data = chunk_cata("cc", chunk_from_thing(type), id->get_encoding(id));
+	msg->add_notify(msg, FALSE, PPK_IDENTITY, data);
+}
+
+/**
+ * Use the given PPK_ID to find a PPK and store it and the ID in the task
+ */
+static bool get_ppk(private_ike_auth_t *this, identification_t *ppk_id)
+{
+	shared_key_t *key;
+
+	key = lib->credmgr->get_shared(lib->credmgr, SHARED_PPK, ppk_id, NULL);
+	if (!key)
+	{
+		if (this->peer_cfg->ppk_required(this->peer_cfg))
+		{
+			DBG1(DBG_CFG, "PPK required but no PPK found for '%Y'", ppk_id);
+			return FALSE;
+		}
+		DBG1(DBG_CFG, "no PPK for '%Y' found, ignored because PPK is not "
+			 "required", ppk_id);
+		return TRUE;
+	}
+	this->ppk = chunk_clone(key->get_key(key));
+	this->ppk_id = ppk_id->clone(ppk_id);
+	key->destroy(key);
+	return TRUE;
+}
+
+/**
+ * Check if we have a PPK available and, if not, whether we require one as
+ * initiator
+ */
+static bool get_ppk_i(private_ike_auth_t *this)
+{
+	identification_t *ppk_id;
+
+	if (!this->ike_sa->supports_extension(this->ike_sa, EXT_PPK))
+	{
+		if (this->peer_cfg->ppk_required(this->peer_cfg))
+		{
+			DBG1(DBG_CFG, "PPK required but peer does not support PPK");
+			return FALSE;
+		}
+		return TRUE;
+	}
+
+	ppk_id = this->peer_cfg->get_ppk_id(this->peer_cfg);
+	if (!ppk_id)
+	{
+		if (this->peer_cfg->ppk_required(this->peer_cfg))
+		{
+			DBG1(DBG_CFG, "PPK required but no PPK_ID configured");
+			return FALSE;
+		}
+		return TRUE;
+	}
+	return get_ppk(this, ppk_id);
+}
+
+/**
+ * Check if we have a PPK available and if not whether we require one as
+ * responder
+ */
+static bool get_ppk_r(private_ike_auth_t *this, message_t *msg)
+{
+	notify_payload_t *notify;
+	identification_t *ppk_id, *ppk_id_cfg;
+	bool result;
+
+	if (!this->ike_sa->supports_extension(this->ike_sa, EXT_PPK))
+	{
+		if (this->peer_cfg->ppk_required(this->peer_cfg))
+		{
+			DBG1(DBG_CFG, "PPK required but peer does not support PPK");
+			return FALSE;
+		}
+		return TRUE;
+	}
+
+	notify = msg->get_notify(msg, PPK_IDENTITY);
+	if (!notify || !parse_ppk_identity(notify, &ppk_id))
+	{
+		if (this->peer_cfg->ppk_required(this->peer_cfg))
+		{
+			DBG1(DBG_CFG, "PPK required but no PPK_IDENTITY received");
+			return FALSE;
+		}
+		return TRUE;
+	}
+
+	ppk_id_cfg = this->peer_cfg->get_ppk_id(this->peer_cfg);
+	if (ppk_id_cfg && !ppk_id->matches(ppk_id, ppk_id_cfg))
+	{
+		DBG1(DBG_CFG, "received PPK_ID '%Y', but require '%Y'", ppk_id,
+			 ppk_id_cfg);
+		ppk_id->destroy(ppk_id);
+		return FALSE;
+	}
+	result = get_ppk(this, ppk_id);
+	ppk_id->destroy(ppk_id);
+	return result;
+}
+
+//LGP_DATA_IWLAN support_5gs [START]
+static uint8_t get_psi(char* name) {
+    int psi = -1;
+    //get psi from 'IWLAN HAL' or 'property'
+    if (psi < 0 || psi > 255) {
+        psi = -1;
+    }
+    return psi;
+}
+//LGP_DATA_IWLAN support_5gs [END]
+
+
 METHOD(task_t, build_i, status_t,
 	private_ike_auth_t *this, message_t *message)
 {
 	auth_cfg_t *cfg;
 	int slotid = 0;
+	int psi = -1;
 
 	if (message->get_exchange_type(message) == IKE_SA_INIT)
 	{
 		return collect_my_init_data(this, message);
 	}
 
-	if (this->peer_cfg == NULL)
+	if (!this->peer_cfg)
 	{
 		this->peer_cfg = this->ike_sa->get_peer_cfg(this->ike_sa);
 		this->peer_cfg->get_ref(this->peer_cfg);
@@ -421,7 +628,31 @@ METHOD(task_t, build_i, status_t,
 			message->add_notify(message, FALSE, EAP_ONLY_AUTHENTICATION,
 							chunk_empty);
 		}
+		//LGP_DATA_IWLAN [START]don't use IKEV@_MESSAGE_ID_SYNC_SUPPORTED
+		/* indicate support for RFC 6311 Message ID synchronization */
+                patch_code_id("LPCP-1776@n@c@libcharon@ike_auth.c@3");
+		/*message->add_notify(message, FALSE, IKEV2_MESSAGE_ID_SYNC_SUPPORTED,
+							chunk_empty);*/
+		//LGP_DATA_IWLAN [END]
+		//LGP_DATA_IWLAN  support_5gs [START]
+		if (get_cust_setting_int_by_slotid(slotid, EPDG_SUPPORT_5GS) == 1)
+		{
+			DBG1(DBG_CFG, "EPDG_SUPPORT_5GS 1");
+			psi = get_psi(this->ike_sa->get_name(this->ike_sa));
+			if (psi != -1) {
+		 		message->add_notify(message, FALSE, N1_MODE_CAPABILITY, chunk_create(&psi,1));
+			}
+		} else {
+			DBG1(DBG_CFG, "EPDG_SUPPORT_5GS 0");
+		}
+		//LGP_DATA_IWLAN  support_5gs [END]
 #endif
+		/* only use a PPK in the first round */
+		if (!get_ppk_i(this))
+		{
+			charon->bus->alert(charon->bus, ALERT_LOCAL_AUTH_FAILED);
+			return FAILED;
+		}
 	}
 
 	if (!this->do_another_auth && !this->my_auth)
@@ -430,7 +661,7 @@ METHOD(task_t, build_i, status_t,
 	}
 
 	/* check if an authenticator is in progress */
-	if (this->my_auth == NULL)
+	if (!this->my_auth)
 	{
 		identification_t *idi, *idr = NULL, *idr_ss=NULL;
 		id_payload_t *id_payload;
@@ -450,7 +681,7 @@ METHOD(task_t, build_i, status_t,
 			idr_ss = cfg->get(cfg, AUTH_RULE_IDENTITY);
 			if (idr) {				
 				this->ike_sa->set_other_id(this->ike_sa, idr->clone(idr));
-				id_payload = id_payload_create_from_identification(ID_RESPONDER, idr);				
+				id_payload = id_payload_create_from_identification(PLV2_ID_RESPONDER, idr);				
 				message->add_payload(message, (payload_t*)id_payload);
 			} else {
 				idr = cfg->get(cfg, AUTH_RULE_IDENTITY);
@@ -458,12 +689,11 @@ METHOD(task_t, build_i, status_t,
 					!idr->contains_wildcards(idr))
 				{
 					this->ike_sa->set_other_id(this->ike_sa, idr->clone(idr));
-					id_payload = id_payload_create_from_identification(ID_RESPONDER, idr);
+					id_payload = id_payload_create_from_identification(PLV2_ID_RESPONDER, idr);
 					message->add_payload(message, (payload_t*)id_payload);
 				}
 			}
 		}
-		
 		/* add IDi */
 		cfg = this->ike_sa->get_auth_cfg(this->ike_sa, TRUE);
 		cfg->merge(cfg, get_auth_cfg(this, TRUE), TRUE);
@@ -478,12 +708,12 @@ METHOD(task_t, build_i, status_t,
 			cfg->add(cfg, AUTH_RULE_IDENTITY, idi);
 		}
 		this->ike_sa->set_my_id(this->ike_sa, idi->clone(idi));
-		id_payload = id_payload_create_from_identification(ID_INITIATOR, idi);
+		id_payload = id_payload_create_from_identification(PLV2_ID_INITIATOR, idi);
 		get_reserved_id_bytes(this, id_payload);
 		message->add_payload(message, (payload_t*)id_payload);
 
-		if (idr && message->get_message_id(message) == 1 &&
-			this->peer_cfg->get_unique_policy(this->peer_cfg) != UNIQUE_NO &&
+		if (idr && !idr->contains_wildcards(idr) &&
+			message->get_message_id(message) == 1 &&
 			this->peer_cfg->get_unique_policy(this->peer_cfg) != UNIQUE_NEVER)
 		{
 			host_t *host;
@@ -500,14 +730,12 @@ METHOD(task_t, build_i, status_t,
 
 			if (idi && idr && id_host)
 				DBG2(DBG_CFG, "====== idi: %Y, idr: %Y, host: %Y ========", idi, idr, id_host);
-			if (!charon->ike_sa_manager->has_contact(charon->ike_sa_manager, idi, id_host, host->get_family(host)))
+			if (!charon->ike_sa_manager->has_contact(charon->ike_sa_manager,
+											idi, id_host, host->get_family(host)))
 			{
 				message->add_notify(message, FALSE, INITIAL_CONTACT, chunk_empty);
 			}
 		}
-
-		//To test
-		//message->add_notify(message, FALSE, NON_FIRST_FRAGMENTS_ALSO, chunk_empty);
 
 		/* build authentication data */
 		this->my_auth = authenticator_create_builder(this->ike_sa, cfg,
@@ -520,6 +748,14 @@ METHOD(task_t, build_i, status_t,
 			charon->bus->alert(charon->bus, ALERT_LOCAL_AUTH_FAILED);
 			return FAILED;
 		}
+	}
+	/* for authentication methods that return NEED_MORE, the PPK will be reset
+	 * in process_i() for messages without PPK_ID notify, so we always set it
+	 * during the first round (afterwards the PPK won't be available) */
+	if (this->ppk.ptr && this->my_auth->use_ppk)
+	{
+		this->my_auth->use_ppk(this->my_auth, this->ppk,
+							!this->peer_cfg->ppk_required(this->peer_cfg));
 	}
 	switch (this->my_auth->build(this->my_auth, message))
 	{
@@ -535,10 +771,16 @@ METHOD(task_t, build_i, status_t,
 			return FAILED;
 	}
 
+	/* add a PPK_IDENTITY notify to the message that contains AUTH */
+	if (this->ppk_id && message->get_payload(message, PLV2_AUTH))
+	{
+		add_ppk_identity(this->ppk_id, message);
+	}
+
 	/* check for additional authentication rounds */
 	if (do_another_auth(this))
 	{
-		if (message->get_payload(message, AUTHENTICATION))
+		if (message->get_payload(message, PLV2_AUTH))
 		{
 			message->add_notify(message, FALSE, ANOTHER_AUTH_FOLLOWS, chunk_empty);
 		}
@@ -562,10 +804,10 @@ METHOD(task_t, process_r, status_t,
 		return collect_other_init_data(this, message);
 	}
 
-	if (this->my_auth == NULL && this->do_another_auth)
+	if (!this->my_auth && this->do_another_auth)
 	{
 		/* handle (optional) IDr payload, apply proposed identity */
-		id_payload = (id_payload_t*)message->get_payload(message, ID_RESPONDER);
+		id_payload = (id_payload_t*)message->get_payload(message, PLV2_ID_RESPONDER);
 		if (id_payload)
 		{
 			id = id_payload->get_identification(id_payload);
@@ -593,12 +835,16 @@ METHOD(task_t, process_r, status_t,
 			this->ike_sa->enable_extension(this->ike_sa,
 										   EXT_EAP_ONLY_AUTHENTICATION);
 		}
+		if (message->get_notify(message, INITIAL_CONTACT))
+		{
+			this->initial_contact = TRUE;
+		}
 	}
 
-	if (this->other_auth == NULL)
+	if (!this->other_auth)
 	{
 		/* handle IDi payload */
-		id_payload = (id_payload_t*)message->get_payload(message, ID_INITIATOR);
+		id_payload = (id_payload_t*)message->get_payload(message, PLV2_ID_INITIATOR);
 		if (!id_payload)
 		{
 			DBG1(DBG_IKE, "IDi payload missing");
@@ -610,7 +856,7 @@ METHOD(task_t, process_r, status_t,
 		cfg = this->ike_sa->get_auth_cfg(this->ike_sa, FALSE);
 		cfg->add(cfg, AUTH_RULE_IDENTITY, id->clone(id));
 
-		if (this->peer_cfg == NULL)
+		if (!this->peer_cfg)
 		{
 			if (!load_cfg_candidates(this))
 			{
@@ -618,14 +864,14 @@ METHOD(task_t, process_r, status_t,
 				return NEED_MORE;
 			}
 		}
-		if (message->get_payload(message, AUTHENTICATION) == NULL)
+		if (!message->get_payload(message, PLV2_AUTH))
 		{	/* before authenticating with EAP, we need a EAP config */
 			cand = get_auth_cfg(this, FALSE);
 			while (!cand || (
 					(uintptr_t)cand->get(cand, AUTH_RULE_EAP_TYPE) == EAP_NAK &&
 					(uintptr_t)cand->get(cand, AUTH_RULE_EAP_VENDOR) == 0))
 			{	/* peer requested EAP, but current config does not match */
-				DBG1(DBG_IKE, "peer requested EAP, config inacceptable");
+				DBG1(DBG_IKE, "peer requested EAP, config unacceptable");
 				this->peer_cfg->destroy(this->peer_cfg);
 				this->peer_cfg = NULL;
 				if (!update_cfg_candidates(this, FALSE))
@@ -664,6 +910,19 @@ METHOD(task_t, process_r, status_t,
 			return NEED_MORE;
 		}
 	}
+	if (message->get_payload(message, PLV2_AUTH) &&
+		is_first_round(this, FALSE))
+	{
+		if (!get_ppk_r(this, message))
+		{
+			this->authentication_failed = TRUE;
+			return NEED_MORE;
+		}
+		else if (this->ppk.ptr && this->other_auth->use_ppk)
+		{
+			this->other_auth->use_ppk(this->other_auth, this->ppk, FALSE);
+		}
+	}
 	switch (this->other_auth->process(this->other_auth, message))
 	{
 		case SUCCESS:
@@ -671,7 +930,7 @@ METHOD(task_t, process_r, status_t,
 			this->other_auth = NULL;
 			break;
 		case NEED_MORE:
-			if (message->get_payload(message, AUTHENTICATION))
+			if (message->get_payload(message, PLV2_AUTH))
 			{	/* AUTH verification successful, but another build() needed */
 				break;
 			}
@@ -679,14 +938,6 @@ METHOD(task_t, process_r, status_t,
 		default:
 			this->authentication_failed = TRUE;
 			return NEED_MORE;
-	}
-
-	/* If authenticated (with non-EAP) and received INITIAL_CONTACT,
-	 * delete any existing IKE_SAs with that peer. */
-	if (message->get_message_id(message) == 1 &&
-		message->get_notify(message, INITIAL_CONTACT))
-	{
-		this->initial_contact = TRUE;
 	}
 
 	/* another auth round done, invoke authorize hook */
@@ -705,7 +956,7 @@ METHOD(task_t, process_r, status_t,
 		return NEED_MORE;
 	}
 
-	if (message->get_notify(message, ANOTHER_AUTH_FOLLOWS) == NULL)
+	if (!message->get_notify(message, ANOTHER_AUTH_FOLLOWS))
 	{
 		this->expect_another_auth = FALSE;
 		if (!update_cfg_candidates(this, TRUE))
@@ -715,6 +966,37 @@ METHOD(task_t, process_r, status_t,
 		}
 	}
 	return NEED_MORE;
+}
+
+/**
+ * Clear the PPK and PPK_ID
+ */
+static void clear_ppk(private_ike_auth_t *this)
+{
+	DESTROY_IF(this->ppk_id);
+	this->ppk_id = NULL;
+	chunk_clear(&this->ppk);
+}
+
+/**
+ * Derive new keys and clear the PPK
+ */
+static bool apply_ppk(private_ike_auth_t *this)
+{
+	keymat_v2_t *keymat;
+
+	if (this->ppk.ptr)
+	{
+		keymat = (keymat_v2_t*)this->ike_sa->get_keymat(this->ike_sa);
+		if (!keymat->derive_ike_keys_ppk(keymat, this->ppk))
+		{
+			return FALSE;
+		}
+		DBG1(DBG_CFG, "using PPK for PPK_ID '%Y'", this->ppk_id);
+		this->ike_sa->set_condition(this->ike_sa, COND_PPK, TRUE);
+	}
+	clear_ppk(this);
+	return TRUE;
 }
 
 METHOD(task_t, build_r, status_t,
@@ -733,12 +1015,12 @@ METHOD(task_t, build_r, status_t,
 		return collect_my_init_data(this, message);
 	}
 
-	if (this->authentication_failed || this->peer_cfg == NULL)
+	if (this->authentication_failed || !this->peer_cfg)
 	{
 		goto peer_auth_failed;
 	}
 
-	if (this->my_auth == NULL && this->do_another_auth)
+	if (!this->my_auth && this->do_another_auth)
 	{
 		identification_t *id, *id_cfg;
 		id_payload_t *id_payload;
@@ -774,16 +1056,9 @@ METHOD(task_t, build_r, status_t,
 			}
 		}
 
-		id_payload = id_payload_create_from_identification(ID_RESPONDER, id);
+		id_payload = id_payload_create_from_identification(PLV2_ID_RESPONDER, id);
 		get_reserved_id_bytes(this, id_payload);
 		message->add_payload(message, (payload_t*)id_payload);
-
-		if (this->initial_contact)
-		{
-			charon->ike_sa_manager->check_uniqueness(charon->ike_sa_manager,
-													 this->ike_sa, TRUE);
-			this->initial_contact = FALSE;
-		}
 
 		if ((uintptr_t)cfg->get(cfg, AUTH_RULE_AUTH_CLASS) == AUTH_CLASS_EAP)
 		{	/* EAP-only authentication */
@@ -821,7 +1096,7 @@ METHOD(task_t, build_r, status_t,
 			case NEED_MORE:
 				break;
 			default:
-				if (message->get_payload(message, EXTENSIBLE_AUTHENTICATION))
+				if (message->get_payload(message, PLV2_EAP))
 				{	/* skip AUTHENTICATION_FAILED if we have EAP_FAILURE */
 					goto peer_auth_failed_no_notify;
 				}
@@ -830,6 +1105,10 @@ METHOD(task_t, build_r, status_t,
 	}
 	if (this->my_auth)
 	{
+		if (this->ppk.ptr && this->my_auth->use_ppk)
+		{
+			this->my_auth->use_ppk(this->my_auth, this->ppk, FALSE);
+		}
 		switch (this->my_auth->build(this->my_auth, message))
 		{
 			case SUCCESS:
@@ -841,6 +1120,16 @@ METHOD(task_t, build_r, status_t,
 				break;
 			default:
 				goto local_auth_failed;
+		}
+	}
+
+	/* add a PPK_IDENTITY notify and derive new keys and clear the PPK */
+	if (this->ppk.ptr)
+	{
+		message->add_notify(message, FALSE, PPK_IDENTITY, chunk_empty);
+		if (!apply_ppk(this))
+		{
+			goto local_auth_failed;
 		}
 	}
 
@@ -859,7 +1148,7 @@ METHOD(task_t, build_r, status_t,
 	}
 
 	if (charon->ike_sa_manager->check_uniqueness(charon->ike_sa_manager,
-												 this->ike_sa, FALSE))
+										this->ike_sa, this->initial_contact))
 	{
 		DBG1(DBG_IKE, "cancelling IKE_SA setup due to uniqueness policy");
 		charon->bus->alert(charon->bus, ALERT_UNIQUE_KEEP);
@@ -909,15 +1198,14 @@ METHOD(task_t, build_r, status_t,
 				 this->ike_sa->get_unique_id(this->ike_sa));
 		}
 #else
-		DBG0(DBG_IKE, "IKE_SA %s[%d] established between %H[%Y]...%H[%Y]",
-			 this->ike_sa->get_name(this->ike_sa),
-			 this->ike_sa->get_unique_id(this->ike_sa),
-			 this->ike_sa->get_my_host(this->ike_sa),
-			 this->ike_sa->get_my_id(this->ike_sa),
-			 this->ike_sa->get_other_host(this->ike_sa),
-			 this->ike_sa->get_other_id(this->ike_sa));
+	DBG0(DBG_IKE, "IKE_SA %s[%d] established between %H[%Y]...%H[%Y]",
+		 this->ike_sa->get_name(this->ike_sa),
+		 this->ike_sa->get_unique_id(this->ike_sa),
+		 this->ike_sa->get_my_host(this->ike_sa),
+		 this->ike_sa->get_my_id(this->ike_sa),
+		 this->ike_sa->get_other_host(this->ike_sa),
+		 this->ike_sa->get_other_id(this->ike_sa));
 #endif
-
 	this->ike_sa->set_state(this->ike_sa, IKE_ESTABLISHED);
 	charon->bus->ike_updown(charon->bus, this->ike_sa, TRUE);
 	return SUCCESS;
@@ -960,13 +1248,45 @@ static void send_auth_failed_informational(private_ike_auth_t *this,
 	message->destroy(message);
 }
 
+/**
+ * Check if strict constraint fullfillment required to continue current auth
+ */
+static bool require_strict(private_ike_auth_t *this, bool mutual_eap)
+{
+	auth_cfg_t *cfg;
+
+	if (this->eap_acceptable)
+	{
+		return FALSE;
+	}
+
+	cfg = this->ike_sa->get_auth_cfg(this->ike_sa, TRUE);
+	switch ((uintptr_t)cfg->get(cfg, AUTH_RULE_AUTH_CLASS))
+	{
+		case AUTH_CLASS_EAP:
+			if (mutual_eap && this->my_auth)
+			{
+				this->eap_acceptable = TRUE;
+				return !this->my_auth->is_mutual(this->my_auth);
+			}
+			return TRUE;
+		case AUTH_CLASS_PSK:
+			return TRUE;
+		case AUTH_CLASS_PUBKEY:
+		case AUTH_CLASS_ANY:
+		default:
+			return FALSE;
+	}
+}
+
 METHOD(task_t, process_i, status_t,
 	private_ike_auth_t *this, message_t *message)
 {
 	enumerator_t *enumerator;
 	payload_t *payload;
 	auth_cfg_t *cfg;
-	bool mutual_eap = FALSE;
+	bool mutual_eap = FALSE, ppk_id_received = FALSE;
+	int slotid;
 
 	if (message->get_exchange_type(message) == IKE_SA_INIT)
 	{
@@ -981,7 +1301,7 @@ METHOD(task_t, process_i, status_t,
 	enumerator = message->create_payload_enumerator(message);
 	while (enumerator->enumerate(enumerator, &payload))
 	{
-		if (payload->get_type(payload) == NOTIFY)
+		if (payload->get_type(payload) == PLV2_NOTIFY)
 		{
 			notify_payload_t *notify = (notify_payload_t*)payload;
 			notify_type_t type = notify->get_notify_type(notify);
@@ -1018,6 +1338,41 @@ METHOD(task_t, process_i, status_t,
 						DBG1(DBG_IKE, "received invalid REDIRECT notify");
 					}
 					break;
+				case IKEV2_MESSAGE_ID_SYNC_SUPPORTED:
+					this->ike_sa->enable_extension(this->ike_sa,
+												   EXT_IKE_MESSAGE_ID_SYNC);
+					break;
+				case PPK_IDENTITY:
+					ppk_id_received = TRUE;
+					break;
+				//LGP_DATA_IWLAN support_5gs [START]
+				case N1_MODE_INFORMATION:
+					DBG1(DBG_IKE, "received N1_MODE_INFORMATION notify");
+					slotid = get_slotid(this->ike_sa->get_name(this->ike_sa));
+					if (get_cust_setting_int_by_slotid(slotid, EPDG_SUPPORT_5GS) == 1)
+					{
+						if (this->ike_sa) {
+							DBG1(DBG_IKE, "ePDG supports 5gs,   set S-NSSAI");
+							this->ike_sa->set_s_nssai(this->ike_sa, notify->get_notification_data(notify));
+						} else {
+							DBG1(DBG_IKE, " ike_sa is NULL");
+						}
+					}
+					break;
+				case N1_MODE_S_NSSAI_PLMN_ID:
+					DBG1(DBG_IKE, "received N1_MODE_S_NSSAI_PLMN_ID notify");
+					slotid = get_slotid(this->ike_sa->get_name(this->ike_sa));
+					if (get_cust_setting_int_by_slotid(slotid, EPDG_SUPPORT_5GS) == 1)
+					{
+						if (this->ike_sa) {
+							DBG1(DBG_IKE, "ePDG supports 5gs,	set PLMN ID");
+							this->ike_sa->set_plmn_id(this->ike_sa, notify->get_notification_data(notify));
+						} else {
+							DBG1(DBG_IKE, " ike_sa is NULL");
+						}
+					}
+					break;
+				//LGP_DATA_IWLAN support_5gs [END]
 				default:
 				{
 					if (type <= 16383)
@@ -1039,14 +1394,14 @@ METHOD(task_t, process_i, status_t,
 
 	if (this->expect_another_auth)
 	{
-		if (this->other_auth == NULL)
+		if (!this->other_auth)
 		{
 			id_payload_t *id_payload;
 			identification_t *id;
 
 			/* handle IDr payload */
 			id_payload = (id_payload_t*)message->get_payload(message,
-															 ID_RESPONDER);
+															 PLV2_ID_RESPONDER);
 			if (!id_payload)
 			{
 				DBG1(DBG_IKE, "IDr payload missing");
@@ -1058,7 +1413,7 @@ METHOD(task_t, process_i, status_t,
 			cfg = this->ike_sa->get_auth_cfg(this->ike_sa, FALSE);
 			cfg->add(cfg, AUTH_RULE_IDENTITY, id->clone(id));
 
-			if (message->get_payload(message, AUTHENTICATION))
+			if (message->get_payload(message, PLV2_AUTH))
 			{
 				/* verify authentication data */
 				this->other_auth = authenticator_create_verifier(this->ike_sa,
@@ -1079,6 +1434,11 @@ METHOD(task_t, process_i, status_t,
 		}
 		if (this->other_auth)
 		{
+			if (ppk_id_received && is_first_round(this, FALSE) &&
+				this->other_auth->use_ppk)
+			{
+				this->other_auth->use_ppk(this->other_auth, this->ppk, FALSE);
+			}
 			switch (this->other_auth->process(this->other_auth, message))
 			{
 				case SUCCESS:
@@ -1104,8 +1464,24 @@ METHOD(task_t, process_i, status_t,
 		}
 	}
 
+	if (require_strict(this, mutual_eap))
+	{
+		if (!update_cfg_candidates(this, TRUE))
+		{
+			goto peer_auth_failed;
+		}
+	}
+
 	if (this->my_auth)
 	{
+		/* while we already set the PPK in build_i(), we MUST not use it if
+		 * the peer did not reply with a PPK_ID notify */
+		if (this->ppk.ptr && this->my_auth->use_ppk)
+		{
+			this->my_auth->use_ppk(this->my_auth,
+								   ppk_id_received ? this->ppk : chunk_empty,
+								   FALSE);
+		}
 		switch (this->my_auth->process(this->my_auth, message))
 		{
 			case SUCCESS:
@@ -1121,11 +1497,29 @@ METHOD(task_t, process_i, status_t,
 			case NEED_MORE:
 				break;
 			default:
-				charon->bus->alert(charon->bus, ALERT_LOCAL_AUTH_FAILED);
-				send_auth_failed_informational(this, message);
-				return FAILED;
+				goto local_auth_failed;
 		}
 	}
+
+	/* change keys and clear PPK after we are done with our authentication, so
+	 * we only explicitly use it for the first round, afterwards we just use the
+	 * changed SK_p keys implicitly */
+	if (!this->my_auth && this->ppk_id)
+	{
+		if (ppk_id_received)
+		{
+			if (!apply_ppk(this))
+			{
+				goto local_auth_failed;
+			}
+		}
+		else
+		{
+			DBG1(DBG_CFG, "peer didn't use PPK for PPK_ID '%Y'", this->ppk_id);
+		}
+		clear_ppk(this);
+	}
+
 	if (mutual_eap)
 	{
 		if (!this->my_auth || !this->my_auth->is_mutual(this->my_auth))
@@ -1136,7 +1530,7 @@ METHOD(task_t, process_i, status_t,
 		DBG1(DBG_IKE, "allow mutual EAP-only authentication");
 	}
 
-	if (message->get_notify(message, ANOTHER_AUTH_FOLLOWS) == NULL)
+	if (!message->get_notify(message, ANOTHER_AUTH_FOLLOWS))
 	{
 		this->expect_another_auth = FALSE;
 	}
@@ -1154,7 +1548,6 @@ METHOD(task_t, process_i, status_t,
 				      "cancelling");
 		goto peer_auth_failed;
 	}
-
 #ifdef __ANDROID__
 		if (get_cust_setting_bool(LGP_DATA_DEBUG_ENABLE_PRIVACY_LOG)) {
             patch_code_id("LPCP-2249@n@c@libcharon@ike_auth.c@2");
@@ -1171,15 +1564,14 @@ METHOD(task_t, process_i, status_t,
 				 this->ike_sa->get_unique_id(this->ike_sa));
 		}
 #else
-		DBG0(DBG_IKE, "IKE_SA %s[%d] established between %H[%Y]...%H[%Y]",
-			 this->ike_sa->get_name(this->ike_sa),
-			 this->ike_sa->get_unique_id(this->ike_sa),
-			 this->ike_sa->get_my_host(this->ike_sa),
-			 this->ike_sa->get_my_id(this->ike_sa),
-			 this->ike_sa->get_other_host(this->ike_sa),
-			 this->ike_sa->get_other_id(this->ike_sa));
+	DBG0(DBG_IKE, "IKE_SA %s[%d] established between %H[%Y]...%H[%Y]",
+		 this->ike_sa->get_name(this->ike_sa),
+		 this->ike_sa->get_unique_id(this->ike_sa),
+		 this->ike_sa->get_my_host(this->ike_sa),
+		 this->ike_sa->get_my_id(this->ike_sa),
+		 this->ike_sa->get_other_host(this->ike_sa),
+		 this->ike_sa->get_other_id(this->ike_sa));
 #endif
-
 	this->ike_sa->set_state(this->ike_sa, IKE_ESTABLISHED);
 	charon->bus->ike_updown(charon->bus, this->ike_sa, TRUE);
 
@@ -1193,6 +1585,10 @@ peer_auth_failed:
 	charon->bus->alert(charon->bus, ALERT_PEER_AUTH_FAILED);
 	send_auth_failed_informational(this, message);
 	return FAILED;
+local_auth_failed:
+	charon->bus->alert(charon->bus, ALERT_LOCAL_AUTH_FAILED);
+	send_auth_failed_informational(this, message);
+	return FAILED;
 }
 
 METHOD(task_t, get_type, task_type_t,
@@ -1204,6 +1600,7 @@ METHOD(task_t, get_type, task_type_t,
 METHOD(task_t, migrate, void,
 	private_ike_auth_t *this, ike_sa_t *ike_sa)
 {
+	clear_ppk(this);
 	chunk_free(&this->my_nonce);
 	chunk_free(&this->other_nonce);
 	DESTROY_IF(this->my_packet);
@@ -1230,6 +1627,7 @@ METHOD(task_t, migrate, void,
 METHOD(task_t, destroy, void,
 	private_ike_auth_t *this)
 {
+	clear_ppk(this);
 	chunk_free(&this->my_nonce);
 	chunk_free(&this->other_nonce);
 	DESTROY_IF(this->my_packet);

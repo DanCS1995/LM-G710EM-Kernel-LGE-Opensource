@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -52,9 +52,7 @@ METHOD(plugin_t, get_features, int,
 		PLUGIN_REGISTER(CERT_DECODE, x509_cert_load, TRUE),
 			PLUGIN_PROVIDE(CERT_DECODE, CERT_X509),
 				PLUGIN_DEPENDS(HASHER, HASH_SHA1),
-				PLUGIN_SDEPEND(PUBKEY, KEY_RSA),
-				PLUGIN_SDEPEND(PUBKEY, KEY_ECDSA),
-				PLUGIN_SDEPEND(PUBKEY, KEY_DSA),
+				PLUGIN_DEPENDS(PUBKEY, KEY_ANY),
 
 		PLUGIN_REGISTER(CERT_ENCODE, x509_ac_gen, FALSE),
 			PLUGIN_PROVIDE(CERT_ENCODE, CERT_X509_AC),

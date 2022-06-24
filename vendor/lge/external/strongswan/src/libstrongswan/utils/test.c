@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,31 +20,73 @@
 /**
  * A collection of testable functions
  */
-hashtable_t *testable_functions;
+static hashtable_t *functions = NULL;
+
+#ifndef WIN32
+bool test_runner_available __attribute__((weak));
+#endif
+
+/**
+ * Check if we have libtest linkage and need testable functions
+ */
+static bool has_libtest_linkage()
+{
+#ifdef WIN32
+	return dlsym(RTLD_DEFAULT, "test_runner_available");
+#else
+	return test_runner_available;
+#endif
+}
 
 /*
  * Described in header.
  */
 void testable_function_register(char *name, void *fn)
 {
-	if (testable_functions)
+	bool old = FALSE;
+
+	if (lib && lib->leak_detective)
 	{
-		bool old = FALSE;
-		if (lib->leak_detective)
+		old = lib->leak_detective->set_state(lib->leak_detective, FALSE);
+	}
+
+	if (has_libtest_linkage())
+	{
+		if (!functions)
 		{
-			old = lib->leak_detective->set_state(lib->leak_detective, FALSE);
+			chunk_hash_seed();
+			functions = hashtable_create(hashtable_hash_str,
+										 hashtable_equals_str, 8);
 		}
 		if (fn)
 		{
-			testable_functions->put(testable_functions, name, fn);
+			functions->put(functions, name, fn);
 		}
 		else
 		{
-			testable_functions->remove(testable_functions, name);
-		}
-		if (lib->leak_detective)
-		{
-			lib->leak_detective->set_state(lib->leak_detective, old);
+			functions->remove(functions, name);
+			if (functions->get_count(functions) == 0)
+			{
+				functions->destroy(functions);
+				functions = NULL;
+			}
 		}
 	}
+
+	if (lib && lib->leak_detective)
+	{
+		lib->leak_detective->set_state(lib->leak_detective, old);
+	}
+}
+
+/*
+ * Described in header.
+ */
+void* testable_function_get(char *name)
+{
+	if (functions)
+	{
+		return functions->get(functions, name);
+	}
+	return NULL;
 }

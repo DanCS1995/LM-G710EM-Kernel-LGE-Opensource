@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 Andreas Steffen
+ * Copyright (C) 2013-2014 Andreas Steffen
  * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -15,54 +15,33 @@
 
 #include "ntru_ke.h"
 #include "ntru_drbg.h"
-
-#include "ntru_crypto/ntru_crypto.h"
+#include "ntru_param_set.h"
+#include "ntru_private_key.h"
+#include "ntru_public_key.h"
 
 #include <crypto/diffie_hellman.h>
 #include <utils/debug.h>
 
 typedef struct private_ntru_ke_t private_ntru_ke_t;
-typedef struct param_set_t param_set_t;
-
-/**
- * Defines an NTRU parameter set by ID or OID
- */
-struct param_set_t {
-	NTRU_ENCRYPT_PARAM_SET_ID id;
-	char oid[3];
-	char *name;
-};
 
 /* Best bandwidth and speed, no X9.98 compatibility */
-static param_set_t param_sets_optimum[] = {
-	{ NTRU_EES401EP2,  {0x00, 0x02, 0x10}, "ees401ep2"  },
-	{ NTRU_EES439EP1,  {0x00, 0x03, 0x10}, "ees439ep1"  },
-	{ NTRU_EES593EP1,  {0x00, 0x05, 0x10}, "ees593ep1"  },
-	{ NTRU_EES743EP1,  {0x00, 0x06, 0x10}, "ees743ep1"  }
+static const ntru_param_set_id_t param_sets_optimum[] = {
+	NTRU_EES401EP2, NTRU_EES439EP1, NTRU_EES593EP1, NTRU_EES743EP1
 };
 
 /* X9.98/IEEE 1363.1 parameter sets for best speed */
-static param_set_t param_sets_x9_98_speed[] = {
-	{ NTRU_EES659EP1,  {0x00, 0x02, 0x06}, "ees659ep1"  },
-	{ NTRU_EES761EP1,  {0x00, 0x03, 0x05}, "ees761ep1"  },
-	{ NTRU_EES1087EP1, {0x00, 0x05, 0x05}, "ees1087ep1" },
-	{ NTRU_EES1499EP1, {0x00, 0x06, 0x05}, "ees1499ep1" }
+static const ntru_param_set_id_t param_sets_x9_98_speed[] = {
+	NTRU_EES659EP1, NTRU_EES761EP1, NTRU_EES1087EP1, NTRU_EES1499EP1
 };
 
 /* X9.98/IEEE 1363.1 parameter sets for best bandwidth (smallest size) */
-static param_set_t param_sets_x9_98_bandwidth[] = {
-	{ NTRU_EES401EP1,  {0x00, 0x02, 0x04}, "ees401ep1"  },
-	{ NTRU_EES449EP1,  {0x00, 0x03, 0x03}, "ees449ep1"  },
-	{ NTRU_EES677EP1,  {0x00, 0x05, 0x03}, "ees677ep1"  },
-	{ NTRU_EES1087EP2, {0x00, 0x06, 0x03}, "ees1087ep2" }
+static const ntru_param_set_id_t param_sets_x9_98_bandwidth[] = {
+	NTRU_EES401EP1, NTRU_EES449EP1, NTRU_EES677EP1, NTRU_EES1087EP2
 };
 
 /* X9.98/IEEE 1363.1 parameter sets balancing speed and bandwidth */
-static param_set_t param_sets_x9_98_balance[] = {
-	{ NTRU_EES541EP1,  {0x00, 0x02, 0x05}, "ees541ep1"  },
-	{ NTRU_EES613EP1,  {0x00, 0x03, 0x04}, "ees613ep1"  },
-	{ NTRU_EES887EP1,  {0x00, 0x05, 0x04}, "ees887ep1"  },
-	{ NTRU_EES1171EP1, {0x00, 0x06, 0x04}, "ees1171ep1" }
+static const ntru_param_set_id_t param_sets_x9_98_balance[] = {
+	NTRU_EES541EP1, NTRU_EES613EP1, NTRU_EES887EP1, NTRU_EES1171EP1
 };
 
 /**
@@ -77,27 +56,27 @@ struct private_ntru_ke_t {
 	/**
 	 * Diffie Hellman group number.
 	 */
-	u_int16_t group;
+	diffie_hellman_group_t group;
 
 	/**
 	 * NTRU Parameter Set
 	 */
-	param_set_t *param_set;
+	const ntru_param_set_t *param_set;
 
 	/**
 	 * Cryptographical strength in bits of the NTRU Parameter Set
 	 */
-	u_int32_t strength;
+	uint32_t strength;
 
 	/**
 	 * NTRU Public Key
 	 */
-	chunk_t pub_key;
+	ntru_public_key_t *pubkey;
 
 	/**
 	 * NTRU Private Key
 	 */
-	chunk_t priv_key;
+	ntru_private_key_t *privkey;
 
 	/**
 	 * NTRU encrypted shared secret
@@ -127,14 +106,12 @@ struct private_ntru_ke_t {
 	/**
 	 * Deterministic Random Bit Generator
 	 */
-    ntru_drbg_t *drbg;
+	ntru_drbg_t *drbg;
 };
 
-METHOD(diffie_hellman_t, get_my_public_value, void,
+METHOD(diffie_hellman_t, get_my_public_value, bool,
 	private_ntru_ke_t *this, chunk_t *value)
 {
-    uint16_t pub_key_len, priv_key_len;
-
 	*value = chunk_empty;
 
 	if (this->responder)
@@ -146,106 +123,77 @@ METHOD(diffie_hellman_t, get_my_public_value, void,
 	}
 	else
 	{
-		if (this->pub_key.len == 0)
+		if (!this->pubkey)
 		{
-			/* determine the NTRU public and private key sizes */
-			if (ntru_crypto_ntru_encrypt_keygen(this->drbg, this->param_set->id,
-								&pub_key_len, NULL,
-				 				&priv_key_len, NULL) != NTRU_OK)
-			{
-				DBG1(DBG_LIB, "error determining NTRU public and private key "
-							  "sizes");
-				return;
-			}
-			this->pub_key  = chunk_alloc(pub_key_len);
-			this->priv_key = chunk_alloc(priv_key_len);
-
 			/* generate a random NTRU public/private key pair */
-		    if (ntru_crypto_ntru_encrypt_keygen(this->drbg, this->param_set->id,
-								&pub_key_len, this->pub_key.ptr,
-				 				&priv_key_len, this->priv_key.ptr) != NTRU_OK)
+			this->privkey = ntru_private_key_create(this->drbg, this->param_set);
+			if (!this->privkey)
 			{
 				DBG1(DBG_LIB, "NTRU keypair generation failed");
-				chunk_free(&this->priv_key);
-				chunk_free(&this->pub_key);
-				return;
+				return FALSE;
 			}
-			DBG3(DBG_LIB, "NTRU public key: %B", &this->pub_key);
-			DBG4(DBG_LIB, "NTRU private key: %B", &this->priv_key);
+			this->pubkey = this->privkey->get_public_key(this->privkey);
 		}
-		*value = chunk_clone(this->pub_key);
+		*value = chunk_clone(this->pubkey->get_encoding(this->pubkey));
+		DBG3(DBG_LIB, "NTRU public key: %B", value);
 	}
+	return TRUE;
 }
 
-METHOD(diffie_hellman_t, get_shared_secret, status_t,
+METHOD(diffie_hellman_t, get_shared_secret, bool,
 	private_ntru_ke_t *this, chunk_t *secret)
 {
 	if (!this->computed || !this->shared_secret.len)
 	{
 		*secret = chunk_empty;
-		return FAILED;
+		return FALSE;
 	}
 	*secret = chunk_clone(this->shared_secret);
 
-	return SUCCESS;
+	return TRUE;
 }
 
-
-METHOD(diffie_hellman_t, set_other_public_value, void,
+METHOD(diffie_hellman_t, set_other_public_value, bool,
 	private_ntru_ke_t *this, chunk_t value)
 {
-	u_int16_t plaintext_len, ciphertext_len;
-
-	if (this->priv_key.len)
+	if (this->privkey)
 	{
 		/* initiator decrypting shared secret */
 		if (value.len == 0)
 		{
 			DBG1(DBG_LIB, "empty NTRU ciphertext");
-			return;
+			return FALSE;
 		}
-		this->ciphertext = chunk_clone(value);
-		DBG3(DBG_LIB, "NTRU ciphertext: %B", &this->ciphertext);
-
-		/* determine the size of the maximum plaintext */
-    	if (ntru_crypto_ntru_decrypt(this->priv_key.len, this->priv_key.ptr,
-								this->ciphertext.len, this->ciphertext.ptr,
-								&plaintext_len, NULL) != NTRU_OK)
-		{
-			DBG1(DBG_LIB, "error determining maximum plaintext size");
-			return;
-		}
-		this->shared_secret = chunk_alloc(plaintext_len);
+		DBG3(DBG_LIB, "NTRU ciphertext: %B", &value);
 
 		/* decrypt the shared secret */
-    	if (ntru_crypto_ntru_decrypt(this->priv_key.len, this->priv_key.ptr,
-						this->ciphertext.len, this->ciphertext.ptr,
-						&plaintext_len, this->shared_secret.ptr) != NTRU_OK)
+		if (!this->privkey->decrypt(this->privkey, value, &this->shared_secret))
 		{
 			DBG1(DBG_LIB, "NTRU decryption of shared secret failed");
-			chunk_free(&this->shared_secret);
-			return;
+			return FALSE;
 		}
-		this->shared_secret.len = plaintext_len;
 		this->computed = TRUE;
 	}
 	else
 	{
+		ntru_public_key_t *pubkey;
+
 		/* responder generating and encrypting the shared secret */
 		this->responder = TRUE;
 
-		/* check the NTRU public key format */
-		if (value.len < 5 || value.ptr[0] != 1 || value.ptr[1] != 3)
+		DBG3(DBG_LIB, "NTRU public key: %B", &value);
+		pubkey = ntru_public_key_create_from_data(this->drbg, value);
+		if (!pubkey)
 		{
-			DBG1(DBG_LIB, "received NTRU public key with invalid header");
-			return;
+			return FALSE;
 		}
-		if (!memeq(value.ptr + 2, this->param_set->oid, 3))
+		if (pubkey->get_id(pubkey) != this->param_set->id)
 		{
-			DBG1(DBG_LIB, "received NTRU public key with wrong OID");
-			return;
+			DBG1(DBG_LIB, "received NTRU public key with wrong OUI");
+			pubkey->destroy(pubkey);
+			return FALSE;
 		}
-		this->pub_key = chunk_clone(value);
+		this->pubkey = pubkey;
 
 		/* shared secret size is chosen as twice the cryptographical strength */
 		this->shared_secret = chunk_alloc(2 * this->strength / BITS_PER_BYTE);
@@ -256,33 +204,19 @@ METHOD(diffie_hellman_t, set_other_public_value, void,
 		{
 			DBG1(DBG_LIB, "generation of shared secret failed");
 			chunk_free(&this->shared_secret);
-			return;
+			return FALSE;
 		}
 		this->computed = TRUE;
 
-		/* determine the size of the ciphertext */
-		if (ntru_crypto_ntru_encrypt(this->drbg,
-							this->pub_key.len,	this->pub_key.ptr,
-							this->shared_secret.len, this->shared_secret.ptr,
-                            &ciphertext_len, NULL) != NTRU_OK)
-		{
-			DBG1(DBG_LIB, "error determining ciphertext size");
-			return;
-		}
-		this->ciphertext = chunk_alloc(ciphertext_len);
-
 		/* encrypt the shared secret */
-		if (ntru_crypto_ntru_encrypt(this->drbg,
-							this->pub_key.len,	this->pub_key.ptr,
-							this->shared_secret.len, this->shared_secret.ptr,
-                            &ciphertext_len, this->ciphertext.ptr) != NTRU_OK)
+		if (!pubkey->encrypt(pubkey, this->shared_secret, &this->ciphertext))
 		{
 			DBG1(DBG_LIB, "NTRU encryption of shared secret failed");
-			chunk_free(&this->ciphertext);
-			return;
+			return FALSE;
 		}
 		DBG3(DBG_LIB, "NTRU ciphertext: %B", &this->ciphertext);
 	}
+	return this->computed;
 }
 
 METHOD(diffie_hellman_t, get_dh_group, diffie_hellman_group_t,
@@ -294,11 +228,11 @@ METHOD(diffie_hellman_t, get_dh_group, diffie_hellman_group_t,
 METHOD(diffie_hellman_t, destroy, void,
 	private_ntru_ke_t *this)
 {
+	DESTROY_IF(this->privkey);
+	DESTROY_IF(this->pubkey);
 	this->drbg->destroy(this->drbg);
 	this->entropy->destroy(this->entropy);
-	chunk_free(&this->pub_key);
 	chunk_free(&this->ciphertext);
-	chunk_clear(&this->priv_key);
 	chunk_clear(&this->shared_secret);
 	free(this);
 }
@@ -309,11 +243,12 @@ METHOD(diffie_hellman_t, destroy, void,
 ntru_ke_t *ntru_ke_create(diffie_hellman_group_t group, chunk_t g, chunk_t p)
 {
 	private_ntru_ke_t *this;
-	param_set_t *param_sets, *param_set;
+	const ntru_param_set_id_t *param_sets;
+	ntru_param_set_id_t param_set_id;
 	rng_t *entropy;
 	ntru_drbg_t *drbg;
 	char *parameter_set;
-	u_int32_t strength;
+	uint32_t strength;
 
 	parameter_set = lib->settings->get_str(lib->settings,
 						"%s.plugins.ntru.parameter_set", "optimum", lib->ns);
@@ -339,25 +274,25 @@ ntru_ke_t *ntru_ke_create(diffie_hellman_group_t group, chunk_t g, chunk_t p)
 	{
 		case NTRU_112_BIT:
 			strength = 112;
-			param_set = &param_sets[0];
+			param_set_id = param_sets[0];
 			break;
 		case NTRU_128_BIT:
 			strength = 128;
-			param_set = &param_sets[1];
+			param_set_id = param_sets[1];
 			break;
 		case NTRU_192_BIT:
 			strength = 192;
-			param_set = &param_sets[2];
+			param_set_id = param_sets[2];
 			break;
 		case NTRU_256_BIT:
 			strength = 256;
-			param_set = &param_sets[3];
+			param_set_id = param_sets[3];
 			break;
 		default:
 			return NULL;
 	}
-	DBG1(DBG_LIB, "%u bit %s NTRU parameter set %s selected", strength,
-				   parameter_set, param_set->name);
+	DBG1(DBG_LIB, "%u bit %s NTRU parameter set %N selected", strength,
+				   parameter_set, ntru_param_set_id_names, param_set_id);
 
 	entropy = lib->crypto->create_rng(lib->crypto, RNG_TRUE);
 	if (!entropy)
@@ -368,10 +303,10 @@ ntru_ke_t *ntru_ke_create(diffie_hellman_group_t group, chunk_t g, chunk_t p)
 
 	drbg = ntru_drbg_create(strength, chunk_from_str("IKE NTRU-KE"), entropy);
 	if (!drbg)
- 	{
+	{
 		DBG1(DBG_LIB, "could not instantiate DRBG at %u bit security", strength);
 		entropy->destroy(entropy);
-        return NULL;
+		return NULL;
 	}
 
 	INIT(this,
@@ -385,7 +320,7 @@ ntru_ke_t *ntru_ke_create(diffie_hellman_group_t group, chunk_t g, chunk_t p)
 			},
 		},
 		.group = group,
-		.param_set = param_set,
+		.param_set = ntru_param_set_get_by_id(param_set_id),
 		.strength = strength,
 		.entropy = entropy,
 		.drbg = drbg,
@@ -393,4 +328,3 @@ ntru_ke_t *ntru_ke_create(diffie_hellman_group_t group, chunk_t g, chunk_t p)
 
 	return &this->public;
 }
-

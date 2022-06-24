@@ -1,6 +1,9 @@
-/* strongSwan charon launcher
- * Copyright (C) 2001-2002 Mathieu Lafon - Arkoon Network Security
- * Copyright (C) 2006 Martin Willi - Hochschule fuer Technik Rapperswil
+/*
+ * Copyright (C) 2006 Martin Willi
+ * HSR Hochschule fuer Technik Rapperswil
+ *
+ * Copyright (C) 2001-2002 Mathieu Lafon
+ * Arkoon Network Security
  *
  * Ported from invokepluto.c to fit charons needs.
  *
@@ -201,6 +204,15 @@ int starter_start_charon (starter_config_t *cfg, bool no_fork, bool attach_gdb)
 		default:
 			/* father */
 			_charon_pid = pid;
+			while (attach_gdb)
+			{
+				/* wait indefinitely if gdb is attached */
+				usleep(10000);
+				if (stat(pid_file, &stb) == 0)
+				{
+					return 0;
+				}
+			}
 			for (i = 0; i < 500 && _charon_pid; i++)
 			{
 				/* wait for charon for a maximum of 500 x 20 ms = 10 s */

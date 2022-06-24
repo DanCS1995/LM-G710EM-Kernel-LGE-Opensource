@@ -43,7 +43,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
-#ifdef	HAVE_GETHRTIME
+#ifdef    HAVE_GETHRTIME
 #include <sys/times.h>
 #endif
 #ifdef HAVE_GETTIMEOFDAY
@@ -101,11 +101,11 @@
    up.  Its allocated size is POOLSIZE+BLOCKLEN.  Note that this is
    also an indication on whether the module has been fully
    initialized. */
-static unsigned char *rndpool;	
+static unsigned char *rndpool;    
 
 /* KEYPOOL is used as a scratch copy to read out random from RNDPOOL.
    Its allocated size is also POOLSIZE+BLOCKLEN.  */
-static unsigned char *keypool;	
+static unsigned char *keypool;    
 
 /* This is the offset into RNDPOOL where the next random bytes are to
    be mixed in.  */
@@ -344,7 +344,7 @@ initialize(void)
         {
           faked_rng = 1;
           slow_gather_fnc = gather_faked;
-	}
+    }
       
       /* Setup the fast entropy gathering function.  */
       fast_gather_fnc = getfnc_fast_random_poll ();
@@ -378,7 +378,7 @@ _gcry_rngcsprng_dump_stats (void)
      into problems.  */
 
   log_info ("random usage: poolsize=%d mixed=%lu polls=%lu/%lu added=%lu/%lu\n"
-	    "              outmix=%lu getlvl1=%lu/%lu getlvl2=%lu/%lu%s\n",
+        "              outmix=%lu getlvl1=%lu/%lu getlvl2=%lu/%lu%s\n",
             POOLSIZE, rndstats.mixrnd, rndstats.slowpolls, rndstats.fastpolls,
             rndstats.naddbytes, rndstats.addbytes,
             rndstats.mixkey, rndstats.ngetbytes1, rndstats.getbytes1,
@@ -645,8 +645,8 @@ mix_pool(unsigned char *pool)
               if ( pp >= pend )
                 pp = pool;
               hashbuf[i] = *pp++;
-	    }
-	}
+        }
+    }
       
       _gcry_rmd160_mixblock ( &md, hashbuf);
       memcpy(p, hashbuf, 20 );
@@ -806,7 +806,7 @@ read_seed_file (void)
 
   add_randomness( buffer, POOLSIZE, RANDOM_ORIGIN_INIT );
   /* add some minor entropy to the pool now (this will also force a mixing) */
-  {	
+  {    
     pid_t x = getpid();
     add_randomness( &x, sizeof(x), RANDOM_ORIGIN_INIT );
   }
@@ -814,7 +814,7 @@ read_seed_file (void)
     time_t x = time(NULL);
     add_randomness( &x, sizeof(x), RANDOM_ORIGIN_INIT );
   }
-  {	
+  {    
     clock_t x = clock();
     add_randomness( &x, sizeof(x), RANDOM_ORIGIN_INIT );
   }
@@ -1093,7 +1093,7 @@ add_randomness (const void *buffer, size_t length, enum random_origins origin)
           pool_writepos = 0;
           mix_pool(rndpool); rndstats.mixrnd++;
           just_mixed = !length;
-	}
+    }
     }
 }
 
@@ -1175,13 +1175,13 @@ do_fast_random_poll (void)
 
   /* Continue with the generic functions. */
 #if HAVE_GETHRTIME
-  {	
+  {    
     hrtime_t tv;
     tv = gethrtime();
     add_randomness( &tv, sizeof(tv), RANDOM_ORIGIN_FASTPOLL );
   }
 #elif HAVE_GETTIMEOFDAY
-  {	
+  {    
     struct timeval tv;
     if( gettimeofday( &tv, NULL ) )
       BUG();
@@ -1189,7 +1189,7 @@ do_fast_random_poll (void)
     add_randomness( &tv.tv_usec, sizeof(tv.tv_usec), RANDOM_ORIGIN_FASTPOLL );
   }
 #elif HAVE_CLOCK_GETTIME
-  {	struct timespec tv;
+  {    struct timespec tv;
   if( clock_gettime( CLOCK_REALTIME, &tv ) == -1 )
     BUG();
   add_randomness( &tv.tv_sec, sizeof(tv.tv_sec), RANDOM_ORIGIN_FASTPOLL );
@@ -1197,7 +1197,7 @@ do_fast_random_poll (void)
   }
 #else /* use times */
 # ifndef HAVE_DOSISH_SYSTEM
-  {	struct tms buf;
+  {    struct tms buf;
   times( &buf );
   add_randomness( &buf, sizeof buf, RANDOM_ORIGIN_FASTPOLL );
   }
@@ -1206,7 +1206,7 @@ do_fast_random_poll (void)
 
 #ifdef HAVE_GETRUSAGE
 # ifdef RUSAGE_SELF
-  {	
+  {    
     struct rusage buf;
     /* QNX/Neutrino does return ENOSYS - so we just ignore it and add
        whatever is in buf.  In a chroot environment it might not work
@@ -1229,7 +1229,7 @@ do_fast_random_poll (void)
     time_t x = time(NULL);
     add_randomness( &x, sizeof(x), RANDOM_ORIGIN_FASTPOLL );
   }
-  {	
+  {    
     clock_t x = clock();
     add_randomness( &x, sizeof(x), RANDOM_ORIGIN_FASTPOLL );
   }

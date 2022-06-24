@@ -91,15 +91,15 @@ sha1_init (void *context)
 #define F4(x,y,z)   ( x ^ y ^ z )
 #define M(i) ( tm =    x[ i    &0x0f]  \
                      ^ x[(i-14)&0x0f]  \
-	 	     ^ x[(i-8) &0x0f]  \
+              ^ x[(i-8) &0x0f]  \
                      ^ x[(i-3) &0x0f], \
                      (x[i&0x0f] = rol(tm, 1)))
 #define R(a,b,c,d,e,f,k,m)  do { e += rol( a, 5 )     \
-	                              + f( b, c, d )  \
-		 		      + k	      \
-			 	      + m;	      \
-				 b = rol( b, 30 );    \
-			       } while(0)
+                                  + f( b, c, d )  \
+                       + k          \
+                       + m;          \
+                 b = rol( b, 30 );    \
+                   } while(0)
 
 
 /*
@@ -326,11 +326,11 @@ sha1_final(void *context)
   hd->buf[56] = msb >> 24;
   hd->buf[57] = msb >> 16;
   hd->buf[58] = msb >>  8;
-  hd->buf[59] = msb	   ;
+  hd->buf[59] = msb       ;
   hd->buf[60] = lsb >> 24;
   hd->buf[61] = lsb >> 16;
   hd->buf[62] = lsb >>  8;
-  hd->buf[63] = lsb	   ;
+  hd->buf[63] = lsb       ;
   TRANSFORM( hd, hd->buf, 1 );
   _gcry_burn_stack (88+4*sizeof(void*));
 
@@ -338,7 +338,7 @@ sha1_final(void *context)
 #ifdef WORDS_BIGENDIAN
 #define X(a) do { *(u32*)p = hd->h##a ; p += 4; } while(0)
 #else /* little endian */
-#define X(a) do { *p++ = hd->h##a >> 24; *p++ = hd->h##a >> 16;	 \
+#define X(a) do { *p++ = hd->h##a >> 24; *p++ = hd->h##a >> 16;     \
                   *p++ = hd->h##a >> 8; *p++ = hd->h##a; } while(0)
 #endif
   X(0);

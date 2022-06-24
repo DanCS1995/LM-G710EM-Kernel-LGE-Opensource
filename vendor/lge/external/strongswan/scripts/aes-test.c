@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -313,7 +313,7 @@ static bool do_test_gcm(test_vector_t *test)
 			return FALSE;
 	}
 
-	aead = lib->crypto->create_aead(lib->crypto, alg, test->key.len);
+	aead = lib->crypto->create_aead(lib->crypto, alg, test->key.len, 4);
 	if (!aead)
 	{
 		DBG1(DBG_APP, "algorithm %N or key length (%d bits) not supported",

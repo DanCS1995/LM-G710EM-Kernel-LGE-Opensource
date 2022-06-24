@@ -1,8 +1,8 @@
 /*
  * Copyright (C) 2006 Martin Will
- * Copyright (C) 2000-2008 Andreas Steffen
+ * Copyright (C) 2000-2016 Andreas Steffen
  *
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -33,7 +33,15 @@ const chunk_t ASN1_INTEGER_1 = chunk_from_chars(0x02, 0x01, 0x01);
 const chunk_t ASN1_INTEGER_2 = chunk_from_chars(0x02, 0x01, 0x02);
 
 /*
- * Defined in header.
+ * Described in header
+ */
+chunk_t asn1_algorithmIdentifier_params(int oid, chunk_t params)
+{
+	return asn1_wrap(ASN1_SEQUENCE, "mm", asn1_build_known_oid(oid), params);
+}
+
+/*
+ * Described in header
  */
 chunk_t asn1_algorithmIdentifier(int oid)
 {
@@ -47,13 +55,15 @@ chunk_t asn1_algorithmIdentifier(int oid)
 		case OID_ECDSA_WITH_SHA256:
 		case OID_ECDSA_WITH_SHA384:
 		case OID_ECDSA_WITH_SHA512:
+		case OID_ED25519:
+		case OID_ED448:
 			parameters = chunk_empty;
 			break;
 		default:
 			parameters = asn1_simple_object(ASN1_NULL, chunk_empty);
 			break;
 	}
-	return asn1_wrap(ASN1_SEQUENCE, "mm", asn1_build_known_oid(oid), parameters);
+	return asn1_algorithmIdentifier_params(oid, parameters);
 }
 
 /*
@@ -123,6 +133,24 @@ chunk_t asn1_build_known_oid(int n)
 	return oid;
 }
 
+/**
+ * Returns the number of bytes required to encode the given OID node
+ */
+static int bytes_required(u_int val)
+{
+	int shift, required = 1;
+
+	/* sufficient to handle 32 bit node numbers */
+	for (shift = 28; shift; shift -= 7)
+	{
+		if (val >> shift)
+		{	/* do not encode leading zeroes */
+			required++;
+		}
+	}
+	return required;
+}
+
 /*
  * Defined in header.
  */
@@ -132,14 +160,15 @@ chunk_t asn1_oid_from_string(char *str)
 	size_t buf_len = 64;
 	u_char buf[buf_len];
 	char *end;
-	int i = 0, pos = 0, shift;
-	u_int val, shifted_val, first = 0;
+	int i = 0, pos = 0, req, shift;
+	u_int val, first = 0;
 
 	enumerator = enumerator_create_token(str, ".", "");
 	while (enumerator->enumerate(enumerator, &str))
 	{
 		val = strtoul(str, &end, 10);
-		if (end == str || pos > buf_len-4)
+		req = bytes_required(val);
+		if (end == str || pos + req > buf_len)
 		{
 			pos = 0;
 			break;
@@ -153,15 +182,9 @@ chunk_t asn1_oid_from_string(char *str)
 				buf[pos++] = first * 40 + val;
 				break;
 			default:
-				shift = 28;		/* sufficient to handle 32 bit node numbers */
-				while (shift)
+				for (shift = (req - 1) * 7; shift; shift -= 7)
 				{
-					shifted_val = val >> shift;
-					shift -= 7;
-					if (shifted_val)	/* do not encode leading zeroes */
-					{
-						buf[pos++] = 0x80 | (shifted_val & 0x7F);
-					}
+					buf[pos++] = 0x80 | ((val >> shift) & 0x7F);
 				}
 				buf[pos++] = val & 0x7F;
 		}
@@ -327,7 +350,7 @@ static const int days[] = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 33
 static const int tm_leap_1970 = 477;
 
 /**
- * Converts ASN.1 UTCTIME or GENERALIZEDTIME into calender time
+ * Converts ASN.1 UTCTIME or GENERALIZEDTIME into calendar time
  */
 time_t asn1_to_time(const chunk_t *utctime, asn1_t type)
 {
@@ -335,13 +358,15 @@ time_t asn1_to_time(const chunk_t *utctime, asn1_t type)
 	int tm_leap_4, tm_leap_100, tm_leap_400, tm_leap;
 	int tz_hour, tz_min, tz_offset;
 	time_t tm_days, tm_secs;
-	u_char *eot = NULL;
+	char buf[BUF_LEN], *eot = NULL;
 
-	if ((eot = memchr(utctime->ptr, 'Z', utctime->len)) != NULL)
+	snprintf(buf, sizeof(buf), "%.*s", (int)utctime->len, utctime->ptr);
+
+	if ((eot = strchr(buf, 'Z')) != NULL)
 	{
 		tz_offset = 0; /* Zulu time with a zero time zone offset */
 	}
-	else if ((eot = memchr(utctime->ptr, '+', utctime->len)) != NULL)
+	else if ((eot = strchr(buf, '+')) != NULL)
 	{
 		if (sscanf(eot+1, "%2d%2d", &tz_hour, &tz_min) != 2)
 		{
@@ -349,7 +374,7 @@ time_t asn1_to_time(const chunk_t *utctime, asn1_t type)
 		}
 		tz_offset = 3600*tz_hour + 60*tz_min;  /* positive time zone offset */
 	}
-	else if ((eot = memchr(utctime->ptr, '-', utctime->len)) != NULL)
+	else if ((eot = strchr(buf, '-')) != NULL)
 	{
 		if (sscanf(eot+1, "%2d%2d", &tz_hour, &tz_min) != 2)
 		{
@@ -367,15 +392,15 @@ time_t asn1_to_time(const chunk_t *utctime, asn1_t type)
 		const char* format = (type == ASN1_UTCTIME)? "%2d%2d%2d%2d%2d":
 													 "%4d%2d%2d%2d%2d";
 
-		if (sscanf(utctime->ptr, format, &tm_year, &tm_mon, &tm_day,
-										 &tm_hour, &tm_min) != 5)
+		if (sscanf(buf, format, &tm_year, &tm_mon, &tm_day,
+								&tm_hour, &tm_min) != 5)
 		{
 			return 0; /* error in [yy]yymmddhhmm time format */
 		}
 	}
 
 	/* is there a seconds field? */
-	if ((eot - utctime->ptr) == ((type == ASN1_UTCTIME)?12:14))
+	if ((eot - buf) == ((type == ASN1_UTCTIME)?12:14))
 	{
 		if (sscanf(eot-2, "%2d", &tm_sec) != 1)
 		{
@@ -460,7 +485,7 @@ chunk_t asn1_from_time(const time_t *time, asn1_t type)
 	const char *format;
 	char buf[BUF_LEN];
 	chunk_t formatted_time;
-	struct tm t;
+	struct tm t = {};
 
 	gmtime_r(time, &t);
 	/* RFC 5280 says that dates through the year 2049 MUST be encoded as UTCTIME
@@ -579,17 +604,37 @@ bool asn1_parse_simple_object(chunk_t *object, asn1_t type, u_int level, const c
 /*
  * Described in header
  */
-u_int64_t asn1_parse_integer_uint64(chunk_t blob)
+uint64_t asn1_parse_integer_uint64(chunk_t blob)
 {
-	u_int64_t val = 0;
+	uint64_t val = 0;
 	int i;
 
 	for (i = 0; i < blob.len; i++)
 	{	/* if it is longer than 8 bytes, we just use the 8 LSBs */
 		val <<= 8;
-		val |= (u_int64_t)blob.ptr[i];
+		val |= (uint64_t)blob.ptr[i];
 	}
 	return val;
+}
+
+/*
+ * Described in header
+ */
+chunk_t asn1_integer_from_uint64(uint64_t val)
+{
+	u_char buf[sizeof(val)];
+	chunk_t enc = chunk_empty;
+
+	if (val < 0x100)
+	{
+		buf[0] = (u_char)val;
+		return chunk_clone(chunk_create(buf, 1));
+	}
+	for (enc.ptr = buf + sizeof(val); val; enc.len++, val >>= 8)
+	{	/* fill the buffer from the end */
+		*(--enc.ptr) = val & 0xff;
+	}
+	return chunk_clone(enc);
 }
 
 /**
@@ -780,7 +825,6 @@ chunk_t asn1_simple_object(asn1_t tag, chunk_t content)
 
 	u_char *pos = asn1_build_object(&object, tag, content.len);
 	memcpy(pos, content.ptr, content.len);
-	pos += content.len;
 
 	return object;
 }
@@ -900,6 +944,10 @@ static const asn1Object_t timeObjects[] = {
 	{ 0, "end opt",			ASN1_EOC,				ASN1_END			}, /* 3 */
 	{ 0, "exit",			ASN1_EOC,				ASN1_EXIT			}
 };
+#ifdef TIME_UTC
+/* used by C11 timespec_get(), <time.h> */
+# undef TIME_UTC
+#endif
 #define TIME_UTC			0
 #define TIME_GENERALIZED	2
 

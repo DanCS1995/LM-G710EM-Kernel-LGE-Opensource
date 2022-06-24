@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -73,7 +73,7 @@ static void build_opts()
 	memset(command_optstring, 0, sizeof(command_optstring));
 	if (active == help_idx)
 	{
-		for (i = 0; cmds[i].cmd; i++)
+		for (i = 0; i < MAX_COMMANDS && cmds[i].cmd; i++)
 		{
 			command_opts[i].name = cmds[i].cmd;
 			command_opts[i].val = cmds[i].op;
@@ -172,6 +172,15 @@ void command_register(command_t command)
 				"options",	'+', 1, "read command line options from file"
 			};
 		}
+		for (i = 0; cmds[registered].line[i]; i++)
+		{
+			if (i == MAX_LINES - 1)
+			{
+				fprintf(stderr, "command '%s' specifies too many usage summary "
+						"lines, please increase MAX_LINES\n", command.cmd);
+				break;
+			}
+		}
 	}
 	registered++;
 }
@@ -182,7 +191,7 @@ void command_register(command_t command)
 int command_usage(char *error)
 {
 	FILE *out = stdout;
-	int i;
+	int i, indent = 0;
 
 	if (error)
 	{
@@ -200,7 +209,7 @@ int command_usage(char *error)
 	fprintf(out, "usage:\n");
 	if (active == help_idx)
 	{
-		for (i = 0; cmds[i].cmd; i++)
+		for (i = 0; i < MAX_COMMANDS && cmds[i].cmd; i++)
 		{
 			fprintf(out, "  pki --%-7s (-%c)  %s\n",
 					cmds[i].cmd, cmds[i].op, cmds[i].description);
@@ -208,16 +217,16 @@ int command_usage(char *error)
 	}
 	else
 	{
-		for (i = 0; cmds[active].line[i]; i++)
+		for (i = 0; i < MAX_LINES && cmds[active].line[i]; i++)
 		{
 			if (i == 0)
 			{
-				fprintf(out, "  pki --%s %s\n",
-						cmds[active].cmd, cmds[active].line[i]);
+				indent = fprintf(out, "  pki --%s ", cmds[active].cmd);
+				fprintf(out, "%s\n", cmds[active].line[i]);
 			}
 			else
 			{
-				fprintf(out, "              %s\n", cmds[active].line[i]);
+				fprintf(out, "%*s%s\n", indent, "", cmds[active].line[i]);
 			}
 		}
 		for (i = 0; cmds[active].options[i].name; i++)
@@ -263,7 +272,7 @@ int command_dispatch(int c, char *v[])
 
 	build_opts();
 	op = getopt_long(c, v, command_optstring, command_opts, NULL);
-	for (i = 0; cmds[i].cmd; i++)
+	for (i = 0; i < MAX_COMMANDS && cmds[i].cmd; i++)
 	{
 		if (cmds[i].op == op)
 		{

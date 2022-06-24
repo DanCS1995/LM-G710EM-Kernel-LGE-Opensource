@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Andreas Steffen
+ * Copyright (C) 2012-2014 Andreas Steffen
  * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -56,7 +56,12 @@ struct private_ietf_attr_numeric_version_t {
 	pen_type_t type;
 
 	/**
-	 * Attribute value
+	 * Length of attribute value
+	 */
+	size_t length;
+
+	/**
+	 * Attribute value or segment
 	 */
 	chunk_t value;
 
@@ -68,27 +73,27 @@ struct private_ietf_attr_numeric_version_t {
 	/**
 	 * Major Version Number
 	 */
-	u_int32_t major_version;
+	uint32_t major_version;
 
 	/**
 	 * Minor Version Number
 	 */
-	u_int32_t minor_version;
+	uint32_t minor_version;
 
 	/**
 	 * IBuild Number
 	 */
-	u_int32_t build;
+	uint32_t build;
 
 	/**
 	 * Service Pack Major Number
 	 */
-	u_int16_t service_pack_major;
+	uint16_t service_pack_major;
 
 	/**
 	 * Service Pack Minor Number
 	 */
-	u_int16_t service_pack_minor;
+	uint16_t service_pack_minor;
 
 	/**
 	 * Reference count
@@ -138,18 +143,24 @@ METHOD(pa_tnc_attr_t, build, void,
 	writer->write_uint16(writer, this->service_pack_minor);
 
 	this->value = writer->extract_buf(writer);
+	this->length = this->value.len;
 	writer->destroy(writer);
 }
 
 METHOD(pa_tnc_attr_t, process, status_t,
-	private_ietf_attr_numeric_version_t *this, u_int32_t *offset)
+	private_ietf_attr_numeric_version_t *this, uint32_t *offset)
 {
 	bio_reader_t *reader;
 
+	*offset = 0;
+
+	if (this->value.len < this->length)
+	{
+		return NEED_MORE;
+	}
 	if (this->value.len < NUMERIC_VERSION_SIZE)
 	{
 		DBG1(DBG_TNC, "insufficient data for IETF numeric version");
-		*offset = 0;
 		return FAILED;
 	}
 	reader = bio_reader_create(this->value);
@@ -161,6 +172,12 @@ METHOD(pa_tnc_attr_t, process, status_t,
 	reader->destroy(reader);
 
 	return SUCCESS;
+}
+
+METHOD(pa_tnc_attr_t, add_segment, void,
+	private_ietf_attr_numeric_version_t *this, chunk_t segment)
+{
+	this->value = chunk_cat("mc", this->value, segment);
 }
 
 METHOD(pa_tnc_attr_t, get_ref, pa_tnc_attr_t*,
@@ -181,7 +198,7 @@ METHOD(pa_tnc_attr_t, destroy, void,
 }
 
 METHOD(ietf_attr_numeric_version_t, get_version, void,
-	private_ietf_attr_numeric_version_t *this, u_int32_t *major, u_int32_t *minor)
+	private_ietf_attr_numeric_version_t *this, uint32_t *major, uint32_t *minor)
 {
 	if (major)
 	{
@@ -193,14 +210,14 @@ METHOD(ietf_attr_numeric_version_t, get_version, void,
 	}
 }
 
-METHOD(ietf_attr_numeric_version_t, get_build, u_int32_t,
+METHOD(ietf_attr_numeric_version_t, get_build, uint32_t,
 	private_ietf_attr_numeric_version_t *this)
 {
 	return this->build;
 }
 
 METHOD(ietf_attr_numeric_version_t, get_service_pack, void,
-	private_ietf_attr_numeric_version_t *this, u_int16_t *major, u_int16_t *minor)
+	private_ietf_attr_numeric_version_t *this, uint16_t *major, uint16_t *minor)
 {
 	if (major)
 	{
@@ -215,10 +232,10 @@ METHOD(ietf_attr_numeric_version_t, get_service_pack, void,
 /**
  * Described in header.
  */
-pa_tnc_attr_t *ietf_attr_numeric_version_create(u_int32_t major, u_int32_t minor,
-												u_int32_t build,
-												u_int16_t service_pack_major,
-												u_int16_t service_pack_minor)
+pa_tnc_attr_t *ietf_attr_numeric_version_create(uint32_t major, uint32_t minor,
+												uint32_t build,
+												uint16_t service_pack_major,
+												uint16_t service_pack_minor)
 {
 	private_ietf_attr_numeric_version_t *this;
 
@@ -231,6 +248,7 @@ pa_tnc_attr_t *ietf_attr_numeric_version_create(u_int32_t major, u_int32_t minor
 				.set_noskip_flag = _set_noskip_flag,
 				.build = _build,
 				.process = _process,
+				.add_segment = _add_segment,
 				.get_ref = _get_ref,
 				.destroy = _destroy,
 			},
@@ -253,7 +271,8 @@ pa_tnc_attr_t *ietf_attr_numeric_version_create(u_int32_t major, u_int32_t minor
 /**
  * Described in header.
  */
-pa_tnc_attr_t *ietf_attr_numeric_version_create_from_data(chunk_t data)
+pa_tnc_attr_t *ietf_attr_numeric_version_create_from_data(size_t length,
+														  chunk_t data)
 {
 	private_ietf_attr_numeric_version_t *this;
 
@@ -266,6 +285,7 @@ pa_tnc_attr_t *ietf_attr_numeric_version_create_from_data(chunk_t data)
 				.set_noskip_flag = _set_noskip_flag,
 				.build = _build,
 				.process = _process,
+				.add_segment = _add_segment,
 				.get_ref = _get_ref,
 				.destroy = _destroy,
 			},
@@ -274,6 +294,7 @@ pa_tnc_attr_t *ietf_attr_numeric_version_create_from_data(chunk_t data)
 			.get_service_pack = _get_service_pack,
 		},
 		.type = { PEN_IETF, IETF_ATTR_NUMERIC_VERSION },
+		.length = length,
 		.value = chunk_clone(data),
 		.ref = 1,
 	);

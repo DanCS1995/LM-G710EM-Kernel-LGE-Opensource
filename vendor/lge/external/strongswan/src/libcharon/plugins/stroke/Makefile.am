@@ -1,13 +1,13 @@
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/libstrongswan \
-	-I$(top_srcdir)/src/libhydra \
+	-I$(top_srcdir)/src/libcharon/plugins/counters \
 	-I$(top_srcdir)/src/libcharon \
 	-I$(top_srcdir)/src/stroke \
 	-DIPSEC_CONFDIR=\"${sysconfdir}\" \
 	-DIPSEC_PIDDIR=\"${piddir}\"
 
 AM_CFLAGS = \
-	-rdynamic
+	$(PLUGIN_CFLAGS)
 
 if MONOLITHIC
 noinst_LTLIBRARIES = libstrongswan-stroke.la

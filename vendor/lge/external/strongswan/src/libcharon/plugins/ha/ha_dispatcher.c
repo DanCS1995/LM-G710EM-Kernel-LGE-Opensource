@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -81,17 +81,18 @@ struct ha_diffie_hellman_t {
 	chunk_t pub;
 };
 
-METHOD(diffie_hellman_t, dh_get_shared_secret, status_t,
+METHOD(diffie_hellman_t, dh_get_shared_secret, bool,
 	ha_diffie_hellman_t *this, chunk_t *secret)
 {
 	*secret = chunk_clone(this->secret);
-	return SUCCESS;
+	return TRUE;
 }
 
-METHOD(diffie_hellman_t, dh_get_my_public_value, void,
+METHOD(diffie_hellman_t, dh_get_my_public_value, bool,
 	ha_diffie_hellman_t *this, chunk_t *value)
 {
 	*value = chunk_clone(this->pub);
+	return TRUE;
 }
 
 METHOD(diffie_hellman_t, dh_destroy, void,
@@ -130,10 +131,12 @@ static void process_ike_add(private_ha_dispatcher_t *this, ha_message_t *message
 	enumerator_t *enumerator;
 	ike_sa_t *ike_sa = NULL, *old_sa = NULL;
 	ike_version_t version = IKEV2;
-	u_int16_t encr = 0, len = 0, integ = 0, prf = 0, old_prf = PRF_UNDEFINED;
+	uint16_t encr = 0, len = 0, integ = 0, prf = 0, old_prf = PRF_UNDEFINED;
+	uint16_t dh_grp = 0;
 	chunk_t nonce_i = chunk_empty, nonce_r = chunk_empty;
 	chunk_t secret = chunk_empty, old_skd = chunk_empty;
 	chunk_t dh_local = chunk_empty, dh_remote = chunk_empty, psk = chunk_empty;
+	host_t *other = NULL;
 	bool ok = FALSE;
 
 	enumerator = message->create_attribute_enumerator(message);
@@ -148,6 +151,9 @@ static void process_ike_add(private_ha_dispatcher_t *this, ha_message_t *message
 			case HA_IKE_REKEY_ID:
 				old_sa = charon->ike_sa_manager->checkout(charon->ike_sa_manager,
 														  value.ike_sa_id);
+				break;
+			case HA_REMOTE_ADDR:
+				other = value.host->clone(value.host);
 				break;
 			case HA_IKE_VERSION:
 				version = value.u8;
@@ -188,6 +194,9 @@ static void process_ike_add(private_ha_dispatcher_t *this, ha_message_t *message
 			case HA_ALG_OLD_PRF:
 				old_prf = value.u16;
 				break;
+			case HA_ALG_DH:
+				dh_grp = value.u16;
+				break;
 			default:
 				break;
 		}
@@ -211,6 +220,10 @@ static void process_ike_add(private_ha_dispatcher_t *this, ha_message_t *message
 		if (prf)
 		{
 			proposal->add_algorithm(proposal, PSEUDO_RANDOM_FUNCTION, prf, 0);
+		}
+		if (dh_grp)
+		{
+			proposal->add_algorithm(proposal, DIFFIE_HELLMAN_GROUP, dh_grp, 0);
 		}
 		charon->bus->set_sa(charon->bus, ike_sa);
 		dh = ha_diffie_hellman_create(secret, dh_local);
@@ -245,16 +258,16 @@ static void process_ike_add(private_ha_dispatcher_t *this, ha_message_t *message
 		{
 			if (old_sa)
 			{
-				peer_cfg_t *peer_cfg = old_sa->get_peer_cfg(old_sa);
-
-				if (peer_cfg)
-				{
-					ike_sa->set_peer_cfg(ike_sa, peer_cfg);
-					ike_sa->inherit(ike_sa, old_sa);
-				}
+				ike_sa->inherit_pre(ike_sa, old_sa);
+				ike_sa->inherit_post(ike_sa, old_sa);
 				charon->ike_sa_manager->checkin_and_destroy(
 												charon->ike_sa_manager, old_sa);
 				old_sa = NULL;
+			}
+			if (other)
+			{
+				ike_sa->set_other_host(ike_sa, other);
+				other = NULL;
 			}
 			ike_sa->set_state(ike_sa, IKE_CONNECTING);
 			ike_sa->set_proposal(ike_sa, proposal);
@@ -274,6 +287,7 @@ static void process_ike_add(private_ha_dispatcher_t *this, ha_message_t *message
 	{
 		charon->ike_sa_manager->checkin(charon->ike_sa_manager, old_sa);
 	}
+	DESTROY_IF(other);
 	DESTROY_IF(message);
 }
 
@@ -378,6 +392,9 @@ static void process_ike_update(private_ha_dispatcher_t *this,
 				else
 				{
 					DBG1(DBG_IKE, "HA is missing nodes peer configuration");
+					charon->ike_sa_manager->checkin_and_destroy(
+												charon->ike_sa_manager, ike_sa);
+					ike_sa = NULL;
 				}
 				break;
 			case HA_EXTENSIONS:
@@ -442,11 +459,13 @@ static void process_ike_update(private_ha_dispatcher_t *this,
 				pools->destroy(pools);
 			}
 		}
+#ifdef USE_IKEV1
 		if (ike_sa->get_version(ike_sa) == IKEV1)
 		{
 			lib->processor->queue_job(lib->processor, (job_t*)
 							adopt_children_job_create(ike_sa->get_id(ike_sa)));
 		}
+#endif /* USE_IKEV1 */
 		this->cache->cache(this->cache, ike_sa, message);
 		charon->ike_sa_manager->checkin(charon->ike_sa_manager, ike_sa);
 	}
@@ -467,7 +486,7 @@ static void process_ike_mid(private_ha_dispatcher_t *this,
 	ha_message_value_t value;
 	enumerator_t *enumerator;
 	ike_sa_t *ike_sa = NULL;
-	u_int32_t mid = 0;
+	uint32_t mid = 0;
 
 	enumerator = message->create_attribute_enumerator(message);
 	while (enumerator->enumerate(enumerator, &attribute, &value))
@@ -633,11 +652,11 @@ static void process_child_add(private_ha_dispatcher_t *this,
 	child_sa_t *child_sa;
 	proposal_t *proposal;
 	bool initiator = FALSE, failed = FALSE, ok = FALSE;
-	u_int32_t inbound_spi = 0, outbound_spi = 0;
-	u_int16_t inbound_cpi = 0, outbound_cpi = 0;
-	u_int8_t mode = MODE_TUNNEL, ipcomp = 0;
-	u_int16_t encr = ENCR_UNDEFINED, integ = AUTH_UNDEFINED, len = 0;
-	u_int16_t esn = NO_EXT_SEQ_NUMBERS;
+	uint32_t inbound_spi = 0, outbound_spi = 0;
+	uint16_t inbound_cpi = 0, outbound_cpi = 0;
+	uint8_t mode = MODE_TUNNEL, ipcomp = 0;
+	uint16_t encr = 0, integ = 0, len = 0, dh_grp = 0;
+	uint16_t esn = NO_EXT_SEQ_NUMBERS;
 	u_int seg_i, seg_o;
 	chunk_t nonce_i = chunk_empty, nonce_r = chunk_empty, secret = chunk_empty;
 	chunk_t encr_i, integ_i, encr_r, integ_r;
@@ -686,6 +705,9 @@ static void process_child_add(private_ha_dispatcher_t *this,
 			case HA_ALG_INTEG:
 				integ = value.u16;
 				break;
+			case HA_ALG_DH:
+				dh_grp = value.u16;
+				break;
 			case HA_ESN:
 				esn = value.u16;
 				break;
@@ -721,7 +743,8 @@ static void process_child_add(private_ha_dispatcher_t *this,
 
 	child_sa = child_sa_create(ike_sa->get_my_host(ike_sa),
 							   ike_sa->get_other_host(ike_sa), config, 0,
-							   ike_sa->has_condition(ike_sa, COND_NAT_ANY));
+							   ike_sa->has_condition(ike_sa, COND_NAT_ANY),
+							   0, 0);
 	child_sa->set_mode(child_sa, mode);
 	child_sa->set_protocol(child_sa, PROTO_ESP);
 	child_sa->set_ipcomp(child_sa, ipcomp);
@@ -734,6 +757,10 @@ static void process_child_add(private_ha_dispatcher_t *this,
 	if (encr)
 	{
 		proposal->add_algorithm(proposal, ENCRYPTION_ALGORITHM, encr, len);
+	}
+	if (dh_grp)
+	{
+		proposal->add_algorithm(proposal, DIFFIE_HELLMAN_GROUP, dh_grp, 0);
 	}
 	proposal->add_algorithm(proposal, EXTENDED_SEQUENCE_NUMBERS, esn, 0);
 	if (secret.len)
@@ -750,7 +777,7 @@ static void process_child_add(private_ha_dispatcher_t *this,
 	if (ike_sa->get_version(ike_sa) == IKEV1)
 	{
 		keymat_v1_t *keymat_v1 = (keymat_v1_t*)ike_sa->get_keymat(ike_sa);
-		u_int32_t spi_i, spi_r;
+		uint32_t spi_i, spi_r;
 
 		spi_i = initiator ? inbound_spi : outbound_spi;
 		spi_r = initiator ? outbound_spi : inbound_spi;
@@ -791,14 +818,14 @@ static void process_child_add(private_ha_dispatcher_t *this,
 	}
 	enumerator->destroy(enumerator);
 
+	child_sa->set_policies(child_sa, local_ts, remote_ts);
+
 	if (initiator)
 	{
 		if (child_sa->install(child_sa, encr_r, integ_r, inbound_spi,
-							  inbound_cpi, initiator, TRUE, TRUE,
-							  local_ts, remote_ts) != SUCCESS ||
+							  inbound_cpi, initiator, TRUE, TRUE) != SUCCESS ||
 			child_sa->install(child_sa, encr_i, integ_i, outbound_spi,
-							  outbound_cpi, initiator, FALSE, TRUE,
-							  local_ts, remote_ts) != SUCCESS)
+							  outbound_cpi, initiator, FALSE, TRUE) != SUCCESS)
 		{
 			failed = TRUE;
 		}
@@ -806,11 +833,9 @@ static void process_child_add(private_ha_dispatcher_t *this,
 	else
 	{
 		if (child_sa->install(child_sa, encr_i, integ_i, inbound_spi,
-							  inbound_cpi, initiator, TRUE, TRUE,
-							  local_ts, remote_ts) != SUCCESS ||
+							  inbound_cpi, initiator, TRUE, TRUE) != SUCCESS ||
 			child_sa->install(child_sa, encr_r, integ_r, outbound_spi,
-							  outbound_cpi, initiator, FALSE, TRUE,
-							  local_ts, remote_ts) != SUCCESS)
+							  outbound_cpi, initiator, FALSE, TRUE) != SUCCESS)
 		{
 			failed = TRUE;
 		}
@@ -836,12 +861,12 @@ static void process_child_add(private_ha_dispatcher_t *this,
 	seg_o = this->kernel->get_segment_spi(this->kernel,
 								ike_sa->get_other_host(ike_sa), outbound_spi);
 
-	DBG1(DBG_CFG, "installed HA CHILD_SA %s{%d} %#R=== %#R "
+	DBG1(DBG_CFG, "installed HA CHILD_SA %s{%d} %#R === %#R "
 		"(segment in: %d%s, out: %d%s)", child_sa->get_name(child_sa),
-		child_sa->get_reqid(child_sa), local_ts, remote_ts,
+		child_sa->get_unique_id(child_sa), local_ts, remote_ts,
 		seg_i, this->segments->is_active(this->segments, seg_i) ? "*" : "",
 		seg_o, this->segments->is_active(this->segments, seg_o) ? "*" : "");
-	child_sa->add_policies(child_sa, local_ts, remote_ts);
+	child_sa->install_policies(child_sa);
 	local_ts->destroy_offset(local_ts, offsetof(traffic_selector_t, destroy));
 	remote_ts->destroy_offset(remote_ts, offsetof(traffic_selector_t, destroy));
 
@@ -862,7 +887,7 @@ static void process_child_delete(private_ha_dispatcher_t *this,
 	enumerator_t *enumerator;
 	ike_sa_t *ike_sa = NULL;
 	child_sa_t *child_sa;
-	u_int32_t spi = 0;
+	uint32_t spi = 0;
 
 	enumerator = message->create_attribute_enumerator(message);
 	while (enumerator->enumerate(enumerator, &attribute, &value))
@@ -1077,4 +1102,3 @@ ha_dispatcher_t *ha_dispatcher_create(ha_socket_t *socket,
 
 	return &this->public;
 }
-

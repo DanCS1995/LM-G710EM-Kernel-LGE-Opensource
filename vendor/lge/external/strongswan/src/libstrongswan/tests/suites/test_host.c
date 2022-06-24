@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -46,7 +46,7 @@ static void verify_netmask(chunk_t addr, int mask)
  * host_create_any
  */
 
-static void verify_any(host_t *host, int family, u_int16_t port)
+static void verify_any(host_t *host, int family, uint16_t port)
 {
 	verify_netmask(host->get_address(host), 0);
 	ck_assert(host->is_anyaddr(host));
@@ -88,7 +88,7 @@ END_TEST
  * host_create_from_string
  */
 
-static void verify_address(host_t *host, chunk_t addr, int family, u_int16_t port)
+static void verify_address(host_t *host, chunk_t addr, int family, uint16_t port)
 {
 	ck_assert(chunk_equals(host->get_address(host), addr));
 	ck_assert(!host->is_anyaddr(host));
@@ -103,6 +103,9 @@ static const chunk_t addr_v6 = chunk_from_chars(0xfe, 0xc1, 0x00, 0x00, 0x00, 0x
 START_TEST(test_create_from_string_v4)
 {
 	host_t *host;
+
+	host = host_create_from_string(NULL, 500);
+	ck_assert(!host);
 
 	host = host_create_from_string("%any", 500);
 	verify_any(host, AF_INET, 500);
@@ -196,6 +199,7 @@ static void test_create_from_string_and_family_addr(char *string, chunk_t addr,
 
 START_TEST(test_create_from_string_and_family_v4)
 {
+	test_create_from_string_and_family_any(NULL, AF_INET, AF_UNSPEC);
 	test_create_from_string_and_family_any("%any", AF_INET, AF_INET);
 	test_create_from_string_and_family_any("%any4", AF_INET, AF_INET);
 	test_create_from_string_and_family_any("0.0.0.0", AF_INET, AF_INET);
@@ -210,6 +214,7 @@ END_TEST
 
 START_TEST(test_create_from_string_and_family_v6)
 {
+	test_create_from_string_and_family_any(NULL, AF_INET6, AF_UNSPEC);
 	test_create_from_string_and_family_any("%any", AF_INET6, AF_INET6);
 	test_create_from_string_and_family_any("%any6", AF_INET6, AF_INET6);
 	test_create_from_string_and_family_any("::", AF_INET6, AF_INET6);
@@ -224,6 +229,7 @@ END_TEST
 
 START_TEST(test_create_from_string_and_family_other)
 {
+	test_create_from_string_and_family_any(NULL, AF_UNSPEC, AF_UNSPEC);
 	test_create_from_string_and_family_any("%any", AF_UNSPEC, AF_INET);
 	test_create_from_string_and_family_any("%any4", AF_UNSPEC, AF_INET);
 	test_create_from_string_and_family_any("0.0.0.0", AF_UNSPEC, AF_INET);
@@ -233,6 +239,48 @@ START_TEST(test_create_from_string_and_family_other)
 
 	test_create_from_string_and_family_addr("192.168.0.1", addr_v4, AF_UNSPEC, AF_INET);
 	test_create_from_string_and_family_addr("fec1::1", addr_v6, AF_UNSPEC, AF_INET6);
+}
+END_TEST
+
+/*******************************************************************************
+ * host_create_from_dns
+ */
+
+static void test_create_from_dns(int family, chunk_t addr)
+{
+	host_t *host;
+
+	host = host_create_from_dns("localhost", family, 500);
+	if (family != AF_INET6)
+	{
+		ck_assert(host != NULL);
+	}
+	if (host)
+	{
+		if (family != AF_UNSPEC)
+		{
+			verify_address(host, addr, family, 500);
+		}
+		host->destroy(host);
+	}
+}
+
+START_TEST(test_create_from_dns_any)
+{
+	test_create_from_dns(AF_UNSPEC, chunk_empty);
+}
+END_TEST
+
+START_TEST(test_create_from_dns_v4)
+{
+	test_create_from_dns(AF_INET, chunk_from_chars(127,0,0,1));
+}
+END_TEST
+
+START_TEST(test_create_from_dns_v6)
+{
+	test_create_from_dns(AF_INET6,
+						 chunk_from_chars(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1));
 }
 END_TEST
 
@@ -286,8 +334,8 @@ END_TEST
 
 START_TEST(test_create_from_sockaddr_other)
 {
-	struct sockaddr_un addr = {
-		.sun_family = AF_UNIX,
+	struct sockaddr addr = {
+		.sa_family = AF_UNIX,
 	};
 	host_t *host;
 
@@ -396,6 +444,90 @@ START_TEST(test_create_from_subnet_v6)
 
 	host = host_create_from_subnet("foo::bar", &bits);
 	ck_assert(host == NULL);
+}
+END_TEST
+
+/*******************************************************************************
+ * host_create_from_range
+ */
+
+static const chunk_t addr_v4_to = chunk_from_chars(0xc0, 0xa8, 0x00, 0x05);
+static const chunk_t addr_v6_to = chunk_from_chars(0xfe, 0xc1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+												   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05);
+
+static void verify_range(char *str, int family, chunk_t from_addr,
+						 chunk_t to_addr)
+{
+	host_t *from, *to;
+
+	if (!family)
+	{
+		ck_assert(!host_create_from_range(str, &from, &to));
+	}
+	else
+	{
+		ck_assert(host_create_from_range(str, &from, &to));
+		verify_address(from, from_addr, family, 0);
+		verify_address(to, to_addr, family, 0);
+		from->destroy(from);
+		to->destroy(to);
+	}
+}
+
+START_TEST(test_create_from_range_v4)
+{
+	host_t *from, *to;
+
+	ck_assert(host_create_from_range("0.0.0.0-0.0.0.0", &from, &to));
+	verify_any(from, AF_INET, 0);
+	verify_any(to, AF_INET, 0);
+	from->destroy(from);
+	to->destroy(to);
+
+	verify_range("192.168.0.1-192.168.0.1", AF_INET, addr_v4, addr_v4);
+	verify_range("192.168.0.1-192.168.0.5", AF_INET, addr_v4, addr_v4_to);
+	verify_range("192.168.0.1- 192.168.0.5", AF_INET, addr_v4, addr_v4_to);
+	verify_range("192.168.0.1 -192.168.0.5", AF_INET, addr_v4, addr_v4_to);
+	verify_range("192.168.0.1 - 192.168.0.5", AF_INET, addr_v4, addr_v4_to);
+	verify_range("192.168.0.5-192.168.0.1", AF_INET, addr_v4_to, addr_v4);
+
+	verify_range("192.168.0.1", 0, chunk_empty, chunk_empty);
+	verify_range("192.168.0.1-", 0, chunk_empty, chunk_empty);
+	verify_range("-192.168.0.1", 0, chunk_empty, chunk_empty);
+	verify_range("192.168.0.1-192", 0, chunk_empty, chunk_empty);
+	verify_range("192.168.0.1-192.168", 0, chunk_empty, chunk_empty);
+	verify_range("192.168.0.1-192.168.0", 0, chunk_empty, chunk_empty);
+	verify_range("foo.b.a.r", 0, chunk_empty, chunk_empty);
+	verify_range("foo.b.a.r-b.a.r.f", 0, chunk_empty, chunk_empty);
+}
+END_TEST
+
+START_TEST(test_create_from_range_v6)
+{
+	host_t *from, *to;
+
+	ck_assert(host_create_from_range("::-::", &from, &to));
+	verify_any(from, AF_INET6, 0);
+	verify_any(to, AF_INET6, 0);
+	from->destroy(from);
+	to->destroy(to);
+
+	verify_range("fec1::1-fec1::1", AF_INET6, addr_v6, addr_v6);
+	verify_range("fec1::1-fec1::5", AF_INET6, addr_v6, addr_v6_to);
+	verify_range("fec1::1- fec1::5", AF_INET6, addr_v6, addr_v6_to);
+	verify_range("fec1::1 -fec1::5", AF_INET6, addr_v6, addr_v6_to);
+	verify_range("fec1::1 - fec1::5", AF_INET6, addr_v6, addr_v6_to);
+	verify_range("fec1::5-fec1::1", AF_INET6, addr_v6_to, addr_v6);
+
+	verify_range("fec1::1", 0, chunk_empty, chunk_empty);
+	verify_range("fec1::1-", 0, chunk_empty, chunk_empty);
+	verify_range("-fec1::1", 0, chunk_empty, chunk_empty);
+	verify_range("fec1::1-fec1", 0, chunk_empty, chunk_empty);
+	verify_range("foo::bar", 0, chunk_empty, chunk_empty);
+	verify_range("foo::bar-bar::foo", 0, chunk_empty, chunk_empty);
+
+	verify_range("fec1::1-192.168.0.1", 0, chunk_empty, chunk_empty);
+	verify_range("192.168.0.1-fec1::1", 0, chunk_empty, chunk_empty);
 }
 END_TEST
 
@@ -524,19 +656,19 @@ END_TEST
 
 static struct {
 	char *addr;
-	u_int16_t port;
-	/* results for %H, %+H, %#H (falls back to [0]) */
+	uint16_t port;
+	/* results for %H, %+H, %#H (falls back to the first entry) */
 	char *result[3];
 } printf_data[] = {
 	{NULL,          0, { "(null)" }},
 	{NULL,        500, { "(null)" }},
-	{"%any",        0, { "%any", "0.0.0.0", "0.0.0.0[0]" }},
+	{"%any",        0, { "%any", "0.0.0.0", "0.0.0.0" }},
 	{"%any",      500, { "%any", "0.0.0.0", "0.0.0.0[500]" }},
-	{"%any6",       0, { "%any6", "::", "::[0]" }},
+	{"%any6",       0, { "%any6", "::", "::" }},
 	{"%any6",     500, { "%any6", "::", "::[500]" }},
-	{"192.168.0.1",   0, { "192.168.0.1", "192.168.0.1", "192.168.0.1[0]" }},
+	{"192.168.0.1",   0, { "192.168.0.1" }},
 	{"192.168.0.1", 500, { "192.168.0.1", "192.168.0.1", "192.168.0.1[500]" }},
-	{"fec1::1",     0, { "fec1::1", "fec1::1", "fec1::1[0]" }},
+	{"fec1::1",     0, { "fec1::1" }},
 	{"fec1::1",   500, { "fec1::1", "fec1::1", "fec1::1[500]" }},
 };
 
@@ -610,6 +742,12 @@ Suite *host_suite_create()
 	tcase_add_test(tc, test_create_from_string_and_family_other);
 	suite_add_tcase(s, tc);
 
+	tc = tcase_create("host_create_from_dns");
+	tcase_add_test(tc, test_create_from_dns_any);
+	tcase_add_test(tc, test_create_from_dns_v4);
+	tcase_add_test(tc, test_create_from_dns_v6);
+	suite_add_tcase(s, tc);
+
 	tc = tcase_create("host_create_from_sockaddr");
 	tcase_add_test(tc, test_create_from_sockaddr_v4);
 	tcase_add_test(tc, test_create_from_sockaddr_v6);
@@ -625,6 +763,11 @@ Suite *host_suite_create()
 	tc = tcase_create("host_create_from_subnet");
 	tcase_add_test(tc, test_create_from_subnet_v4);
 	tcase_add_test(tc, test_create_from_subnet_v6);
+	suite_add_tcase(s, tc);
+
+	tc = tcase_create("host_create_from_range");
+	tcase_add_test(tc, test_create_from_range_v4);
+	tcase_add_test(tc, test_create_from_range_v6);
 	suite_add_tcase(s, tc);
 
 	tc = tcase_create("host_create_netmask");

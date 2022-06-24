@@ -3,7 +3,7 @@ AM_CPPFLAGS = \
 	-I/usr/include/ClearSilver
 
 AM_CFLAGS = \
-	-rdynamic
+	$(PLUGIN_CFLAGS)
 
 AM_LDFLAGS = \
 	-no-undefined
@@ -22,4 +22,4 @@ endif
 
 libfast_la_LIBADD = \
 	$(top_builddir)/src/libstrongswan/libstrongswan.la \
-	-lfcgi $(clearsilver_LIBS) $(PTHREADLIB)
+	-lfcgi $(clearsilver_LIBS) $(PTHREADLIB) $(ATOMICLIB)

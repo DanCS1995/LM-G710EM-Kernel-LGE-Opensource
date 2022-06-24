@@ -44,9 +44,9 @@ gpg_strerror_sym (gpg_error_t err)
       code &= ~GPG_ERR_SYSTEM_ERROR;
       idx = errnos_msgidxof (code);
       if (idx >= 0)
-	return errnos_msgstr + errnos_msgidx[idx];
+    return errnos_msgstr + errnos_msgidx[idx];
       else
-	return NULL;
+    return NULL;
     }
 
   if (msgidxof (code) == msgidxof (GPG_ERR_CODE_DIM))

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2006 Tobias Brunner, Daniel Roethlisberger
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -54,7 +54,7 @@ METHOD(job_t, execute, job_requeue_t,
 											  this->ike_sa_id);
 	if (ike_sa)
 	{
-		ike_sa->send_keepalive(ike_sa);
+		ike_sa->send_keepalive(ike_sa, TRUE);
 		charon->ike_sa_manager->checkin(charon->ike_sa_manager, ike_sa);
 	}
 	return JOB_REQUEUE_NONE;

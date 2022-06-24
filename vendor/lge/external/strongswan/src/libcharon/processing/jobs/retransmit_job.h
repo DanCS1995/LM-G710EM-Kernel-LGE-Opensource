@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2005-2007 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -31,7 +31,6 @@ typedef struct retransmit_job_t retransmit_job_t;
 /* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 #define RETRANSMIT_DPD_WAKELOCK "dpd_wakelock"
 /* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
-
 /**
  * Class representing an retransmit Job.
  *
@@ -56,10 +55,10 @@ struct retransmit_job_t {
 /* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 /*
 // original
-retransmit_job_t *retransmit_job_create(u_int32_t message_id,
+retransmit_job_t *retransmit_job_create(uint32_t message_id,
 										ike_sa_id_t *ike_sa_id);
 */
-retransmit_job_t *retransmit_job_create(u_int32_t message_id,
+retransmit_job_t *retransmit_job_create(uint32_t message_id,
 										ike_sa_id_t *ike_sa_id,
 										bool aqure_wakelock);
 /* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */

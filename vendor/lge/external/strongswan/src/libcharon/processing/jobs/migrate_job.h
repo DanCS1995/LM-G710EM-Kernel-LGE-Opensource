@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 Andreas Steffen
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -26,7 +26,7 @@ typedef struct migrate_job_t migrate_job_t;
 #include <library.h>
 #include <networking/host.h>
 #include <selectors/traffic_selector.h>
-#include <kernel_wrap/kernel_ipsec.h>
+#include <kernel/kernel_ipsec.h>
 #include <processing/jobs/job.h>
 
 /**
@@ -46,7 +46,7 @@ struct migrate_job_t {
  *
  * We use the reqid or the traffic selectors to find a matching CHILD_SA.
  *
- * @param reqid		reqid of the CHILD_SA to acquire
+ * @param reqid		reqid of the CHILD_SA to migrate
  * @param src_ts	source traffic selector to be used in the policy
  * @param dst_ts	destination traffic selector to be used in the policy
  * @param dir		direction of the policy (in|out)
@@ -54,7 +54,7 @@ struct migrate_job_t {
  * @param remote	remote host address to be used in the IKE_SA
  * @return			migrate_job_t object
  */
-migrate_job_t *migrate_job_create(u_int32_t reqid,
+migrate_job_t *migrate_job_create(uint32_t reqid,
 						traffic_selector_t *src_ts, traffic_selector_t *dst_ts,
 						policy_dir_t dir, host_t *local, host_t *remote);
 

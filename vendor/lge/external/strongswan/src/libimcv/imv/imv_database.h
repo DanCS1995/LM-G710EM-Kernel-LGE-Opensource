@@ -46,7 +46,7 @@ struct imv_database_t {
 	 */
 	 imv_session_t* (*add_session)(imv_database_t *this,
 								   TNC_ConnectionID conn_id,
-								   u_int32_t ar_id_type, chunk_t ar_id_value);
+								   uint32_t ar_id_type, chunk_t ar_id_value);
 
 	/**
 	 * Remove and delete a session
@@ -54,26 +54,6 @@ struct imv_database_t {
 	 * @param session		Session
 	 */
 	 void (*remove_session)(imv_database_t *this, imv_session_t *session);
-
-	/**
-	 * Add product information string to a session database entry
-	 *
-	 * @param session		Session
-	 * @param product		Product information string
-	 * @return				Product ID
-	 */
-	 int (*add_product)(imv_database_t *this, imv_session_t *session,
-						char *product);
-
-	/**
-	 * Add device identification to a session database entry
-	 *
-	 * @param session		Session
-	 * @param device		Device identification
-	 * @return				Device ID
-	 */
-	 int (*add_device)(imv_database_t *this, imv_session_t *session,
-					   chunk_t device);
 
 	/**
 	 * Add final recommendation to a session database entry

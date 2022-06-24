@@ -1,6 +1,6 @@
-/* stroke keywords
+/*
  * Copyright (C) 2006 Andreas Steffen
- * Hochschule fuer Technik Rapperswil, Switzerland
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -74,6 +74,7 @@ typedef enum {
 
 typedef struct stroke_token stroke_token_t;
 
-extern const stroke_token_t* in_word_set(register const char *str, register unsigned int len);
+extern const stroke_token_t* in_word_set(register const char *str,
+										 register unsigned len);
 
 #endif /* _STROKE_KEYWORDS_H_ */

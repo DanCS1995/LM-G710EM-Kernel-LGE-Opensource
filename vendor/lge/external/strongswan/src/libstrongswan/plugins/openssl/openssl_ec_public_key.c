@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2009 Martin Willi
  * Copyright (C) 2008 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -26,6 +26,10 @@
 #include <openssl/evp.h>
 #include <openssl/ecdsa.h>
 #include <openssl/x509.h>
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+OPENSSL_KEY_FALLBACK(ECDSA_SIG, r, s)
+#endif
 
 typedef struct private_openssl_ec_public_key_t private_openssl_ec_public_key_t;
 
@@ -55,14 +59,23 @@ struct private_openssl_ec_public_key_t {
 static bool verify_signature(private_openssl_ec_public_key_t *this,
 							 chunk_t hash, chunk_t signature)
 {
-	bool valid = FALSE;
+	BIGNUM *r, *s;
 	ECDSA_SIG *sig;
+	bool valid = FALSE;
 
 	sig = ECDSA_SIG_new();
 	if (sig)
 	{
-		/* split the signature chunk in r and s */
-		if (openssl_bn_split(signature, sig->r, sig->s))
+		r = BN_new();
+		s = BN_new();
+		if (!openssl_bn_split(signature, r, s))
+		{
+			BN_free(r);
+			BN_free(s);
+			ECDSA_SIG_free(sig);
+			return FALSE;
+		}
+		if (ECDSA_SIG_set0(sig, r, s))
 		{
 			valid = (ECDSA_do_verify(hash.ptr, hash.len, sig, this->ec) == 1);
 		}
@@ -138,7 +151,7 @@ METHOD(public_key_t, get_type, key_type_t,
 
 METHOD(public_key_t, verify, bool,
 	private_openssl_ec_public_key_t *this, signature_scheme_t scheme,
-	chunk_t data, chunk_t signature)
+	void *params, chunk_t data, chunk_t signature)
 {
 	switch (scheme)
 	{
@@ -179,17 +192,7 @@ METHOD(public_key_t, encrypt, bool,
 METHOD(public_key_t, get_keysize, int,
 	private_openssl_ec_public_key_t *this)
 {
-	switch (EC_GROUP_get_curve_name(EC_KEY_get0_group(this->ec)))
-	{
-		case NID_X9_62_prime256v1:
-			return 256;
-		case NID_secp384r1:
-			return 384;
-		case NID_secp521r1:
-			return 521;
-		default:
-			return 0;
-	}
+	return EC_GROUP_get_degree(EC_KEY_get0_group(this->ec));
 }
 
 /**

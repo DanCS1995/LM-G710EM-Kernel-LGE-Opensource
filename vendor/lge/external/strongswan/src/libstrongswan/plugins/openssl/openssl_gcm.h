@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -30,8 +30,10 @@
  *
  * @param algo			algorithm to implement
  * @param key_size		key size in bytes
+ * @param salt_size		size of implicit salt length
  * @return				aead_t object, NULL if not supported
  */
-aead_t *openssl_gcm_create(encryption_algorithm_t algo, size_t key_size);
+aead_t *openssl_gcm_create(encryption_algorithm_t algo, size_t key_size,
+							size_t salt_size);
 
 #endif /** OPENSSL_GCM_H_ @}*/

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil, Switzerland
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,7 +19,6 @@
 #include <dlfcn.h>
 
 #include <library.h>
-#include <hydra.h>
 #include <daemon.h>
 #include <collections/enumerator.h>
 
@@ -34,7 +33,7 @@ integrity_checker_t *integrity;
 static void build_checksum(char *path, char *name, char *sname)
 {
 	void *handle, *symbol;
-	u_int32_t fsum, ssum;
+	uint32_t fsum, ssum;
 	size_t fsize = 0;
 	size_t ssize = 0;
 
@@ -128,9 +127,8 @@ int main(int argc, char* argv[])
 {
 	int i;
 
-	/* forces link against libhydra/libcharon, imports symbols needed to
+	/* forces link against libcharon, imports symbols needed to
 	 * dlopen plugins */
-	hydra = NULL;
 	charon = NULL;
 
 	/* avoid confusing leak reports in build process */
@@ -159,8 +157,8 @@ int main(int argc, char* argv[])
 #ifdef S_PLUGINS
 	build_plugin_checksums(S_PLUGINS);
 #endif
-#ifdef H_PLUGINS
-	build_plugin_checksums(H_PLUGINS);
+#ifdef P_PLUGINS
+	build_plugin_checksums(P_PLUGINS);
 #endif
 #ifdef T_PLUGINS
 	build_plugin_checksums(T_PLUGINS);

@@ -2,7 +2,7 @@
  * drivers/staging/android/ion/ion_priv.h
  *
  * Copyright (C) 2011 Google, Inc.
- * Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -114,6 +114,8 @@ struct ion_buffer {
 #ifdef CONFIG_MIGRATE_HIGHORDER
 	size_t highorder_size;
 #endif
+	char thread_comm[TASK_COMM_LEN];
+	pid_t tid;
 };
 void ion_buffer_destroy(struct ion_buffer *buffer);
 
@@ -226,6 +228,7 @@ struct ion_heap {
 #ifdef CONFIG_MIGRATE_HIGHORDER
 	size_t free_highorder_size;
 #endif
+	atomic_long_t total_allocated_peak;
 };
 
 /**
@@ -549,11 +552,39 @@ int ion_walk_heaps(struct ion_client *client, int heap_id,
 		   enum ion_heap_type type, void *data,
 		   int (*f)(struct ion_heap *heap, void *data));
 
-struct ion_handle *ion_handle_get_by_id(struct ion_client *client,
-					int id);
+struct ion_handle *ion_handle_get_by_id_nolock(struct ion_client *client,
+					       int id);
 
 int ion_handle_put(struct ion_handle *handle);
 
 void show_ion_usage(struct ion_device *dev);
+
+int ion_share_dma_buf_fd_nolock(struct ion_client *client,
+				struct ion_handle *handle);
+
+bool ion_handle_validate(struct ion_client *client, struct ion_handle *handle);
+
+void lock_client(struct ion_client *client);
+
+void unlock_client(struct ion_client *client);
+
+struct ion_buffer *get_buffer(struct ion_handle *handle);
+
+/**
+ * This function is same as ion_free() except it won't use client->lock.
+ */
+void ion_free_nolock(struct ion_client *client, struct ion_handle *handle);
+
+/**
+ * This function is same as ion_phys() except it won't use client->lock.
+ */
+int ion_phys_nolock(struct ion_client *client, struct ion_handle *handle,
+		    ion_phys_addr_t *addr, size_t *len);
+
+/**
+ * This function is same as ion_import_dma_buf() except it won't use
+ * client->lock.
+ */
+struct ion_handle *ion_import_dma_buf_fd_nolock(struct ion_client *client, int fd);
 
 #endif /* _ION_PRIV_H */

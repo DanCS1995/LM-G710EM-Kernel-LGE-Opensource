@@ -1,13 +1,7 @@
-/**
- * @file stroke_msg.h
- *
- * @brief Definition of stroke_msg_t.
- *
- */
-
 /*
+ * Copyright (C) 2015 Tobias Brunner
  * Copyright (C) 2006 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -32,7 +26,10 @@
  */
 #define STROKE_SOCKET IPSEC_PIDDIR "/charon.ctl"
 
-#define STROKE_BUF_LEN		2048
+/**
+ * Number of bytes by which the buffer is increased as needed
+ */
+#define STROKE_BUF_LEN_INC     1024
 
 typedef enum list_flag_t list_flag_t;
 
@@ -161,7 +158,7 @@ struct stroke_end_t {
 	char *cert_policy;
 	char *updown;
 	char *address;
-	u_int16_t ikeport;
+	uint16_t ikeport;
 	char *sourceip;
 	char *pcscf;
 	char *imei;
@@ -174,9 +171,9 @@ struct stroke_end_t {
 	int hostaccess;
 	int tohost;
 	int allow_any;
-	u_int8_t protocol;
-	u_int16_t from_port;
-	u_int16_t to_port;
+	uint8_t protocol;
+	uint16_t from_port;
+	uint16_t to_port;
 };
 
 typedef struct stroke_msg_t stroke_msg_t;
@@ -186,7 +183,7 @@ typedef struct stroke_msg_t stroke_msg_t;
  */
 struct stroke_msg_t {
 	/* length of this message with all strings */
-	u_int16_t length;
+	uint16_t length;
 
 	/* type of the message */
 	enum {
@@ -280,9 +277,9 @@ struct stroke_msg_t {
 			int proxy_mode;
 			int install_policy;
 			int close_action;
-			u_int32_t reqid;
-			u_int32_t tfc;
-			u_int8_t ikedscp;
+			uint32_t reqid;
+			uint32_t tfc;
+			uint8_t ikedscp;
 
 			crl_policy_t crl_policy;
 			int unique;
@@ -296,10 +293,10 @@ struct stroke_msg_t {
 				time_t ipsec_lifetime;
 				time_t ike_lifetime;
 				time_t margin;
-				u_int64_t life_bytes;
-				u_int64_t margin_bytes;
-				u_int64_t life_packets;
-				u_int64_t margin_packets;
+				uint64_t life_bytes;
+				uint64_t margin_bytes;
+				uint64_t life_packets;
+				uint64_t margin_packets;
 				unsigned long tries;
 				unsigned long fuzz;
 			} rekey;
@@ -314,10 +311,12 @@ struct stroke_msg_t {
 				char *peerid;
 			} ikeme;
 			struct {
-				u_int32_t value;
-				u_int32_t mask;
+				uint32_t value;
+				uint32_t mask;
 			} mark_in, mark_out;
 			stroke_end_t me, other;
+			uint32_t replay_window;
+			bool sha256_96;
 		} add_conn;
 
 		/* data for STR_ADD_CA */
@@ -394,7 +393,10 @@ struct stroke_msg_t {
 		/* 2016-07-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_DPD_NOW [END] */
 
 	};
-	char buffer[STROKE_BUF_LEN];
+	/* length of the string buffer */
+	uint16_t buflen;
+	/* string buffer */
+	char buffer[];
 };
 
 #endif /* STROKE_MSG_H_ */

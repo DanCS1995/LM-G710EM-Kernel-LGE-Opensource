@@ -1,12 +1,11 @@
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/libstrongswan \
-	-I$(top_srcdir)/src/libhydra \
 	-I$(top_srcdir)/src/libcharon \
 	-I$(top_srcdir)/src/libsimaka
 
 AM_CFLAGS = \
 	${pcsclite_CFLAGS} \
-	-rdynamic
+	$(PLUGIN_CFLAGS)
 
 libstrongswan_eap_sim_pcsc_la_LDFLAGS = -module -avoid-version
 libstrongswan_eap_sim_pcsc_la_LIBADD  = ${pcsclite_LIBS}

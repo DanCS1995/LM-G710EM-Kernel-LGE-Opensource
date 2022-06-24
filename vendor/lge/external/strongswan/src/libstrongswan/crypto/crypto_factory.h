@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * Copyright (C) 2016 Andreas Steffen
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -31,6 +32,7 @@ typedef struct crypto_factory_t crypto_factory_t;
 #include <crypto/hashers/hasher.h>
 #include <crypto/prfs/prf.h>
 #include <crypto/rngs/rng.h>
+#include <crypto/xofs/xof.h>
 #include <crypto/nonce_gen.h>
 #include <crypto/diffie_hellman.h>
 #include <crypto/transform.h>
@@ -46,7 +48,7 @@ typedef crypter_t* (*crypter_constructor_t)(encryption_algorithm_t algo,
  * Constructor function for aead transforms
  */
 typedef aead_t* (*aead_constructor_t)(encryption_algorithm_t algo,
-									  size_t key_size);
+									  size_t key_size, size_t salt_size);
 /**
  * Constructor function for signers
  */
@@ -61,6 +63,11 @@ typedef hasher_t* (*hasher_constructor_t)(hash_algorithm_t algo);
  * Constructor function for pseudo random functions
  */
 typedef prf_t* (*prf_constructor_t)(pseudo_random_function_t algo);
+
+/**
+ * Constructor function for pseudo random functions
+ */
+typedef xof_t* (*xof_constructor_t)(ext_out_function_t algo);
 
 /**
  * Constructor function for source of randomness
@@ -100,10 +107,12 @@ struct crypto_factory_t {
 	 *
 	 * @param algo			encryption algorithm
 	 * @param key_size		length of the key in bytes
+	 * @param salt_size		size of salt, implicit part of the nonce
 	 * @return				aead_t instance, NULL if not supported
 	 */
 	aead_t* (*create_aead)(crypto_factory_t *this,
-						   encryption_algorithm_t algo, size_t key_size);
+						   encryption_algorithm_t algo,
+						   size_t key_size, size_t salt_size);
 
 	/**
 	 * Create a symmetric signer instance.
@@ -129,6 +138,14 @@ struct crypto_factory_t {
 	 * @return				prf_t instance, NULL if not supported
 	 */
 	prf_t* (*create_prf)(crypto_factory_t *this, pseudo_random_function_t algo);
+
+	/**
+	 * Create an extended output function instance.
+	 *
+	 * @param algo			XOF algorithm to use
+	 * @return				xof_t instance, NULL if not supported
+	 */
+	xof_t* (*create_xof)(crypto_factory_t *this, ext_out_function_t algo);
 
 	/**
 	 * Create a source of randomness.
@@ -160,12 +177,14 @@ struct crypto_factory_t {
 	 * Register a crypter constructor.
 	 *
 	 * @param algo			algorithm to constructor
+	 * @param key size		key size to perform benchmarking for
 	 * @param plugin_name	plugin that registered this algorithm
 	 * @param create		constructor function for that algorithm
 	 * @return				TRUE if registered, FALSE if test vector failed
 	 */
 	bool (*add_crypter)(crypto_factory_t *this, encryption_algorithm_t algo,
-						const char *plugin_name, crypter_constructor_t create);
+						size_t key_size, const char *plugin_name,
+						crypter_constructor_t create);
 
 	/**
 	 * Unregister a crypter constructor.
@@ -185,12 +204,14 @@ struct crypto_factory_t {
 	 * Register a aead constructor.
 	 *
 	 * @param algo			algorithm to constructor
+	 * @param key size		key size to perform benchmarking for
 	 * @param plugin_name	plugin that registered this algorithm
 	 * @param create		constructor function for that algorithm
 	 * @return				TRUE if registered, FALSE if test vector failed
 	 */
 	bool (*add_aead)(crypto_factory_t *this, encryption_algorithm_t algo,
-					 const char *plugin_name, aead_constructor_t create);
+					 size_t key_size, const char *plugin_name,
+					 aead_constructor_t create);
 
 	/**
 	 * Register a signer constructor.
@@ -245,6 +266,24 @@ struct crypto_factory_t {
 	 * @param create		constructor function to unregister
 	 */
 	void (*remove_prf)(crypto_factory_t *this, prf_constructor_t create);
+
+	/**
+	 * Register an xof constructor.
+	 *
+	 * @param algo			algorithm to constructor
+	 * @param plugin_name	plugin that registered this algorithm
+	 * @param create		constructor function for that algorithm
+	 * @return				TRUE if registered, FALSE if test vector failed
+	 */
+	bool (*add_xof)(crypto_factory_t *this, ext_out_function_t algo,
+					const char *plugin_name, xof_constructor_t create);
+
+	/**
+	 * Unregister an xof constructor.
+	 *
+	 * @param create		constructor function to unregister
+	 */
+	void (*remove_xof)(crypto_factory_t *this, xof_constructor_t create);
 
 	/**
 	 * Register a source of randomness.
@@ -336,6 +375,13 @@ struct crypto_factory_t {
 	enumerator_t* (*create_prf_enumerator)(crypto_factory_t *this);
 
 	/**
+	 * Create an enumerator over all registered XOFs.
+	 *
+	 * @return				enumerator over ext_out_function_t, plugin
+	 */
+	enumerator_t* (*create_xof_enumerator)(crypto_factory_t *this);
+
+	/**
 	 * Create an enumerator over all registered diffie hellman groups.
 	 *
 	 * @return				enumerator over diffie_hellman_group_t, plugin
@@ -366,14 +412,17 @@ struct crypto_factory_t {
 							void *vector);
 
 	/**
-	 * Get the number of test vector failures encountered during add.
+	 * Create an enumerator verifying transforms using known test vectors.
 	 *
-	 * This counter gets incremented only if transforms get tested during
-	 * registration.
+	 * The resulting enumerator enumerates over an u_int with the type
+	 * specific transform identifier, the plugin name providing the transform,
+	 * and a boolean value indicating success/failure for the given transform.
 	 *
-	 * @return				number of failed test vectors
+	 * @param type			transform type to test
+	 * @return				enumerator over (u_int, char*, bool)
 	 */
-	u_int (*get_test_vector_failures)(crypto_factory_t *this);
+	enumerator_t* (*create_verify_enumerator)(crypto_factory_t *this,
+											  transform_type_t type);
 
 	/**
 	 * Destroy a crypto_factory instance.

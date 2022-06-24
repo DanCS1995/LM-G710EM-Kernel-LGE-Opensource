@@ -50,7 +50,7 @@ static const char *selftest(void);
 
 /* Structure for an expanded Twofish key.  s contains the key-dependent
  * S-boxes composed with the MDS matrix; w contains the eight "whitening"
- * subkeys, K[0] through K[7].	k holds the remaining, "round" subkeys.  Note
+ * subkeys, K[0] through K[7].    k holds the remaining, "round" subkeys.  Note
  * that k[i] corresponds to what the Twofish paper calls K[i+8]. */
 typedef struct {
    u32 s[4][256], w[8], k[32];
@@ -325,11 +325,11 @@ static const u32 mds[4][256] = {
  * from the Twofish paper.  I've only included the table entries I actually
  * need; I never do a lookup on a variable input of zero and the biggest
  * exponents I'll ever see are 254 (variable) and 237 (constant), so they'll
- * never sum to more than 491.	I'm repeating part of the exp_to_poly table
+ * never sum to more than 491.    I'm repeating part of the exp_to_poly table
  * so that I don't have to do mod-255 reduction in the exponent arithmetic.
  * Since I know my constant operands are never zero, I only have to worry
  * about zero values in the variable operand, and I do it with a simple
- * conditional branch.	I know conditionals are expensive, but I couldn't
+ * conditional branch.    I know conditionals are expensive, but I couldn't
  * see a non-horrible way of avoiding them, and I did manage to group the
  * statements so that each if covers four group multiplications. */
 
@@ -547,9 +547,9 @@ static byte calc_sb_tbl[512] = {
 
 #define CALC_K256_2(a, b, j) \
    CALC_K_2 (q0[q1[b ^ key[(j) + 24]] ^ key[(j) + 16]], \
-	     q1[q1[a ^ key[(j) + 25]] ^ key[(j) + 17]], \
-	     q0[q0[a ^ key[(j) + 26]] ^ key[(j) + 18]], \
-	     q1[q0[b ^ key[(j) + 27]] ^ key[(j) + 19]], j)
+         q1[q1[a ^ key[(j) + 25]] ^ key[(j) + 17]], \
+         q0[q0[a ^ key[(j) + 26]] ^ key[(j) + 18]], \
+         q1[q0[b ^ key[(j) + 27]] ^ key[(j) + 19]], j)
 
 #define CALC_K256(a, j, k, l, m, n) \
    x = CALC_K256_2 (k, l, 0); \
@@ -599,7 +599,7 @@ do_twofish_setkey (TWOFISH_context *ctx, const byte *key, const unsigned keylen)
     return GPG_ERR_SELFTEST_FAILED;
 
   /* Compute the first two words of the S vector.  The magic numbers are
-   * the entries of the RS matrix, preprocessed through poly_to_exp.	The
+   * the entries of the RS matrix, preprocessed through poly_to_exp.    The
    * numbers in the comments are the original (polynomial form) matrix
    * entries. */
   CALC_S (sa, sb, sc, sd, 0, 0x00, 0x2D, 0x01, 0x2D); /* 01 A4 02 A4 */
@@ -643,7 +643,7 @@ do_twofish_setkey (TWOFISH_context *ctx, const byte *key, const unsigned keylen)
       for(i=j=0,k=1; i < 256; i++, j += 2, k += 2 )
         {
           CALC_SB256_2( i, calc_sb_tbl[j], calc_sb_tbl[k] );
-	}
+    }
 
       /* Calculate whitening and round subkeys.  The constants are
        * indices of subkeys, preprocessed through q0 and q1. */
@@ -865,7 +865,7 @@ static const char*
 selftest (void)
 {
   TWOFISH_context ctx; /* Expanded key. */
-  byte scratch[16];	/* Encryption/decryption result buffer. */
+  byte scratch[16];    /* Encryption/decryption result buffer. */
 
   /* Test vectors for single encryption/decryption.  Note that I am using
    * the vectors from the Twofish paper's "known answer test", I=3 for
@@ -918,11 +918,11 @@ selftest (void)
   return NULL;
 }
 
-/* More complete test program.	This does 1000 encryptions and decryptions
+/* More complete test program.    This does 1000 encryptions and decryptions
  * with each of 250 128-bit keys and 2000 encryptions and decryptions with
  * each of 125 256-bit keys, using a feedback scheme similar to a Feistel
  * cipher, so as to be sure of testing all the table entries pretty
- * thoroughly.	We keep changing the keys so as to get a more meaningful
+ * thoroughly.    We keep changing the keys so as to get a more meaningful
  * performance number, since the key setup is non-trivial for Twofish. */
 
 #ifdef TEST
@@ -935,7 +935,7 @@ int
 main()
 {
   TWOFISH_context ctx;     /* Expanded key. */
-  int i, j;		    /* Loop counters. */
+  int i, j;            /* Loop counters. */
 
   const char *encrypt_msg; /* Message to print regarding encryption test;
                             * the printf is done outside the loop to avoid

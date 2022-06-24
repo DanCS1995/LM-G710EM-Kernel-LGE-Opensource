@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Andreas Steffen
+ * Copyright (C) 2011-2014 Andreas Steffen
  * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -46,7 +46,7 @@ struct private_imc_agent_t {
 	/**
 	 * number of message types registered by IMC
 	 */
-	u_int32_t type_count;
+	uint32_t type_count;
 
 	/**
 	 * ID of IMC as assigned by TNCC
@@ -59,6 +59,11 @@ struct private_imc_agent_t {
 	linked_list_t *additional_ids;
 
 	/**
+	 * list of non-fatal unsupported PA-TNC attribute types
+	 */
+	linked_list_t *non_fatal_attr_types;
+
+	/**
 	 * list of TNCC connection entries
 	 */
 	linked_list_t *connections;
@@ -67,6 +72,11 @@ struct private_imc_agent_t {
 	 * rwlock to lock TNCC connection entries
 	 */
 	rwlock_t *connection_lock;
+
+	/**
+	 * Is the transport protocol PT-TLS?
+	 */
+	bool has_pt_tls;
 
 	/**
 	 * Inform a TNCC about the set of message types the IMC is able to receive
@@ -315,7 +325,7 @@ static char* get_str_attribute(private_imc_agent_t *this, TNC_ConnectionID id,
 /**
  * Read an UInt32 attribute
  */
-static u_int32_t get_uint_attribute(private_imc_agent_t *this, TNC_ConnectionID id,
+static uint32_t get_uint_attribute(private_imc_agent_t *this, TNC_ConnectionID id,
 									TNC_AttributeID attribute_id)
 {
 	TNC_UInt32 len;
@@ -336,7 +346,7 @@ METHOD(imc_agent_t, create_state, TNC_Result,
 	TNC_ConnectionID conn_id;
 	char *tnccs_p = NULL, *tnccs_v = NULL, *t_p = NULL, *t_v = NULL;
 	bool has_long = FALSE, has_excl = FALSE, has_soh = FALSE;
-	u_int32_t max_msg_len;
+	uint32_t max_msg_len;
 
 	conn_id = state->get_connection_id(state);
 	if (find_connection(this, conn_id))
@@ -366,6 +376,8 @@ METHOD(imc_agent_t, create_state, TNC_Result,
 			      has_long ? "+":"-", has_excl ? "+":"-", has_soh ? "+":"-");
 	DBG2(DBG_IMC, "  over %s %s with maximum PA-TNC message size of %u bytes",
 				  t_p ? t_p:"?", t_v ? t_v :"?", max_msg_len);
+
+	this->has_pt_tls = streq(t_p, "IF-T for TLS");
 
 	free(tnccs_p);
 	free(tnccs_v);
@@ -398,6 +410,7 @@ METHOD(imc_agent_t, change_state, TNC_Result,
 							   imc_state_t **state_p)
 {
 	imc_state_t *state;
+	TNC_ConnectionState old_state;
 
 	switch (new_state)
 	{
@@ -413,13 +426,20 @@ METHOD(imc_agent_t, change_state, TNC_Result,
 							  this->id, this->name, connection_id);
 				return TNC_RESULT_FATAL;
 			}
-			state->change_state(state, new_state);
+			old_state = state->change_state(state, new_state);
 			DBG2(DBG_IMC, "IMC %u \"%s\" changed state of Connection ID %u to '%N'",
 						  this->id, this->name, connection_id,
 						  TNC_Connection_State_names, new_state);
 			if (state_p)
 			{
 				*state_p = state;
+			}
+			if (new_state == TNC_CONNECTION_STATE_HANDSHAKE &&
+				old_state != TNC_CONNECTION_STATE_CREATE)
+			{
+				state->reset(state);
+				DBG2(DBG_IMC, "IMC %u \"%s\" reset state of Connection ID %u",
+							   this->id, this->name, connection_id);
 			}
 			break;
 		case TNC_CONNECTION_STATE_CREATE:
@@ -490,7 +510,7 @@ METHOD(imc_agent_t, reserve_additional_ids, TNC_Result,
 		count--;
 
 		/* store the scalar value in the pointer */
-		pointer = (void*)id;
+		pointer = (void*)(uintptr_t)id;
 		this->additional_ids->insert_last(this->additional_ids, pointer);
 		DBG2(DBG_IMC, "IMC %u \"%s\" reserved additional ID %u",
 					  this->id, this->name, id);
@@ -510,11 +530,35 @@ METHOD(imc_agent_t, create_id_enumerator, enumerator_t*,
 	return this->additional_ids->create_enumerator(this->additional_ids);
 }
 
+METHOD(imc_agent_t, add_non_fatal_attr_type, void,
+	private_imc_agent_t *this, pen_type_t type)
+{
+	pen_type_t *type_p;
+
+	type_p = malloc_thing(pen_type_t);
+	*type_p = type;
+	this->non_fatal_attr_types->insert_last(this->non_fatal_attr_types, type_p);
+}
+
+METHOD(imc_agent_t, get_non_fatal_attr_types, linked_list_t*,
+	private_imc_agent_t *this)
+{
+	return this->non_fatal_attr_types;
+}
+
+METHOD(imc_agent_t, has_pt_tls, bool,
+	private_imc_agent_t *this)
+{
+	return	this->has_pt_tls;
+}
+
 METHOD(imc_agent_t, destroy, void,
 	private_imc_agent_t *this)
 {
 	DBG1(DBG_IMC, "IMC %u \"%s\" terminated", this->id, this->name);
 	this->additional_ids->destroy(this->additional_ids);
+	this->non_fatal_attr_types->destroy_function(this->non_fatal_attr_types,
+												 free);
 	this->connections->destroy_function(this->connections, free);
 	this->connection_lock->destroy(this->connection_lock);
 	free(this);
@@ -527,7 +571,7 @@ METHOD(imc_agent_t, destroy, void,
  * Described in header.
  */
 imc_agent_t *imc_agent_create(const char *name,
-							  pen_type_t *supported_types, u_int32_t type_count,
+							  pen_type_t *supported_types, uint32_t type_count,
 							  TNC_IMCID id, TNC_Version *actual_version)
 {
 	private_imc_agent_t *this;
@@ -550,6 +594,9 @@ imc_agent_t *imc_agent_create(const char *name,
 			.reserve_additional_ids = _reserve_additional_ids,
 			.count_additional_ids = _count_additional_ids,
 			.create_id_enumerator = _create_id_enumerator,
+			.add_non_fatal_attr_type = _add_non_fatal_attr_type,
+			.get_non_fatal_attr_types = _get_non_fatal_attr_types,
+			.has_pt_tls = _has_pt_tls,
 			.destroy = _destroy,
 		},
 		.name = name,
@@ -557,6 +604,7 @@ imc_agent_t *imc_agent_create(const char *name,
 		.type_count = type_count,
 		.id = id,
 		.additional_ids = linked_list_create(),
+		.non_fatal_attr_types = linked_list_create(),
 		.connections = linked_list_create(),
 		.connection_lock = rwlock_create(RWLOCK_TYPE_DEFAULT),
 	);
@@ -566,4 +614,3 @@ imc_agent_t *imc_agent_create(const char *name,
 
 	return &this->public;
 }
-

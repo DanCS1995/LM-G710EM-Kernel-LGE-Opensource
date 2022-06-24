@@ -36,19 +36,19 @@
 
 typedef struct
 {
-  gcry_mpi_t n;	    /* modulus */
-  gcry_mpi_t e;	    /* exponent */
+  gcry_mpi_t n;        /* modulus */
+  gcry_mpi_t e;        /* exponent */
 } RSA_public_key;
 
 
 typedef struct
 {
-  gcry_mpi_t n;	    /* public modulus */
-  gcry_mpi_t e;	    /* public exponent */
-  gcry_mpi_t d;	    /* exponent */
-  gcry_mpi_t p;	    /* prime  p. */
-  gcry_mpi_t q;	    /* prime  q. */
-  gcry_mpi_t u;	    /* inverse of p mod q. */
+  gcry_mpi_t n;        /* public modulus */
+  gcry_mpi_t e;        /* public exponent */
+  gcry_mpi_t d;        /* exponent */
+  gcry_mpi_t p;        /* prime  p. */
+  gcry_mpi_t q;        /* prime  q. */
+  gcry_mpi_t u;        /* inverse of p mod q. */
 } RSA_secret_key;
 
 
@@ -262,8 +262,8 @@ generate_std (RSA_secret_key *sk, unsigned int nbits, unsigned long use_e,
   t1 = mpi_alloc_secure( mpi_get_nlimbs(p) );
   t2 = mpi_alloc_secure( mpi_get_nlimbs(p) );
   phi = gcry_mpi_snew ( nbits );
-  g	= gcry_mpi_snew ( nbits );
-  f	= gcry_mpi_snew ( nbits );
+  g    = gcry_mpi_snew ( nbits );
+  f    = gcry_mpi_snew ( nbits );
   mpi_sub_ui( t1, p, 1 );
   mpi_sub_ui( t2, q, 1 );
   mpi_mul( phi, t1, t2 );
@@ -592,7 +592,7 @@ check_secret_key( RSA_secret_key *sk )
 /****************
  * Public key operation. Encrypt INPUT with PKEY and put result into OUTPUT.
  *
- *	c = m^e mod n
+ *    c = m^e mod n
  *
  * Where c is OUTPUT, m is INPUT and e,n are elements of PKEY.
  */
@@ -678,7 +678,7 @@ stronger_key_check ( RSA_secret_key *skey )
 /****************
  * Secret key operation. Encrypt INPUT with SKEY and put result into OUTPUT.
  *
- *	m = c^d mod n
+ *    m = c^d mod n
  *
  * Or faster:
  *
@@ -905,11 +905,11 @@ rsa_decrypt (int algo, gcry_mpi_t *result, gcry_mpi_t *data,
              gcry_mpi_t *skey, int flags)
 {
   RSA_secret_key sk;
-  gcry_mpi_t r = MPI_NULL;	/* Random number needed for blinding.  */
-  gcry_mpi_t ri = MPI_NULL;	/* Modular multiplicative inverse of
-				   r.  */
-  gcry_mpi_t x = MPI_NULL;	/* Data to decrypt.  */
-  gcry_mpi_t y;			/* Result.  */
+  gcry_mpi_t r = MPI_NULL;    /* Random number needed for blinding.  */
+  gcry_mpi_t ri = MPI_NULL;    /* Modular multiplicative inverse of
+                   r.  */
+  gcry_mpi_t x = MPI_NULL;    /* Data to decrypt.  */
+  gcry_mpi_t y;            /* Result.  */
 
   (void)algo;
 
@@ -931,10 +931,10 @@ rsa_decrypt (int algo, gcry_mpi_t *result, gcry_mpi_t *data,
       /* Initialize blinding.  */
       
       /* First, we need a random number r between 0 and n - 1, which
-	 is relatively prime to n (i.e. it is neither p nor q).  The
-	 random number needs to be only unpredictable, thus we employ
-	 the gcry_create_nonce function by using GCRY_WEAK_RANDOM with
-	 gcry_mpi_randomize.  */
+     is relatively prime to n (i.e. it is neither p nor q).  The
+     random number needs to be only unpredictable, thus we employ
+     the gcry_create_nonce function by using GCRY_WEAK_RANDOM with
+     gcry_mpi_randomize.  */
       r = gcry_mpi_snew (gcry_mpi_get_nbits (sk.n));
       ri = gcry_mpi_snew (gcry_mpi_get_nbits (sk.n));
       
@@ -945,7 +945,7 @@ rsa_decrypt (int algo, gcry_mpi_t *result, gcry_mpi_t *data,
          follwing test fails, thus we do not add code to release
          allocated resources.  */
       if (!gcry_mpi_invm (ri, r, sk.n))
-	return GPG_ERR_INTERNAL;
+    return GPG_ERR_INTERNAL;
     }
 
   if (! (flags & PUBKEY_FLAG_NO_BLINDING))
@@ -1004,8 +1004,8 @@ rsa_sign (int algo, gcry_mpi_t *resarr, gcry_mpi_t data, gcry_mpi_t *skey)
 
 static gcry_err_code_t
 rsa_verify (int algo, gcry_mpi_t hash, gcry_mpi_t *data, gcry_mpi_t *pkey,
-		  int (*cmp) (void *opaque, gcry_mpi_t tmp),
-		  void *opaquev)
+          int (*cmp) (void *opaque, gcry_mpi_t tmp),
+          void *opaquev)
 {
   RSA_public_key pk;
   gcry_mpi_t result;

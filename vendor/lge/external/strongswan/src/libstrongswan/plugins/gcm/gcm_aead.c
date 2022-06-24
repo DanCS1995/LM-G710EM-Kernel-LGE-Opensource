@@ -62,16 +62,16 @@ struct private_gcm_aead_t {
 };
 
 /**
- * Find a suiteable word size and network order conversion functions
+ * Find a suitable word size and network order conversion functions
  */
 #if ULONG_MAX == 18446744073709551615UL && defined(htobe64)
 #	define htobeword htobe64
 #	define bewordtoh be64toh
-#	define SHIFT_WORD_TYPE u_int64_t
+#	define SHIFT_WORD_TYPE uint64_t
 #else
 #	define htobeword htonl
 #	define bewordtoh ntohl
-#	define SHIFT_WORD_TYPE u_int32_t
+#	define SHIFT_WORD_TYPE uint32_t
 #endif
 
 /**
@@ -276,7 +276,7 @@ static bool verify_icv(private_gcm_aead_t *this, chunk_t assoc, chunk_t crypt,
 	char tmp[this->icv_size];
 
 	return create_icv(this, assoc, crypt, j, tmp) &&
-		   memeq(tmp, icv, this->icv_size);
+		   memeq_const(tmp, icv, this->icv_size);
 }
 
 METHOD(aead_t, encrypt, bool,
@@ -375,7 +375,8 @@ METHOD(aead_t, destroy, void,
 /**
  * See header
  */
-gcm_aead_t *gcm_aead_create(encryption_algorithm_t algo, size_t key_size)
+gcm_aead_t *gcm_aead_create(encryption_algorithm_t algo,
+							size_t key_size, size_t salt_size)
 {
 	private_gcm_aead_t *this;
 	size_t icv_size;
@@ -391,6 +392,11 @@ gcm_aead_t *gcm_aead_create(encryption_algorithm_t algo, size_t key_size)
 			break;
 		default:
 			return NULL;
+	}
+	if (salt_size && salt_size != SALT_SIZE)
+	{
+		/* currently not supported */
+		return NULL;
 	}
 	switch (algo)
 	{

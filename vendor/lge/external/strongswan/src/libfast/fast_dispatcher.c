@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,6 +21,7 @@
 #include <fcgiapp.h>
 #include <signal.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <utils/debug.h>
 #include <threading/thread.h>
@@ -29,7 +30,7 @@
 #include <collections/linked_list.h>
 #include <collections/hashtable.h>
 
-/** Intervall to check for expired sessions, in seconds */
+/** Interval to check for expired sessions, in seconds */
 #define CLEANUP_INTERVAL 30
 
 typedef struct private_fast_dispatcher_t private_fast_dispatcher_t;
@@ -135,7 +136,7 @@ typedef struct {
 } session_entry_t;
 
 /**
- * create a session and instanciate controllers
+ * create a session and instantiate controllers
  */
 static fast_session_t* load_session(private_fast_dispatcher_t *this)
 {
@@ -383,14 +384,16 @@ METHOD(fast_dispatcher_t, waitsignal, void,
 	private_fast_dispatcher_t *this)
 {
 	sigset_t set;
-	int sig;
 
 	sigemptyset(&set);
 	sigaddset(&set, SIGINT);
 	sigaddset(&set, SIGTERM);
 	sigaddset(&set, SIGHUP);
 	sigprocmask(SIG_BLOCK, &set, NULL);
-	sigwait(&set, &sig);
+	while (sigwaitinfo(&set, NULL) == -1 && errno == EINTR)
+	{
+		/* wait for signal */
+	}
 }
 
 METHOD(fast_dispatcher_t, destroy, void,

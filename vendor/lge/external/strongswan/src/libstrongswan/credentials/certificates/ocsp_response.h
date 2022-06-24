@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -50,7 +50,7 @@ extern enum_name_t *ocsp_status_names;
 struct ocsp_response_t {
 
 	/**
-	 * Implements certificiate_t interface
+	 * Implements certificate_t interface
 	 */
 	certificate_t certificate;
 
@@ -77,6 +77,13 @@ struct ocsp_response_t {
 	 * @return					enumerator over certificate_t*
 	 */
 	enumerator_t* (*create_cert_enumerator)(ocsp_response_t *this);
+
+	/**
+	 * Create an enumerator over the contained responses.
+	 *
+	 * @return					enumerator over major response fields
+	 */
+	enumerator_t* (*create_response_enumerator)(ocsp_response_t *this);
 };
 
 #endif /** OCSP_RESPONSE_H_ @}*/

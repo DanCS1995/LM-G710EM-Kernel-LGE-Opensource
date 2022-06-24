@@ -1,4 +1,4 @@
-/* secmem.c  -	memory allocation from a secure heap
+/* secmem.c  -    memory allocation from a secure heap
  * Copyright (C) 1998, 1999, 2000, 2001, 2002,
  *               2003, 2007 Free Software Foundation, Inc.
  *
@@ -50,9 +50,9 @@
 
 typedef struct memblock
 {
-  unsigned size;		/* Size of the memory available to the
-				   user.  */
-  int flags;			/* See below.  */
+  unsigned size;        /* Size of the memory available to the
+                   user.  */
+  int flags;            /* See below.  */
   PROPERLY_ALIGNED_TYPE aligned;
 } memblock_t;
 
@@ -156,13 +156,13 @@ mb_get_prev (memblock_t *mb)
     {
       mb_prev = (memblock_t *) pool;
       while (1)
-	{
-	  mb_next = mb_get_next (mb_prev);
-	  if (mb_next == mb)
-	    break;
-	  else
-	    mb_prev = mb_next;
-	}
+    {
+      mb_next = mb_get_next (mb_prev);
+      if (mb_next == mb)
+        break;
+      else
+        mb_prev = mb_next;
+    }
     }
 
   return mb_prev;
@@ -196,24 +196,24 @@ mb_get_new (memblock_t *block, size_t size)
   for (mb = block; ptr_into_pool_p (mb); mb = mb_get_next (mb))
     if (! (mb->flags & MB_FLAG_ACTIVE) && mb->size >= size)
       {
-	/* Found a free block.  */
-	mb->flags |= MB_FLAG_ACTIVE;
+    /* Found a free block.  */
+    mb->flags |= MB_FLAG_ACTIVE;
 
-	if (mb->size - size > BLOCK_HEAD_SIZE)
-	  {
-	    /* Split block.  */
-	  
-	    mb_split = (memblock_t *) (((char *) mb) + BLOCK_HEAD_SIZE + size);
-	    mb_split->size = mb->size - size - BLOCK_HEAD_SIZE;
-	    mb_split->flags = 0;
+    if (mb->size - size > BLOCK_HEAD_SIZE)
+      {
+        /* Split block.  */
+      
+        mb_split = (memblock_t *) (((char *) mb) + BLOCK_HEAD_SIZE + size);
+        mb_split->size = mb->size - size - BLOCK_HEAD_SIZE;
+        mb_split->flags = 0;
 
-	    mb->size = size;
+        mb->size = size;
 
-	    mb_merge (mb_split);
+        mb_merge (mb_split);
 
-	  }
+      }
 
-	break;
+    break;
       }
 
   if (! ptr_into_pool_p (mb))
@@ -246,17 +246,17 @@ lock_pool (void *p, size_t n)
   if (err)
     {
       if (errno != EPERM
-#ifdef EAGAIN	/* OpenBSD returns this */
-	  && errno != EAGAIN
+#ifdef EAGAIN    /* OpenBSD returns this */
+      && errno != EAGAIN
 #endif
-#ifdef ENOSYS	/* Some SCOs return this (function not implemented) */
-	  && errno != ENOSYS
+#ifdef ENOSYS    /* Some SCOs return this (function not implemented) */
+      && errno != ENOSYS
 #endif
 #ifdef ENOMEM  /* Linux might return this. */
             && errno != ENOMEM
 #endif
-	  )
-	log_error ("can't lock memory: %s\n", strerror (err));
+      )
+    log_error ("can't lock memory: %s\n", strerror (err));
       show_warning = 1;
       not_locked = 1;
     }
@@ -281,7 +281,7 @@ lock_pool (void *p, size_t n)
     {
       err = mlock (p, n);
       if (err && errno)
-	err = errno;
+    err = errno;
     }
 #else /* !HAVE_BROKEN_MLOCK */
   err = mlock (p, n);
@@ -294,23 +294,23 @@ lock_pool (void *p, size_t n)
       /* check that we really dropped the privs.
        * Note: setuid(0) should always fail */
       if (setuid (uid) || getuid () != geteuid () || !setuid (0))
-	log_fatal ("failed to reset uid: %s\n", strerror (errno));
+    log_fatal ("failed to reset uid: %s\n", strerror (errno));
     }
 
   if (err)
     {
       if (errno != EPERM
-#ifdef EAGAIN	/* OpenBSD returns this. */
-	  && errno != EAGAIN
+#ifdef EAGAIN    /* OpenBSD returns this. */
+      && errno != EAGAIN
 #endif
-#ifdef ENOSYS	/* Some SCOs return this (function not implemented). */
-	  && errno != ENOSYS
+#ifdef ENOSYS    /* Some SCOs return this (function not implemented). */
+      && errno != ENOSYS
 #endif
 #ifdef ENOMEM  /* Linux might return this. */
             && errno != ENOMEM
 #endif
-	  )
-	log_error ("can't lock memory: %s\n", strerror (err));
+      )
+    log_error ("can't lock memory: %s\n", strerror (err));
       show_warning = 1;
       not_locked = 1;
     }
@@ -362,7 +362,7 @@ init_pool (size_t n)
   pool_size = (pool_size + pgsize - 1) & ~(pgsize - 1);
 #ifdef MAP_ANONYMOUS
   pool = mmap (0, pool_size, PROT_READ | PROT_WRITE,
-	       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 #else /* map /dev/zero instead */
   {
     int fd;
@@ -370,19 +370,19 @@ init_pool (size_t n)
     fd = open ("/dev/zero", O_RDWR);
     if (fd == -1)
       {
-	log_error ("can't open /dev/zero: %s\n", strerror (errno));
-	pool = (void *) -1;
+    log_error ("can't open /dev/zero: %s\n", strerror (errno));
+    pool = (void *) -1;
       }
     else
       {
-	pool = mmap (0, pool_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+    pool = mmap (0, pool_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
         close (fd);
       }
   }
 #endif
   if (pool == (void *) -1)
     log_info ("can't mmap pool of %u bytes: %s - using malloc\n",
-	      (unsigned) pool_size, strerror (errno));
+          (unsigned) pool_size, strerror (errno));
   else
     {
       pool_is_mmapped = 1;
@@ -394,10 +394,10 @@ init_pool (size_t n)
     {
       pool = malloc (pool_size);
       if (!pool)
-	log_fatal ("can't allocate memory pool of %u bytes\n",
-		   (unsigned) pool_size);
+    log_fatal ("can't allocate memory pool of %u bytes\n",
+           (unsigned) pool_size);
       else
-	pool_okay = 1;
+    pool_okay = 1;
     }
 
   /* Initialize first memory block.  */
@@ -461,23 +461,23 @@ secmem_init (size_t n)
       disable_secmem = 1;
       uid = getuid ();
       if (uid != geteuid ())
-	{
-	  if (setuid (uid) || getuid () != geteuid () || !setuid (0))
-	    log_fatal ("failed to drop setuid\n");
-	}
+    {
+      if (setuid (uid) || getuid () != geteuid () || !setuid (0))
+        log_fatal ("failed to drop setuid\n");
+    }
 #endif
     }
   else
     {
       if (n < MINIMUM_POOL_SIZE)
-	n = MINIMUM_POOL_SIZE;
+    n = MINIMUM_POOL_SIZE;
       if (! pool_okay)
-	{
-	  init_pool (n);
-	  lock_pool (pool, n);
-	}
+    {
+      init_pool (n);
+      lock_pool (pool, n);
+    }
       else
-	log_error ("Oops, secure memory pool already initialized\n");
+    log_error ("Oops, secure memory pool already initialized\n");
     }
 }
 
@@ -608,11 +608,11 @@ _gcry_secmem_realloc (void *p, size_t newsize)
     {
       a = _gcry_secmem_malloc_internal (newsize);
       if (a)
-	{
-	  memcpy (a, p, size);
-	  memset ((char *) a + size, 0, newsize - size);
-	  _gcry_secmem_free_internal (p);
-	}
+    {
+      memcpy (a, p, size);
+      memset ((char *) a + size, 0, newsize - size);
+      _gcry_secmem_free_internal (p);
+    }
     }
 
   SECMEM_UNLOCK;
@@ -631,11 +631,11 @@ _gcry_private_is_secure (const void *p)
 
 /****************
  * Warning:  This code might be called by an interrupt handler
- *	     and frankly, there should really be such a handler,
- *	     to make sure that the memory is wiped out.
- *	     We hope that the OS wipes out mlocked memory after
- *	     receiving a SIGKILL - it really should do so, otherwise
- *	     there is no chance to get the secure memory cleaned.
+ *         and frankly, there should really be such a handler,
+ *         to make sure that the memory is wiped out.
+ *         We hope that the OS wipes out mlocked memory after
+ *         receiving a SIGKILL - it really should do so, otherwise
+ *         there is no chance to get the secure memory cleaned.
  */
 void
 _gcry_secmem_term ()
@@ -666,7 +666,7 @@ _gcry_secmem_dump_stats ()
 
  if (pool_okay)
     log_info ("secmem usage: %u/%lu bytes in %u blocks\n",
-	      cur_alloced, (unsigned long)pool_size, cur_blocks);
+          cur_alloced, (unsigned long)pool_size, cur_blocks);
   SECMEM_UNLOCK;
 #else
   memblock_t *mb;
@@ -678,9 +678,9 @@ _gcry_secmem_dump_stats ()
        ptr_into_pool_p (mb);
        mb = mb_get_next (mb), i++)
     log_info ("SECMEM: [%s] block: %i; size: %i\n",
-	      (mb->flags & MB_FLAG_ACTIVE) ? "used" : "free",
-	      i,
-	      mb->size);
+          (mb->flags & MB_FLAG_ACTIVE) ? "used" : "free",
+          i,
+          mb->size);
   SECMEM_UNLOCK;
 #endif
 }

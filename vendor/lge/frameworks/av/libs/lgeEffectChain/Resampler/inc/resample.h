@@ -15,14 +15,14 @@
 /* Conversion constants */
 #define Nhc       8
 #define Na        7
-#define Np       (Nhc+Na)
-#define Npc      (1<<Nhc)
-#define Amask    ((1<<Na)-1)
-#define Pmask    ((1<<Np)-1)
+#define Np       (Nhc+Na)       //15
+#define Npc      (1<<Nhc)       // 1<<8 : 256
+#define Amask    ((1<<Na)-1)    // 1<<7 -1 = 128-1 = 127
+#define Pmask    ((1<<Np)-1)    // 1<< 15 -1 = 32768 - 1 = 32767
 #define Nh       16
 #define Nb       16
 #define Nhxn     14
-#define Nhg      (Nh-Nhxn)
+#define Nhg      (Nh-Nhxn)      // 16 - 14 = 2
 #define NLpScl   13
 
 typedef char BOOL;

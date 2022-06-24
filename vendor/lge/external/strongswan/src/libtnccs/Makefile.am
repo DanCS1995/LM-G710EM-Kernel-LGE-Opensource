@@ -12,6 +12,10 @@ libtnccs_la_LIBADD = \
 	$(top_builddir)/src/libstrongswan/libstrongswan.la \
 	$(top_builddir)/src/libtncif/libtncif.la
 
+if USE_WINDOWS
+  libtnccs_la_LIBADD += -lws2_32
+endif
+
 libtnccs_la_SOURCES = \
 tnc/tnc.h tnc/tnc.c \
 tnc/imc/imc.h tnc/imc/imc_manager.h \
@@ -21,6 +25,15 @@ tnc/tnccs/tnccs.h tnc/tnccs/tnccs.c \
 tnc/tnccs/tnccs_manager.h tnc/tnccs/tnccs_manager.c
 
 EXTRA_DIST = Android.mk
+
+if STATIC_PLUGIN_CONSTRUCTORS
+BUILT_SOURCES = $(srcdir)/plugin_constructors.c
+CLEANFILES = $(srcdir)/plugin_constructors.c
+
+$(srcdir)/plugin_constructors.c: $(top_srcdir)/src/libstrongswan/plugins/plugin_constructors.py
+		$(AM_V_GEN) \
+		$(PYTHON) $(top_srcdir)/src/libstrongswan/plugins/plugin_constructors.py ${t_plugins} > $@
+endif
 
 # build optional plugins
 ########################
@@ -72,5 +85,3 @@ if MONOLITHIC
   libtnccs_la_LIBADD += plugins/tnccs_dynamic/libstrongswan-tnccs-dynamic.la
 endif
 endif
-
-

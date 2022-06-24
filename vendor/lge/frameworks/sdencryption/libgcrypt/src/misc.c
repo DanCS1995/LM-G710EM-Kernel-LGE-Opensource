@@ -48,7 +48,7 @@ const char *
 _gcry_gettext( const char *key )
 {
     if( user_gettext_handler )
-	return user_gettext_handler( key );
+    return user_gettext_handler( key );
     /* FIXME: switch the domain to gnupg and restore later */
     return key;
 }
@@ -89,7 +89,7 @@ _gcry_fatal_error (int rc, const char *text)
 
 void
 gcry_set_log_handler( void (*f)(void*,int, const char*, va_list ),
-							    void *opaque )
+                                void *opaque )
 {
     log_handler = f;
     log_handler_value = opaque;
@@ -128,7 +128,7 @@ _gcry_logv( int level, const char *fmt, va_list arg_ptr )
         case GCRY_LOG_BUG:   fputs("Ohhhh jeeee: ", stderr); break;
         case GCRY_LOG_DEBUG: fputs("DBG: ", stderr ); break;
         default: fprintf(stderr,"[Unknown log level %d]: ", level ); break;
-	}
+    }
       vfprintf(stderr,fmt,arg_ptr) ;
     }
   
@@ -157,7 +157,7 @@ void
 _gcry_bug( const char *file, int line, const char *func )
 {
     _gcry_log( GCRY_LOG_BUG,
-	     ("... this is a bug (%s:%d:%s)\n"), file, line, func );
+         ("... this is a bug (%s:%d:%s)\n"), file, line, func );
     abort(); /* never called, but it makes the compiler happy */
 }
 void
@@ -173,7 +173,7 @@ void
 _gcry_bug( const char *file, int line )
 {
     _gcry_log( GCRY_LOG_BUG,
-	     _("you found a bug ... (%s:%d)\n"), file, line);
+         _("you found a bug ... (%s:%d)\n"), file, line);
     abort(); /* never called, but it makes the compiler happy */
 }
 void

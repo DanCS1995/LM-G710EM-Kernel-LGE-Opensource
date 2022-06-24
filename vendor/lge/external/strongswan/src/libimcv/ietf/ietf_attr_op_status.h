@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Andreas Steffen
+ * Copyright (C) 2012-2014 Andreas Steffen
  * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -70,14 +70,14 @@ struct ietf_attr_op_status_t {
 	 *
 	 * @return				Operational Status
 	 */
-	u_int8_t (*get_status)(ietf_attr_op_status_t *this);
+	uint8_t (*get_status)(ietf_attr_op_status_t *this);
 
 	/**
 	 * Gets the Operational Result
 	 *
 	 * @return				Operational Result
 	 */
-	u_int8_t (*get_result)(ietf_attr_op_status_t *this);
+	uint8_t (*get_result)(ietf_attr_op_status_t *this);
 
 	/**
 	 * Gets the time of last use
@@ -94,14 +94,16 @@ struct ietf_attr_op_status_t {
  * @param result			Operational Result
  * @param last_use			Time of last use
  */
-pa_tnc_attr_t* ietf_attr_op_status_create(u_int8_t status, u_int8_t result,
+pa_tnc_attr_t* ietf_attr_op_status_create(uint8_t status, uint8_t result,
 										  time_t last_use);
 
 /**
  * Creates an ietf_attr_op_status_t object from received data
  *
- * @param value				unparsed attribute value
+ * @param length			Total length of attribute value
+ * @param value				Unparsed attribute value (might be a segment)
  */
-pa_tnc_attr_t* ietf_attr_op_status_create_from_data(chunk_t value);
+pa_tnc_attr_t* ietf_attr_op_status_create_from_data(size_t length,
+													chunk_t value);
 
 #endif /** IETF_ATTR_OP_STATUS_H_ @}*/

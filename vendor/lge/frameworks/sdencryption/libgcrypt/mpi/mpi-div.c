@@ -19,10 +19,10 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  *
  * Note: This code is heavily based on the GNU MP Library.
- *	 Actually it's the same code with only minor changes in the
- *	 way the data is stored; this is to support the abstraction
- *	 of an optional secure memory allocation which may be used
- *	 to avoid revealing of sensitive data due to paging etc.
+ *     Actually it's the same code with only minor changes in the
+ *     way the data is stored; this is to support the abstraction
+ *     of an optional secure memory allocation which may be used
+ *     to avoid revealing of sensitive data due to paging etc.
  */
 
 #include <config.h>
@@ -40,20 +40,20 @@ _gcry_mpi_fdiv_r( gcry_mpi_t rem, gcry_mpi_t dividend, gcry_mpi_t divisor )
     gcry_mpi_t temp_divisor = NULL;
 
     /* We need the original value of the divisor after the remainder has been
-     * preliminary calculated.	We have to copy it to temporary space if it's
+     * preliminary calculated.    We have to copy it to temporary space if it's
      * the same variable as REM.  */
     if( rem == divisor ) {
-	temp_divisor = mpi_copy( divisor );
-	divisor = temp_divisor;
+    temp_divisor = mpi_copy( divisor );
+    divisor = temp_divisor;
     }
 
     _gcry_mpi_tdiv_r( rem, dividend, divisor );
 
     if( ((divisor_sign?1:0) ^ (dividend->sign?1:0)) && rem->nlimbs )
-	gcry_mpi_add( rem, rem, divisor);
+    gcry_mpi_add( rem, rem, divisor);
 
     if( temp_divisor )
-	mpi_free(temp_divisor);
+    mpi_free(temp_divisor);
 }
 
 
@@ -71,11 +71,11 @@ _gcry_mpi_fdiv_r_ui( gcry_mpi_t rem, gcry_mpi_t dividend, ulong divisor )
 
     rlimb = _gcry_mpih_mod_1( dividend->d, dividend->nlimbs, divisor );
     if( rlimb && dividend->sign )
-	rlimb = divisor - rlimb;
+    rlimb = divisor - rlimb;
 
     if( rem ) {
-	rem->d[0] = rlimb;
-	rem->nlimbs = rlimb? 1:0;
+    rem->d[0] = rlimb;
+    rem->nlimbs = rlimb? 1:0;
     }
     return rlimb;
 }
@@ -96,19 +96,19 @@ _gcry_mpi_fdiv_qr( gcry_mpi_t quot, gcry_mpi_t rem, gcry_mpi_t dividend, gcry_mp
     gcry_mpi_t temp_divisor = NULL;
 
     if( quot == divisor || rem == divisor ) {
-	temp_divisor = mpi_copy( divisor );
-	divisor = temp_divisor;
+    temp_divisor = mpi_copy( divisor );
+    divisor = temp_divisor;
     }
 
     _gcry_mpi_tdiv_qr( quot, rem, dividend, divisor );
 
     if( (divisor_sign ^ dividend->sign) && rem->nlimbs ) {
-	gcry_mpi_sub_ui( quot, quot, 1 );
-	gcry_mpi_add( rem, rem, divisor);
+    gcry_mpi_sub_ui( quot, quot, 1 );
+    gcry_mpi_add( rem, rem, divisor);
     }
 
     if( temp_divisor )
-	mpi_free(temp_divisor);
+    mpi_free(temp_divisor);
 }
 
 
@@ -147,24 +147,24 @@ _gcry_mpi_tdiv_qr( gcry_mpi_t quot, gcry_mpi_t rem, gcry_mpi_t num, gcry_mpi_t d
     rsize = nsize + 1;
     mpi_resize( rem, rsize);
 
-    qsize = rsize - dsize;	  /* qsize cannot be bigger than this.	*/
+    qsize = rsize - dsize;      /* qsize cannot be bigger than this.    */
     if( qsize <= 0 ) {
-	if( num != rem ) {
-	    rem->nlimbs = num->nlimbs;
-	    rem->sign = num->sign;
-	    MPN_COPY(rem->d, num->d, nsize);
-	}
-	if( quot ) {
-	    /* This needs to follow the assignment to rem, in case the
-	     * numerator and quotient are the same.  */
-	    quot->nlimbs = 0;
-	    quot->sign = 0;
-	}
-	return;
+    if( num != rem ) {
+        rem->nlimbs = num->nlimbs;
+        rem->sign = num->sign;
+        MPN_COPY(rem->d, num->d, nsize);
+    }
+    if( quot ) {
+        /* This needs to follow the assignment to rem, in case the
+         * numerator and quotient are the same.  */
+        quot->nlimbs = 0;
+        quot->sign = 0;
+    }
+    return;
     }
 
     if( quot )
-	mpi_resize( quot, qsize);
+    mpi_resize( quot, qsize);
 
     /* Read pointers here, when reallocation is finished.  */
     np = num->d;
@@ -173,37 +173,37 @@ _gcry_mpi_tdiv_qr( gcry_mpi_t quot, gcry_mpi_t rem, gcry_mpi_t num, gcry_mpi_t d
 
     /* Optimize division by a single-limb divisor.  */
     if( dsize == 1 ) {
-	mpi_limb_t rlimb;
-	if( quot ) {
-	    qp = quot->d;
-	    rlimb = _gcry_mpih_divmod_1( qp, np, nsize, dp[0] );
-	    qsize -= qp[qsize - 1] == 0;
-	    quot->nlimbs = qsize;
-	    quot->sign = sign_quotient;
-	}
-	else
-	    rlimb = _gcry_mpih_mod_1( np, nsize, dp[0] );
-	rp[0] = rlimb;
-	rsize = rlimb != 0?1:0;
-	rem->nlimbs = rsize;
-	rem->sign = sign_remainder;
-	return;
+    mpi_limb_t rlimb;
+    if( quot ) {
+        qp = quot->d;
+        rlimb = _gcry_mpih_divmod_1( qp, np, nsize, dp[0] );
+        qsize -= qp[qsize - 1] == 0;
+        quot->nlimbs = qsize;
+        quot->sign = sign_quotient;
+    }
+    else
+        rlimb = _gcry_mpih_mod_1( np, nsize, dp[0] );
+    rp[0] = rlimb;
+    rsize = rlimb != 0?1:0;
+    rem->nlimbs = rsize;
+    rem->sign = sign_remainder;
+    return;
     }
 
 
     if( quot ) {
-	qp = quot->d;
-	/* Make sure QP and NP point to different objects.  Otherwise the
-	 * numerator would be gradually overwritten by the quotient limbs.  */
-	if(qp == np) { /* Copy NP object to temporary space.  */
+    qp = quot->d;
+    /* Make sure QP and NP point to different objects.  Otherwise the
+     * numerator would be gradually overwritten by the quotient limbs.  */
+    if(qp == np) { /* Copy NP object to temporary space.  */
             marker_nlimbs[markidx] = nsize;
-	    np = marker[markidx++] = mpi_alloc_limb_space(nsize,
-							  mpi_is_secure(quot));
-	    MPN_COPY(np, qp, nsize);
-	}
+        np = marker[markidx++] = mpi_alloc_limb_space(nsize,
+                              mpi_is_secure(quot));
+        MPN_COPY(np, qp, nsize);
+    }
     }
     else /* Put quotient at top of remainder. */
-	qp = rp + dsize;
+    qp = rp + dsize;
 
     count_leading_zeros( normalization_steps, dp[dsize - 1] );
 
@@ -212,75 +212,75 @@ _gcry_mpi_tdiv_qr( gcry_mpi_t quot, gcry_mpi_t rem, gcry_mpi_t num, gcry_mpi_t d
      * numerator the same number of steps (to keep the quotient the same!).
      */
     if( normalization_steps ) {
-	mpi_ptr_t tp;
-	mpi_limb_t nlimb;
+    mpi_ptr_t tp;
+    mpi_limb_t nlimb;
 
-	/* Shift up the denominator setting the most significant bit of
-	 * the most significant word.  Use temporary storage not to clobber
-	 * the original contents of the denominator.  */
+    /* Shift up the denominator setting the most significant bit of
+     * the most significant word.  Use temporary storage not to clobber
+     * the original contents of the denominator.  */
         marker_nlimbs[markidx] = dsize;
-	tp = marker[markidx++] = mpi_alloc_limb_space(dsize,mpi_is_secure(den));
-	_gcry_mpih_lshift( tp, dp, dsize, normalization_steps );
-	dp = tp;
+    tp = marker[markidx++] = mpi_alloc_limb_space(dsize,mpi_is_secure(den));
+    _gcry_mpih_lshift( tp, dp, dsize, normalization_steps );
+    dp = tp;
 
-	/* Shift up the numerator, possibly introducing a new most
-	 * significant word.  Move the shifted numerator in the remainder
-	 * meanwhile.  */
-	nlimb = _gcry_mpih_lshift(rp, np, nsize, normalization_steps);
-	if( nlimb ) {
-	    rp[nsize] = nlimb;
-	    rsize = nsize + 1;
-	}
-	else
-	    rsize = nsize;
+    /* Shift up the numerator, possibly introducing a new most
+     * significant word.  Move the shifted numerator in the remainder
+     * meanwhile.  */
+    nlimb = _gcry_mpih_lshift(rp, np, nsize, normalization_steps);
+    if( nlimb ) {
+        rp[nsize] = nlimb;
+        rsize = nsize + 1;
+    }
+    else
+        rsize = nsize;
     }
     else {
-	/* The denominator is already normalized, as required.	Copy it to
-	 * temporary space if it overlaps with the quotient or remainder.  */
-	if( dp == rp || (quot && (dp == qp))) {
-	    mpi_ptr_t tp;
+    /* The denominator is already normalized, as required.    Copy it to
+     * temporary space if it overlaps with the quotient or remainder.  */
+    if( dp == rp || (quot && (dp == qp))) {
+        mpi_ptr_t tp;
 
             marker_nlimbs[markidx] = dsize;
-	    tp = marker[markidx++] = mpi_alloc_limb_space(dsize,
+        tp = marker[markidx++] = mpi_alloc_limb_space(dsize,
                                                           mpi_is_secure(den));
-	    MPN_COPY( tp, dp, dsize );
-	    dp = tp;
-	}
+        MPN_COPY( tp, dp, dsize );
+        dp = tp;
+    }
 
-	/* Move the numerator to the remainder.  */
-	if( rp != np )
-	    MPN_COPY(rp, np, nsize);
+    /* Move the numerator to the remainder.  */
+    if( rp != np )
+        MPN_COPY(rp, np, nsize);
 
-	rsize = nsize;
+    rsize = nsize;
     }
 
     q_limb = _gcry_mpih_divrem( qp, 0, rp, rsize, dp, dsize );
 
     if( quot ) {
-	qsize = rsize - dsize;
-	if(q_limb) {
-	    qp[qsize] = q_limb;
-	    qsize += 1;
-	}
+    qsize = rsize - dsize;
+    if(q_limb) {
+        qp[qsize] = q_limb;
+        qsize += 1;
+    }
 
-	quot->nlimbs = qsize;
-	quot->sign = sign_quotient;
+    quot->nlimbs = qsize;
+    quot->sign = sign_quotient;
     }
 
     rsize = dsize;
     MPN_NORMALIZE (rp, rsize);
 
     if( normalization_steps && rsize ) {
-	_gcry_mpih_rshift(rp, rp, rsize, normalization_steps);
-	rsize -= rp[rsize - 1] == 0?1:0;
+    _gcry_mpih_rshift(rp, rp, rsize, normalization_steps);
+    rsize -= rp[rsize - 1] == 0?1:0;
     }
 
     rem->nlimbs = rsize;
-    rem->sign	= sign_remainder;
+    rem->sign    = sign_remainder;
     while( markidx )
       {
         markidx--;
-	_gcry_mpi_free_limb_space (marker[markidx], marker_nlimbs[markidx]);
+    _gcry_mpi_free_limb_space (marker[markidx], marker_nlimbs[markidx]);
       }
 }
 
@@ -294,25 +294,25 @@ _gcry_mpi_tdiv_q_2exp( gcry_mpi_t w, gcry_mpi_t u, unsigned int count )
     limb_cnt = count / BITS_PER_MPI_LIMB;
     wsize = usize - limb_cnt;
     if( limb_cnt >= usize )
-	w->nlimbs = 0;
+    w->nlimbs = 0;
     else {
-	mpi_ptr_t wp;
-	mpi_ptr_t up;
+    mpi_ptr_t wp;
+    mpi_ptr_t up;
 
-	RESIZE_IF_NEEDED( w, wsize );
-	wp = w->d;
-	up = u->d;
+    RESIZE_IF_NEEDED( w, wsize );
+    wp = w->d;
+    up = u->d;
 
-	count %= BITS_PER_MPI_LIMB;
-	if( count ) {
-	    _gcry_mpih_rshift( wp, up + limb_cnt, wsize, count );
-	    wsize -= !wp[wsize - 1];
-	}
-	else {
-	    MPN_COPY_INCR( wp, up + limb_cnt, wsize);
-	}
+    count %= BITS_PER_MPI_LIMB;
+    if( count ) {
+        _gcry_mpih_rshift( wp, up + limb_cnt, wsize, count );
+        wsize -= !wp[wsize - 1];
+    }
+    else {
+        MPN_COPY_INCR( wp, up + limb_cnt, wsize);
+    }
 
-	w->nlimbs = wsize;
+    w->nlimbs = wsize;
     }
 }
 

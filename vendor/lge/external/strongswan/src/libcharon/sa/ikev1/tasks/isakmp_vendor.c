@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2012-2013 Tobias Brunner
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,7 +15,7 @@
  */
 
 /*
- * Copyright (C) 2012 Volker Rümelin
+ * Copyright (C) 2012-2014 Volker Rümelin
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -59,7 +59,7 @@ struct private_isakmp_vendor_t {
 	ike_sa_t *ike_sa;
 
 	/**
-	 * Are we the inititator of this task
+	 * Are we the initiator of this task
 	 */
 	bool initiator;
 
@@ -102,13 +102,19 @@ static struct {
 	{ "DPD", EXT_DPD, TRUE, 16,
 	  "\xaf\xca\xd7\x13\x68\xa1\xf1\xc9\x6b\x86\x96\xfc\x77\x57\x01\x00"},
 
+	/* CISCO-UNITY, similar to DPD the last two bytes indicate the version */
 	{ "Cisco Unity", EXT_CISCO_UNITY, FALSE, 16,
 	  "\x12\xf5\xf2\x8c\x45\x71\x68\xa9\x70\x2d\x9f\xe2\x74\xcc\x01\x00"},
 
 	/* Proprietary IKE fragmentation extension. Capabilities are handled
-	 * specially on receipt of this VID. */
+	 * specially on receipt of this VID. Windows peers send this VID
+	 * without capabilities, but accept it with and without capabilities. */
 	{ "FRAGMENTATION", EXT_IKE_FRAGMENTATION, FALSE, 20,
 	  "\x40\x48\xb7\xd5\x6e\xbc\xe8\x85\x25\xe7\xde\x7f\x00\xd6\xc2\xd3\x80\x00\x00\x00"},
+
+	/* Windows peers send this VID and a version number */
+	{ "MS NT5 ISAKMPOAKLEY", EXT_MS_WINDOWS, FALSE, 20,
+	  "\x1e\x2b\x51\x69\x05\x99\x1c\x7d\x7c\x96\xfc\xbf\xb5\x87\xe4\x61\x00\x00\x00\x00"},
 
 }, vendor_natt_ids[] = {
 
@@ -165,17 +171,31 @@ static struct {
  * for fragmentation of base ISAKMP messages (Cisco adds that and thus sends
  * 0xc0000000)
  */
-static const u_int32_t fragmentation_ike = 0x80000000;
+static const uint32_t fragmentation_ike = 0x80000000;
 
-/**
- * Check if the given vendor ID indicate support for fragmentation
- */
-static bool fragmentation_supported(chunk_t data, int i)
+static bool is_known_vid(chunk_t data, int i)
 {
-	if (vendor_ids[i].extension  == EXT_IKE_FRAGMENTATION &&
-		data.len == 20 && memeq(data.ptr, vendor_ids[i].id, 16))
+	switch (vendor_ids[i].extension)
 	{
-		return untoh32(&data.ptr[16]) & fragmentation_ike;
+		case EXT_IKE_FRAGMENTATION:
+			if (data.len >= 16 && memeq(data.ptr, vendor_ids[i].id, 16))
+			{
+				switch (data.len)
+				{
+					case 16:
+						return TRUE;
+					case 20:
+						return untoh32(&data.ptr[16]) & fragmentation_ike;
+				}
+			}
+			break;
+		case EXT_MS_WINDOWS:
+			return data.len == 20 && memeq(data.ptr, vendor_ids[i].id, 16);
+		case EXT_CISCO_UNITY:
+			return data.len == 16 && memeq(data.ptr, vendor_ids[i].id, 14);
+		default:
+			return chunk_equals(data, chunk_create(vendor_ids[i].id,
+												   vendor_ids[i].len));
 	}
 	return FALSE;
 }
@@ -209,7 +229,7 @@ static void build(private_isakmp_vendor_t *this, message_t *message)
 		   (vendor_ids[i].extension == EXT_IKE_FRAGMENTATION && fragmentation))
 		{
 			DBG2(DBG_IKE, "sending %s vendor ID", vendor_ids[i].desc);
-			vid_payload = vendor_id_payload_create_data(VENDOR_ID_V1,
+			vid_payload = vendor_id_payload_create_data(PLV1_VENDOR_ID,
 				chunk_clone(chunk_create(vendor_ids[i].id, vendor_ids[i].len)));
 			message->add_payload(message, &vid_payload->payload_interface);
 		}
@@ -220,7 +240,7 @@ static void build(private_isakmp_vendor_t *this, message_t *message)
 			this->best_natt_ext == i)
 		{
 			DBG2(DBG_IKE, "sending %s vendor ID", vendor_natt_ids[i].desc);
-			vid_payload = vendor_id_payload_create_data(VENDOR_ID_V1,
+			vid_payload = vendor_id_payload_create_data(PLV1_VENDOR_ID,
 							chunk_clone(chunk_create(vendor_natt_ids[i].id,
 													 vendor_natt_ids[i].len)));
 			message->add_payload(message, &vid_payload->payload_interface);
@@ -240,7 +260,7 @@ static void process(private_isakmp_vendor_t *this, message_t *message)
 	enumerator = message->create_payload_enumerator(message);
 	while (enumerator->enumerate(enumerator, &payload))
 	{
-		if (payload->get_type(payload) == VENDOR_ID_V1)
+		if (payload->get_type(payload) == PLV1_VENDOR_ID)
 		{
 			vendor_id_payload_t *vid;
 			bool found = FALSE;
@@ -251,9 +271,7 @@ static void process(private_isakmp_vendor_t *this, message_t *message)
 
 			for (i = 0; i < countof(vendor_ids); i++)
 			{
-				if (chunk_equals(data, chunk_create(vendor_ids[i].id,
-													vendor_ids[i].len)) ||
-					fragmentation_supported(data, i))
+				if (is_known_vid(data, i))
 				{
 					DBG1(DBG_IKE, "received %s vendor ID", vendor_ids[i].desc);
 					if (vendor_ids[i].extension)

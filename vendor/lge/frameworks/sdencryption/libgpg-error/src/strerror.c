@@ -43,9 +43,9 @@ gpg_strerror (gpg_error_t err)
     {
       int no = gpg_err_code_to_errno (code);
       if (no)
-	return strerror (no);
+    return strerror (no);
       else
-	code = GPG_ERR_UNKNOWN_ERRNO;
+    code = GPG_ERR_UNKNOWN_ERRNO;
     }
   return dgettext (PACKAGE, msgstr + msgidx[msgidxof (code)]);
 }
@@ -78,15 +78,15 @@ system_strerror_r (int no, char *buf, size_t buflen)
   else
     {
       /* We can not tell if the buffer was large enough, but we can
-	 try to make a guess.  */
+     try to make a guess.  */
       if (strlen (buf) + 1 >= buflen)
-	return ERANGE;
+    return ERANGE;
 
       return 0;
     }
 }
 
-#else	/* STRERROR_R_CHAR_P */
+#else    /* STRERROR_R_CHAR_P */
 /* Now the POSIX version.  */
 
 static int
@@ -95,9 +95,9 @@ system_strerror_r (int no, char *buf, size_t buflen)
   return strerror_r (no, buf, buflen);
 }
 
-#endif	/* STRERROR_R_CHAR_P */
+#endif    /* STRERROR_R_CHAR_P */
 
-#else	/* HAVE_STRERROR_H */
+#else    /* HAVE_STRERROR_H */
 /* Without strerror_r(), we can still provide a non-thread-safe
    version.  Maybe we are even lucky and the system's strerror() is
    already thread-safe.  */
@@ -112,7 +112,7 @@ system_strerror_r (int no, char *buf, size_t buflen)
       int saved_errno = errno;
 
       if (saved_errno != EINVAL)
-	snprintf (buf, buflen, "strerror failed: %i\n", errno);
+    snprintf (buf, buflen, "strerror failed: %i\n", errno);
       return saved_errno;
     }
   else
@@ -145,16 +145,16 @@ gpg_strerror_r (gpg_error_t err, char *buf, size_t buflen)
     {
       int no = gpg_err_code_to_errno (code);
       if (no)
-	{
-	  int system_err = system_strerror_r (no, buf, buflen);
+    {
+      int system_err = system_strerror_r (no, buf, buflen);
 
-	  if (system_err != EINVAL)
-	    {
-	      if (buflen)
-		buf[buflen - 1] = '\0';
-	      return system_err;
-	    }
-	}
+      if (system_err != EINVAL)
+        {
+          if (buflen)
+        buf[buflen - 1] = '\0';
+          return system_err;
+        }
+    }
       code = GPG_ERR_UNKNOWN_ERRNO;
     }
 

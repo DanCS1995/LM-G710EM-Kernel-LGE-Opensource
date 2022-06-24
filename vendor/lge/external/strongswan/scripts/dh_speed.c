@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,6 +15,7 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <assert.h>
 #include <library.h>
 #include <utils/debug.h>
 #include <crypto/diffie_hellman.h>
@@ -45,6 +46,7 @@ struct {
 	{"ecp521",			ECP_521_BIT},
 	{"ecp192",			ECP_192_BIT},
 	{"ecp224",			ECP_224_BIT},
+	{"curve25519",		CURVE_25519},
 };
 
 static void start_timing(struct timespec *start)
@@ -64,7 +66,7 @@ static double end_timing(struct timespec *start)
 static void run_test(diffie_hellman_group_t group, int rounds)
 {
 	diffie_hellman_t *l[rounds], *r;
-	chunk_t chunk;
+	chunk_t chunk, chunks[rounds], lsecrets[rounds], rsecrets[rounds];
 	struct timespec timing;
 	int round;
 
@@ -76,34 +78,38 @@ static void run_test(diffie_hellman_group_t group, int rounds)
 		return;
 	}
 
-	printf("%N:\t",
-			diffie_hellman_group_names, group);
+	printf("%N:\t", diffie_hellman_group_names, group);
 
 	start_timing(&timing);
 	for (round = 0; round < rounds; round++)
 	{
 		l[round] = lib->crypto->create_dh(lib->crypto, group);
+		assert(l[round]->get_my_public_value(l[round], &chunks[round]));
 	}
 	printf("A = g^a/s: %8.1f", rounds / end_timing(&timing));
 
 	for (round = 0; round < rounds; round++)
 	{
-		l[round]->get_my_public_value(l[round], &chunk);
-		r->set_other_public_value(r, chunk);
-		chunk_free(&chunk);
+		assert(r->set_other_public_value(r, chunks[round]));
+		assert(r->get_shared_secret(r, &rsecrets[round]));
+		chunk_free(&chunks[round]);
 	}
 
-	r->get_my_public_value(r, &chunk);
+	assert(r->get_my_public_value(r, &chunk));
 	start_timing(&timing);
 	for (round = 0; round < rounds; round++)
 	{
-		l[round]->set_other_public_value(l[round], chunk);
+		assert(l[round]->set_other_public_value(l[round], chunk));
+		assert(l[round]->get_shared_secret(l[round], &lsecrets[round]));
 	}
 	printf(" | S = B^a/s: %8.1f\n", rounds / end_timing(&timing));
 	chunk_free(&chunk);
 
 	for (round = 0; round < rounds; round++)
 	{
+		assert(chunk_equals(rsecrets[round], lsecrets[round]));
+		free(lsecrets[round].ptr);
+		free(rsecrets[round].ptr);
 		l[round]->destroy(l[round]);
 	}
 	r->destroy(r);
@@ -143,4 +149,3 @@ int main(int argc, char *argv[])
 	}
 	return 0;
 }
-

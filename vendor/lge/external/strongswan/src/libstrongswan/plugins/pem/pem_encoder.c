@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2010 Andreas Steffen
- * Hochschule fuer Technik Rapperswil
+ * Copyright (C) 2010-2016 Andreas Steffen
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -14,6 +14,8 @@
  */
 
 #include "pem_encoder.h"
+
+#include <library.h>
 
 #define BYTES_PER_LINE	48
 
@@ -37,7 +39,11 @@ bool pem_encoder_encode(cred_encoding_type_t type, chunk_t *encoding,
 			if (cred_encoding_args(args, CRED_PART_RSA_PUB_ASN1_DER,
 									&asn1, CRED_PART_END) ||
 				cred_encoding_args(args, CRED_PART_ECDSA_PUB_ASN1_DER,
-									&asn1, CRED_PART_END))
+									&asn1, CRED_PART_END) ||
+				cred_encoding_args(args, CRED_PART_EDDSA_PUB_ASN1_DER,
+									&asn1, CRED_PART_END) ||
+				cred_encoding_args(args, CRED_PART_BLISS_PUB_ASN1_DER,
+								   &asn1, CRED_PART_END))
 			{
 				break;
 			}
@@ -86,6 +92,18 @@ bool pem_encoder_encode(cred_encoding_type_t type, chunk_t *encoding,
 				label ="EC PRIVATE KEY";
 				break;
 			}
+			if (cred_encoding_args(args, CRED_PART_BLISS_PRIV_ASN1_DER,
+								   &asn1, CRED_PART_END))
+			{
+				label ="BLISS PRIVATE KEY";
+				break;
+			}
+			if (cred_encoding_args(args, CRED_PART_EDDSA_PRIV_ASN1_DER,
+								   &asn1, CRED_PART_END))
+			{
+				label ="PRIVATE KEY";
+				break;
+			}
 			return FALSE;
 		case CERT_PEM:
 			if (cred_encoding_args(args, CRED_PART_X509_ASN1_DER,
@@ -104,6 +122,12 @@ bool pem_encoder_encode(cred_encoding_type_t type, chunk_t *encoding,
 								   &asn1, CRED_PART_END))
 			{	/* PEM encode PKCS10 certificate reqeuest */
 				label = "CERTIFICATE REQUEST";
+				break;
+			}
+			if (cred_encoding_args(args, CRED_PART_X509_AC_ASN1_DER,
+								   &asn1, CRED_PART_END))
+			{
+				label = "ATTRIBUTE CERTIFICATE";
 				break;
 			}
 		default:
@@ -154,4 +178,3 @@ bool pem_encoder_encode(cred_encoding_type_t type, chunk_t *encoding,
 	encoding->len = pos - encoding->ptr;
 	return TRUE;
 }
-

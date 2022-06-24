@@ -1,12 +1,12 @@
 /****************************************************************************
- *									    *
- *									    *
- *   Unix Randomness-Gathering Code					    *
- *									    *
+ *                                        *
+ *                                        *
+ *   Unix Randomness-Gathering Code                        *
+ *                                        *
  *   Copyright Peter Gutmann, Paul Kendall, and Chris Wedgwood 1996-1999.   *
- *   Heavily modified for GnuPG by Werner Koch				    *
- *									    *
- *									    *
+ *   Heavily modified for GnuPG by Werner Koch                    *
+ *                                        *
+ *                                        *
  ****************************************************************************/
 
 /* This module is part of the cryptlib continuously seeded pseudorandom
@@ -97,7 +97,7 @@
    * anyway */
 #undef BIG_ENDIAN
 #undef LITTLE_ENDIAN
-#endif				/* __osf__ */
+#endif                /* __osf__ */
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -105,30 +105,30 @@
 #ifndef __QNX__
 #include <sys/errno.h>
 #include <sys/ipc.h>
-#endif				/* __QNX__ */
-#include <sys/time.h>		/* SCO and SunOS need this before resource.h */
+#endif                /* __QNX__ */
+#include <sys/time.h>        /* SCO and SunOS need this before resource.h */
 #ifndef __QNX__
 #include <sys/resource.h>
-#endif				/* __QNX__ */
+#endif                /* __QNX__ */
 #if defined( _AIX ) || defined( __QNX__ )
 #include <sys/select.h>
-#endif				/* _AIX */
+#endif                /* _AIX */
 #ifndef __QNX__
 #include <sys/shm.h>
 #include <signal.h>
 #include <sys/signal.h>
-#endif				/* __QNX__ */
+#endif                /* __QNX__ */
 #include <sys/stat.h>
-#include <sys/types.h>		/* Verschiedene komische Typen */
+#include <sys/types.h>        /* Verschiedene komische Typen */
 #if defined( __hpux ) && ( OS_VERSION == 9 )
 #include <vfork.h>
-#endif				/* __hpux 9.x, after that it's in unistd.h */
+#endif                /* __hpux 9.x, after that it's in unistd.h */
 #include <sys/wait.h>
 /* #include <kitchensink.h> */
 #ifdef __QNX__
 #include <signal.h>
 #include <process.h>
-#endif		      /* __QNX__ */
+#endif              /* __QNX__ */
 #include <errno.h>
 
 #include "types.h"  /* for byte and u32 typedefs */
@@ -136,7 +136,7 @@
 #include "rand-internal.h"
 
 #ifndef EAGAIN
-#define EAGAIN	EWOULDBLOCK
+#define EAGAIN    EWOULDBLOCK
 #endif
 #ifndef STDIN_FILENO
 #define STDIN_FILENO 0
@@ -145,7 +145,7 @@
 #define STDOUT_FILENO 1
 #endif
 
-#define GATHER_BUFSIZE		49152	/* Usually about 25K are filled */
+#define GATHER_BUFSIZE        49152    /* Usually about 25K are filled */
 
 /* The structure containing information on random-data sources.  Each
  * record contains the source and a relative estimate of its usefulness
@@ -206,122 +206,122 @@
  * trap), so we define a value SC_0 which evaluates to zero when fed to
  * '1024 / SC_0' */
 
-#define SC( weight )	( 1024 / weight )	/* Scale factor */
-#define SC_0			16384	/* SC( SC_0 ) evalutes to 0 */
+#define SC( weight )    ( 1024 / weight )    /* Scale factor */
+#define SC_0            16384    /* SC( SC_0 ) evalutes to 0 */
 
 static struct RI {
-    const char *path;		/* Path to check for existence of source */
-    const char *arg;		/* Args for source */
-    const int usefulness;	/* Usefulness of source */
-    FILE *pipe; 		/* Pipe to source as FILE * */
-    int pipeFD; 		/* Pipe to source as FD */
-    pid_t pid;			/* pid of child for waitpid() */
-    int length; 		/* Quantity of output produced */
-    const int hasAlternative;	    /* Whether source has alt.location */
+    const char *path;        /* Path to check for existence of source */
+    const char *arg;        /* Args for source */
+    const int usefulness;    /* Usefulness of source */
+    FILE *pipe;         /* Pipe to source as FILE * */
+    int pipeFD;         /* Pipe to source as FD */
+    pid_t pid;            /* pid of child for waitpid() */
+    int length;         /* Quantity of output produced */
+    const int hasAlternative;        /* Whether source has alt.location */
 } dataSources[] = {
 
-    {	"/bin/vmstat", "-s", SC(-3), NULL, 0, 0, 0, 1    },
-    {	"/usr/bin/vmstat", "-s", SC(-3), NULL, 0, 0, 0, 0},
-    {	"/bin/vmstat", "-c", SC(-3), NULL, 0, 0, 0, 1     },
-    {	"/usr/bin/vmstat", "-c", SC(-3), NULL, 0, 0, 0, 0},
-    {	"/usr/bin/pfstat", NULL, SC(-2), NULL, 0, 0, 0, 0},
-    {	"/bin/vmstat", "-i", SC(-2), NULL, 0, 0, 0, 1     },
-    {	"/usr/bin/vmstat", "-i", SC(-2), NULL, 0, 0, 0, 0},
-    {	"/usr/ucb/netstat", "-s", SC(2), NULL, 0, 0, 0, 1 },
-    {	"/usr/bin/netstat", "-s", SC(2), NULL, 0, 0, 0, 1 },
-    {	"/usr/sbin/netstat", "-s", SC(2), NULL, 0, 0, 0, 1},
-    {	"/usr/etc/netstat", "-s", SC(2), NULL, 0, 0, 0, 0},
-    {	"/usr/bin/nfsstat", NULL, SC(2), NULL, 0, 0, 0, 0},
-    {	"/usr/ucb/netstat", "-m", SC(-1), NULL, 0, 0, 0, 1  },
-    {	"/usr/bin/netstat", "-m", SC(-1), NULL, 0, 0, 0, 1  },
-    {	"/usr/sbin/netstat", "-m", SC(-1), NULL, 0, 0, 0, 1 },
-    {	"/usr/etc/netstat", "-m", SC(-1), NULL, 0, 0, 0, 0 },
-    {	"/bin/netstat",     "-in", SC(-1), NULL, 0, 0, 0, 1 },
-    {	"/usr/ucb/netstat", "-in", SC(-1), NULL, 0, 0, 0, 1 },
-    {	"/usr/bin/netstat", "-in", SC(-1), NULL, 0, 0, 0, 1 },
-    {	"/usr/sbin/netstat", "-in", SC(-1), NULL, 0, 0, 0, 1},
-    {	"/usr/etc/netstat", "-in", SC(-1), NULL, 0, 0, 0, 0},
-    {	"/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.7.1.0",
-				    SC(-1), NULL, 0, 0, 0, 0 }, /* UDP in */
-    {	"/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.7.4.0",
-				    SC(-1), NULL, 0, 0, 0, 0 },  /* UDP out */
-    {	"/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.4.3.0",
-				    SC(-1), NULL, 0, 0, 0, 0 }, /* IP ? */
-    {	"/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.6.10.0",
-				    SC(-1), NULL, 0, 0, 0, 0 }, /* TCP ? */
-    {	"/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.6.11.0",
-				    SC(-1), NULL, 0, 0, 0, 0 }, /* TCP ? */
-    {	"/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.6.13.0",
-				    SC(-1), NULL, 0, 0, 0, 0 }, /* TCP ? */
-    {	"/usr/bin/mpstat", NULL, SC(1), NULL, 0, 0, 0, 0     },
-    {	"/usr/bin/w", NULL, SC(1), NULL, 0, 0, 0, 1           },
-    {	"/usr/bsd/w", NULL, SC(1), NULL, 0, 0, 0, 0          },
-    {	"/usr/bin/df", NULL, SC(1), NULL, 0, 0, 0, 1          },
-    {	"/bin/df", NULL, SC(1), NULL, 0, 0, 0, 0             },
-    {	"/usr/sbin/portstat", NULL, SC(1), NULL, 0, 0, 0, 0  },
-    {	"/usr/bin/iostat", NULL, SC(SC_0), NULL, 0, 0, 0, 0  },
-    {	"/usr/bin/uptime", NULL, SC(SC_0), NULL, 0, 0, 0, 1   },
-    {	"/usr/bsd/uptime", NULL, SC(SC_0), NULL, 0, 0, 0, 0  },
-    {	"/bin/vmstat", "-f", SC(SC_0), NULL, 0, 0, 0, 1       },
-    {	"/usr/bin/vmstat", "-f", SC(SC_0), NULL, 0, 0, 0, 0  },
-    {	"/bin/vmstat", NULL, SC(SC_0), NULL, 0, 0, 0, 1       },
-    {	"/usr/bin/vmstat", NULL, SC(SC_0), NULL, 0, 0, 0, 0  },
-    {	"/usr/ucb/netstat", "-n", SC(0.5), NULL, 0, 0, 0, 1   },
-    {	"/usr/bin/netstat", "-n", SC(0.5), NULL, 0, 0, 0, 1   },
-    {	"/usr/sbin/netstat", "-n", SC(0.5), NULL, 0, 0, 0, 1  },
-    {	"/usr/etc/netstat", "-n", SC(0.5), NULL, 0, 0, 0, 0  },
+    {    "/bin/vmstat", "-s", SC(-3), NULL, 0, 0, 0, 1    },
+    {    "/usr/bin/vmstat", "-s", SC(-3), NULL, 0, 0, 0, 0},
+    {    "/bin/vmstat", "-c", SC(-3), NULL, 0, 0, 0, 1     },
+    {    "/usr/bin/vmstat", "-c", SC(-3), NULL, 0, 0, 0, 0},
+    {    "/usr/bin/pfstat", NULL, SC(-2), NULL, 0, 0, 0, 0},
+    {    "/bin/vmstat", "-i", SC(-2), NULL, 0, 0, 0, 1     },
+    {    "/usr/bin/vmstat", "-i", SC(-2), NULL, 0, 0, 0, 0},
+    {    "/usr/ucb/netstat", "-s", SC(2), NULL, 0, 0, 0, 1 },
+    {    "/usr/bin/netstat", "-s", SC(2), NULL, 0, 0, 0, 1 },
+    {    "/usr/sbin/netstat", "-s", SC(2), NULL, 0, 0, 0, 1},
+    {    "/usr/etc/netstat", "-s", SC(2), NULL, 0, 0, 0, 0},
+    {    "/usr/bin/nfsstat", NULL, SC(2), NULL, 0, 0, 0, 0},
+    {    "/usr/ucb/netstat", "-m", SC(-1), NULL, 0, 0, 0, 1  },
+    {    "/usr/bin/netstat", "-m", SC(-1), NULL, 0, 0, 0, 1  },
+    {    "/usr/sbin/netstat", "-m", SC(-1), NULL, 0, 0, 0, 1 },
+    {    "/usr/etc/netstat", "-m", SC(-1), NULL, 0, 0, 0, 0 },
+    {    "/bin/netstat",     "-in", SC(-1), NULL, 0, 0, 0, 1 },
+    {    "/usr/ucb/netstat", "-in", SC(-1), NULL, 0, 0, 0, 1 },
+    {    "/usr/bin/netstat", "-in", SC(-1), NULL, 0, 0, 0, 1 },
+    {    "/usr/sbin/netstat", "-in", SC(-1), NULL, 0, 0, 0, 1},
+    {    "/usr/etc/netstat", "-in", SC(-1), NULL, 0, 0, 0, 0},
+    {    "/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.7.1.0",
+                    SC(-1), NULL, 0, 0, 0, 0 }, /* UDP in */
+    {    "/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.7.4.0",
+                    SC(-1), NULL, 0, 0, 0, 0 },  /* UDP out */
+    {    "/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.4.3.0",
+                    SC(-1), NULL, 0, 0, 0, 0 }, /* IP ? */
+    {    "/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.6.10.0",
+                    SC(-1), NULL, 0, 0, 0, 0 }, /* TCP ? */
+    {    "/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.6.11.0",
+                    SC(-1), NULL, 0, 0, 0, 0 }, /* TCP ? */
+    {    "/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.6.13.0",
+                    SC(-1), NULL, 0, 0, 0, 0 }, /* TCP ? */
+    {    "/usr/bin/mpstat", NULL, SC(1), NULL, 0, 0, 0, 0     },
+    {    "/usr/bin/w", NULL, SC(1), NULL, 0, 0, 0, 1           },
+    {    "/usr/bsd/w", NULL, SC(1), NULL, 0, 0, 0, 0          },
+    {    "/usr/bin/df", NULL, SC(1), NULL, 0, 0, 0, 1          },
+    {    "/bin/df", NULL, SC(1), NULL, 0, 0, 0, 0             },
+    {    "/usr/sbin/portstat", NULL, SC(1), NULL, 0, 0, 0, 0  },
+    {    "/usr/bin/iostat", NULL, SC(SC_0), NULL, 0, 0, 0, 0  },
+    {    "/usr/bin/uptime", NULL, SC(SC_0), NULL, 0, 0, 0, 1   },
+    {    "/usr/bsd/uptime", NULL, SC(SC_0), NULL, 0, 0, 0, 0  },
+    {    "/bin/vmstat", "-f", SC(SC_0), NULL, 0, 0, 0, 1       },
+    {    "/usr/bin/vmstat", "-f", SC(SC_0), NULL, 0, 0, 0, 0  },
+    {    "/bin/vmstat", NULL, SC(SC_0), NULL, 0, 0, 0, 1       },
+    {    "/usr/bin/vmstat", NULL, SC(SC_0), NULL, 0, 0, 0, 0  },
+    {    "/usr/ucb/netstat", "-n", SC(0.5), NULL, 0, 0, 0, 1   },
+    {    "/usr/bin/netstat", "-n", SC(0.5), NULL, 0, 0, 0, 1   },
+    {    "/usr/sbin/netstat", "-n", SC(0.5), NULL, 0, 0, 0, 1  },
+    {    "/usr/etc/netstat", "-n", SC(0.5), NULL, 0, 0, 0, 0  },
 #if defined( __sgi ) || defined( __hpux )
-    {	"/bin/ps", "-el", SC(0.3), NULL, 0, 0, 0, 1           },
-#endif				/* __sgi || __hpux */
-    {	"/usr/ucb/ps", "aux", SC(0.3), NULL, 0, 0, 0, 1       },
-    {	"/usr/bin/ps", "aux", SC(0.3), NULL, 0, 0, 0, 1       },
-    {	"/bin/ps", "aux", SC(0.3), NULL, 0, 0, 0, 0          },
+    {    "/bin/ps", "-el", SC(0.3), NULL, 0, 0, 0, 1           },
+#endif                /* __sgi || __hpux */
+    {    "/usr/ucb/ps", "aux", SC(0.3), NULL, 0, 0, 0, 1       },
+    {    "/usr/bin/ps", "aux", SC(0.3), NULL, 0, 0, 0, 1       },
+    {    "/bin/ps", "aux", SC(0.3), NULL, 0, 0, 0, 0          },
     {   "/bin/ps", "-A", SC(0.3), NULL, 0, 0, 0, 0           }, /*QNX*/
-    {	"/usr/bin/ipcs", "-a", SC(0.5), NULL, 0, 0, 0, 1      },
-    {	"/bin/ipcs", "-a", SC(0.5), NULL, 0, 0, 0, 0         },
+    {    "/usr/bin/ipcs", "-a", SC(0.5), NULL, 0, 0, 0, 1      },
+    {    "/bin/ipcs", "-a", SC(0.5), NULL, 0, 0, 0, 0         },
     /* Unreliable source, depends on system usage */
-    {	"/etc/pstat", "-p", SC(0.5), NULL, 0, 0, 0, 1         },
-    {	"/bin/pstat", "-p", SC(0.5), NULL, 0, 0, 0, 0        },
-    {	"/etc/pstat", "-S", SC(0.2), NULL, 0, 0, 0, 1         },
-    {	"/bin/pstat", "-S", SC(0.2), NULL, 0, 0, 0, 0        },
-    {	"/etc/pstat", "-v", SC(0.2), NULL, 0, 0, 0, 1         },
-    {	"/bin/pstat", "-v", SC(0.2), NULL, 0, 0, 0, 0        },
-    {	"/etc/pstat", "-x", SC(0.2), NULL, 0, 0, 0, 1         },
-    {	"/bin/pstat", "-x", SC(0.2), NULL, 0, 0, 0, 0        },
-    {	"/etc/pstat", "-t", SC(0.1), NULL, 0, 0, 0, 1         },
-    {	"/bin/pstat", "-t", SC(0.1), NULL, 0, 0, 0, 0        },
+    {    "/etc/pstat", "-p", SC(0.5), NULL, 0, 0, 0, 1         },
+    {    "/bin/pstat", "-p", SC(0.5), NULL, 0, 0, 0, 0        },
+    {    "/etc/pstat", "-S", SC(0.2), NULL, 0, 0, 0, 1         },
+    {    "/bin/pstat", "-S", SC(0.2), NULL, 0, 0, 0, 0        },
+    {    "/etc/pstat", "-v", SC(0.2), NULL, 0, 0, 0, 1         },
+    {    "/bin/pstat", "-v", SC(0.2), NULL, 0, 0, 0, 0        },
+    {    "/etc/pstat", "-x", SC(0.2), NULL, 0, 0, 0, 1         },
+    {    "/bin/pstat", "-x", SC(0.2), NULL, 0, 0, 0, 0        },
+    {    "/etc/pstat", "-t", SC(0.1), NULL, 0, 0, 0, 1         },
+    {    "/bin/pstat", "-t", SC(0.1), NULL, 0, 0, 0, 0        },
     /* pstat is your friend */
-    {	"/usr/bin/last", "-n 50", SC(0.3), NULL, 0, 0, 0, 1   },
+    {    "/usr/bin/last", "-n 50", SC(0.3), NULL, 0, 0, 0, 1   },
 #ifdef __sgi
-    {	"/usr/bsd/last", "-50", SC(0.3), NULL, 0, 0, 0, 0    },
-#endif				/* __sgi */
+    {    "/usr/bsd/last", "-50", SC(0.3), NULL, 0, 0, 0, 0    },
+#endif                /* __sgi */
 #ifdef __hpux
-    {	"/etc/last", "-50", SC(0.3), NULL, 0, 0, 0, 0        },
-#endif				/* __hpux */
-    {	"/usr/bsd/last", "-n 50", SC(0.3), NULL, 0, 0, 0, 0  },
-    {	"/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.5.1.0",
-				SC(0.1), NULL, 0, 0, 0, 0 }, /* ICMP ? */
-    {	"/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.5.3.0",
-				SC(0.1), NULL, 0, 0, 0, 0 }, /* ICMP ? */
-    {	"/etc/arp", "-a", SC(0.1), NULL, 0, 0, 0, 1  },
-    {	"/usr/etc/arp", "-a", SC(0.1), NULL, 0, 0, 0, 1  },
-    {	"/usr/bin/arp", "-a", SC(0.1), NULL, 0, 0, 0, 1  },
-    {	"/usr/sbin/arp", "-a", SC(0.1), NULL, 0, 0, 0, 0 },
-    {	"/usr/sbin/ripquery", "-nw 1 127.0.0.1",
-				SC(0.1), NULL, 0, 0, 0, 0 },
-    {	"/bin/lpstat", "-t", SC(0.1), NULL, 0, 0, 0, 1     },
-    {	"/usr/bin/lpstat", "-t", SC(0.1), NULL, 0, 0, 0, 1 },
-    {	"/usr/ucb/lpstat", "-t", SC(0.1), NULL, 0, 0, 0, 0 },
-    {	"/usr/bin/tcpdump", "-c 5 -efvvx", SC(1), NULL, 0, 0, 0, 0 },
+    {    "/etc/last", "-50", SC(0.3), NULL, 0, 0, 0, 0        },
+#endif                /* __hpux */
+    {    "/usr/bsd/last", "-n 50", SC(0.3), NULL, 0, 0, 0, 0  },
+    {    "/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.5.1.0",
+                SC(0.1), NULL, 0, 0, 0, 0 }, /* ICMP ? */
+    {    "/usr/sbin/snmp_request", "localhost public get 1.3.6.1.2.1.5.3.0",
+                SC(0.1), NULL, 0, 0, 0, 0 }, /* ICMP ? */
+    {    "/etc/arp", "-a", SC(0.1), NULL, 0, 0, 0, 1  },
+    {    "/usr/etc/arp", "-a", SC(0.1), NULL, 0, 0, 0, 1  },
+    {    "/usr/bin/arp", "-a", SC(0.1), NULL, 0, 0, 0, 1  },
+    {    "/usr/sbin/arp", "-a", SC(0.1), NULL, 0, 0, 0, 0 },
+    {    "/usr/sbin/ripquery", "-nw 1 127.0.0.1",
+                SC(0.1), NULL, 0, 0, 0, 0 },
+    {    "/bin/lpstat", "-t", SC(0.1), NULL, 0, 0, 0, 1     },
+    {    "/usr/bin/lpstat", "-t", SC(0.1), NULL, 0, 0, 0, 1 },
+    {    "/usr/ucb/lpstat", "-t", SC(0.1), NULL, 0, 0, 0, 0 },
+    {    "/usr/bin/tcpdump", "-c 5 -efvvx", SC(1), NULL, 0, 0, 0, 0 },
     /* This is very environment-dependant.  If network traffic is low, it'll
      * probably time out before delivering 5 packets, which is OK because
      * it'll probably be fixed stuff like ARP anyway */
-    {	"/usr/sbin/advfsstat", "-b usr_domain",
-				SC(SC_0), NULL, 0, 0, 0, 0},
-    {	"/usr/sbin/advfsstat", "-l 2 usr_domain",
-				SC(0.5), NULL, 0, 0, 0, 0},
-    {	"/usr/sbin/advfsstat", "-p usr_domain",
-				SC(SC_0), NULL, 0, 0, 0, 0},
+    {    "/usr/sbin/advfsstat", "-b usr_domain",
+                SC(SC_0), NULL, 0, 0, 0, 0},
+    {    "/usr/sbin/advfsstat", "-l 2 usr_domain",
+                SC(0.5), NULL, 0, 0, 0, 0},
+    {    "/usr/sbin/advfsstat", "-p usr_domain",
+                SC(SC_0), NULL, 0, 0, 0, 0},
     /* This is a complex and screwball program.  Some systems have things
      * like rX_dmn, x = integer, for RAID systems, but the statistics are
      * pretty dodgy */
@@ -334,23 +334,23 @@ static struct RI {
      * unpredictable, however they give an indication of the sort of sources
      * you can use (for example the finger might be more useful on a
      * firewalled internal network) */
-    {	"/usr/bin/finger", "@ml.media.mit.edu", SC(0.9), NULL, 0, 0, 0, 0 },
-    {	"/usr/local/bin/wget", "-O - http://lavarand.sgi.com/block.html",
-				SC(0.9), NULL, 0, 0, 0, 0 },
-    {	"/bin/cat", "/usr/spool/mqueue/syslog", SC(0.9), NULL, 0, 0, 0, 0 },
-#endif				/* 0 */
-    {	NULL, NULL, 0, NULL, 0, 0, 0, 0 }
+    {    "/usr/bin/finger", "@ml.media.mit.edu", SC(0.9), NULL, 0, 0, 0, 0 },
+    {    "/usr/local/bin/wget", "-O - http://lavarand.sgi.com/block.html",
+                SC(0.9), NULL, 0, 0, 0, 0 },
+    {    "/bin/cat", "/usr/spool/mqueue/syslog", SC(0.9), NULL, 0, 0, 0, 0 },
+#endif                /* 0 */
+    {    NULL, NULL, 0, NULL, 0, 0, 0, 0 }
 };
 
-static byte *gather_buffer;	    /* buffer for gathering random noise */
-static int gather_buffer_size;	    /* size of the memory buffer */
+static byte *gather_buffer;        /* buffer for gathering random noise */
+static int gather_buffer_size;        /* size of the memory buffer */
 static uid_t gatherer_uid;
 
 /* The message structure used to communicate with the parent */
 typedef struct {
-    int  usefulness;	/* usefulness of data */
-    int  ndata; 	/* valid bytes in data */
-    char data[500];	/* gathered data */
+    int  usefulness;    /* usefulness of data */
+    int  ndata;     /* valid bytes in data */
+    char data[500];    /* gathered data */
 } GATHER_MSG;
 
 #ifndef HAVE_WAITPID
@@ -358,23 +358,23 @@ static pid_t
 waitpid(pid_t pid, int *statptr, int options)
 {
 #ifdef HAVE_WAIT4
-	return wait4(pid, statptr, options, NULL);
+    return wait4(pid, statptr, options, NULL);
 #else
-	/* If wait4 is also not available, try wait3 for SVR3 variants */
-	/* Less ideal because can't actually request a specific pid */
-	/* For that reason, first check to see if pid is for an */
-	/*   existing process. */
-	int tmp_pid, dummystat;;
-	if (kill(pid, 0) == -1) {
-		errno = ECHILD;
-		return -1;
-	}
-	if (statptr == NULL)
-		statptr = &dummystat;
-	while (((tmp_pid = wait3(statptr, options, 0)) != pid) &&
-		    (tmp_pid != -1) && (tmp_pid != 0) && (pid != -1))
-	    ;
-	return tmp_pid;
+    /* If wait4 is also not available, try wait3 for SVR3 variants */
+    /* Less ideal because can't actually request a specific pid */
+    /* For that reason, first check to see if pid is for an */
+    /*   existing process. */
+    int tmp_pid, dummystat;;
+    if (kill(pid, 0) == -1) {
+        errno = ECHILD;
+        return -1;
+    }
+    if (statptr == NULL)
+        statptr = &dummystat;
+    while (((tmp_pid = wait3(statptr, options, 0)) != pid) &&
+            (tmp_pid != -1) && (tmp_pid != 0) && (pid != -1))
+        ;
+    return tmp_pid;
 #endif
 }
 #endif
@@ -397,50 +397,50 @@ my_popen(struct RI *entry)
 
     /* Create the pipe */
     if (pipe(pipedes) < 0)
-	return (NULL);
+    return (NULL);
 
     /* Fork off the child ("vfork() is like an OS orgasm.  All OS's want to
      * do it, but most just end up faking it" - Chris Wedgwood).  If your OS
      * supports it, you should try to use vfork() here because it's somewhat
      * more efficient */
 #if defined( sun ) || defined( __ultrix__ ) || defined( __osf__ ) || \
-	defined(__hpux)
+    defined(__hpux)
     entry->pid = vfork();
-#else				/*  */
+#else                /*  */
     entry->pid = fork();
-#endif				/* Unixen which have vfork() */
+#endif                /* Unixen which have vfork() */
     if (entry->pid == (pid_t) - 1) {
-	/* The fork failed */
-	close(pipedes[0]);
-	close(pipedes[1]);
-	return (NULL);
+    /* The fork failed */
+    close(pipedes[0]);
+    close(pipedes[1]);
+    return (NULL);
     }
 
     if (entry->pid == (pid_t) 0) {
-	struct passwd *passwd;
+    struct passwd *passwd;
 
-	/* We are the child.  Make the read side of the pipe be stdout */
-	if (dup2(pipedes[STDOUT_FILENO], STDOUT_FILENO) < 0)
-	    exit(127);
+    /* We are the child.  Make the read side of the pipe be stdout */
+    if (dup2(pipedes[STDOUT_FILENO], STDOUT_FILENO) < 0)
+        exit(127);
 
-	/* Now that everything is set up, give up our permissions to make
-	 * sure we don't read anything sensitive.  If the getpwnam() fails,
-	 * we default to -1, which is usually nobody */
-	if (gatherer_uid == (uid_t)-1 && \
-	    (passwd = getpwnam("nobody")) != NULL)
-	    gatherer_uid = passwd->pw_uid;
+    /* Now that everything is set up, give up our permissions to make
+     * sure we don't read anything sensitive.  If the getpwnam() fails,
+     * we default to -1, which is usually nobody */
+    if (gatherer_uid == (uid_t)-1 && \
+        (passwd = getpwnam("nobody")) != NULL)
+        gatherer_uid = passwd->pw_uid;
 
-	setuid(gatherer_uid);
+    setuid(gatherer_uid);
 
-	/* Close the pipe descriptors */
-	close(pipedes[STDIN_FILENO]);
-	close(pipedes[STDOUT_FILENO]);
+    /* Close the pipe descriptors */
+    close(pipedes[STDIN_FILENO]);
+    close(pipedes[STDOUT_FILENO]);
 
-	/* Try and exec the program */
-	execl(entry->path, entry->path, entry->arg, NULL);
+    /* Try and exec the program */
+    execl(entry->path, entry->path, entry->arg, NULL);
 
-	/* Die if the exec failed */
-	exit(127);
+    /* Die if the exec failed */
+    exit(127);
     }
 
     /* We are the parent.  Close the irrelevant side of the pipe and open
@@ -455,21 +455,21 @@ my_popen(struct RI *entry)
     stream = fdopen(pipedes[STDIN_FILENO], "r");
 
     if (stream == NULL) {
-	int savedErrno = errno;
+    int savedErrno = errno;
 
-	/* The stream couldn't be opened or the child structure couldn't be
-	 * allocated.  Kill the child and close the other side of the pipe */
-	kill(entry->pid, SIGKILL);
-	if (stream == NULL)
-	    close(pipedes[STDOUT_FILENO]);
-	else
-	    fclose(stream);
+    /* The stream couldn't be opened or the child structure couldn't be
+     * allocated.  Kill the child and close the other side of the pipe */
+    kill(entry->pid, SIGKILL);
+    if (stream == NULL)
+        close(pipedes[STDOUT_FILENO]);
+    else
+        fclose(stream);
 
-	waitpid(entry->pid, NULL, 0);
+    waitpid(entry->pid, NULL, 0);
 
-	entry->pid = 0;
-	errno = savedErrno;
-	return (NULL);
+    entry->pid = 0;
+    errno = savedErrno;
+    return (NULL);
     }
 
     return (stream);
@@ -481,7 +481,7 @@ my_pclose(struct RI *entry)
     int status = 0;
 
     if (fclose(entry->pipe))
-	return (-1);
+    return (-1);
 
     /* We ignore the return value from the process because some
        programs return funny values which would result in the input
@@ -490,7 +490,7 @@ my_pclose(struct RI *entry)
        out any programs which exit with a usage message without
        producing useful output.  */
     if (waitpid(entry->pid, NULL, 0) != entry->pid)
-	status = -1;
+    status = -1;
 
     entry->pipe = NULL;
     entry->pid = 0;
@@ -526,40 +526,40 @@ slow_poll(FILE *dbgfp, int dbgall, size_t *nbytes )
     /* Fire up each randomness source */
     FD_ZERO(&fds);
     for (i = 0; dataSources[i].path != NULL; i++) {
-	/* Since popen() is a fairly heavy function, we check to see whether
-	 * the executable exists before we try to run it */
-	if (access(dataSources[i].path, X_OK)) {
-	    if( dbgfp && dbgall )
-		fprintf(dbgfp, "%s not present%s\n", dataSources[i].path,
-			       dataSources[i].hasAlternative ?
-					", has alternatives" : "");
-	    dataSources[i].pipe = NULL;
-	}
-	else
-	    dataSources[i].pipe = my_popen(&dataSources[i]);
+    /* Since popen() is a fairly heavy function, we check to see whether
+     * the executable exists before we try to run it */
+    if (access(dataSources[i].path, X_OK)) {
+        if( dbgfp && dbgall )
+        fprintf(dbgfp, "%s not present%s\n", dataSources[i].path,
+                   dataSources[i].hasAlternative ?
+                    ", has alternatives" : "");
+        dataSources[i].pipe = NULL;
+    }
+    else
+        dataSources[i].pipe = my_popen(&dataSources[i]);
 
-	if (dataSources[i].pipe != NULL) {
-	    dataSources[i].pipeFD = fileno(dataSources[i].pipe);
-	    if (dataSources[i].pipeFD > maxFD)
-		maxFD = dataSources[i].pipeFD;
+    if (dataSources[i].pipe != NULL) {
+        dataSources[i].pipeFD = fileno(dataSources[i].pipe);
+        if (dataSources[i].pipeFD > maxFD)
+        maxFD = dataSources[i].pipeFD;
 
 #ifdef O_NONBLOCK /* Ohhh what a hack (used for Atari) */
-	    fcntl(dataSources[i].pipeFD, F_SETFL, O_NONBLOCK);
+        fcntl(dataSources[i].pipeFD, F_SETFL, O_NONBLOCK);
 #else
 #error O_NONBLOCK is missing
 #endif
 
-	    FD_SET(dataSources[i].pipeFD, &fds);
-	    dataSources[i].length = 0;
+        FD_SET(dataSources[i].pipeFD, &fds);
+        dataSources[i].length = 0;
 
-	    /* If there are alternatives for this command, don't try and
-	     * execute them */
-	    while (dataSources[i].hasAlternative) {
-		if( dbgfp && dbgall )
-		    fprintf(dbgfp, "Skipping %s\n", dataSources[i + 1].path);
-		i++;
-	    }
-	}
+        /* If there are alternatives for this command, don't try and
+         * execute them */
+        while (dataSources[i].hasAlternative) {
+        if( dbgfp && dbgall )
+            fprintf(dbgfp, "Skipping %s\n", dataSources[i + 1].path);
+        i++;
+        }
+    }
     }
 
 
@@ -567,103 +567,103 @@ slow_poll(FILE *dbgfp, int dbgall, size_t *nbytes )
     bufPos = 0;
     moreSources = 1;
     while (moreSources && bufPos <= gather_buffer_size) {
-	/* Wait for data to become available from any of the sources, with a
-	 * timeout of 10 seconds.  This adds even more randomness since data
-	 * becomes available in a nondeterministic fashion.  Kudos to HP's QA
-	 * department for managing to ship a select() which breaks its own
-	 * prototype */
-	tv.tv_sec = 10;
-	tv.tv_usec = 0;
+    /* Wait for data to become available from any of the sources, with a
+     * timeout of 10 seconds.  This adds even more randomness since data
+     * becomes available in a nondeterministic fashion.  Kudos to HP's QA
+     * department for managing to ship a select() which breaks its own
+     * prototype */
+    tv.tv_sec = 10;
+    tv.tv_usec = 0;
 
 #if defined( __hpux ) && ( OS_VERSION == 9 )
-	if (select(maxFD + 1, (int *)&fds, NULL, NULL, &tv) == -1)
+    if (select(maxFD + 1, (int *)&fds, NULL, NULL, &tv) == -1)
 #else  /*  */
-	if (select(maxFD + 1, &fds, NULL, NULL, &tv) == -1)
+    if (select(maxFD + 1, &fds, NULL, NULL, &tv) == -1)
 #endif /* __hpux */
-	    break;
+        break;
 
-	/* One of the sources has data available, read it into the buffer */
-	for (i = 0; dataSources[i].path != NULL; i++) {
-	    if( dataSources[i].pipe && FD_ISSET(dataSources[i].pipeFD, &fds)) {
-		size_t noBytes;
+    /* One of the sources has data available, read it into the buffer */
+    for (i = 0; dataSources[i].path != NULL; i++) {
+        if( dataSources[i].pipe && FD_ISSET(dataSources[i].pipeFD, &fds)) {
+        size_t noBytes;
 
-		if ((noBytes = fread(gather_buffer + bufPos, 1,
-				     gather_buffer_size - bufPos,
-				     dataSources[i].pipe)) == 0) {
-		    if (my_pclose(&dataSources[i]) == 0) {
-			int total = 0;
+        if ((noBytes = fread(gather_buffer + bufPos, 1,
+                     gather_buffer_size - bufPos,
+                     dataSources[i].pipe)) == 0) {
+            if (my_pclose(&dataSources[i]) == 0) {
+            int total = 0;
 
-			/* Try and estimate how much entropy we're getting
-			 * from a data source */
-			if (dataSources[i].usefulness) {
-			    if (dataSources[i].usefulness < 0)
-				total = (dataSources[i].length + 999)
-					/ -dataSources[i].usefulness;
-			    else
-				total = dataSources[i].length
-					/ dataSources[i].usefulness;
-			}
-			if( dbgfp )
-			    fprintf(dbgfp,
-			       "%s %s contributed %d bytes, "
-			       "usefulness = %d\n", dataSources[i].path,
-			       (dataSources[i].arg != NULL) ?
-				       dataSources[i].arg : "",
-				      dataSources[i].length, total);
-			if( dataSources[i].length )
-			    usefulness += total;
-		    }
-		    dataSources[i].pipe = NULL;
-		}
-		else {
-		    int currPos = bufPos;
-		    int endPos = bufPos + noBytes;
+            /* Try and estimate how much entropy we're getting
+             * from a data source */
+            if (dataSources[i].usefulness) {
+                if (dataSources[i].usefulness < 0)
+                total = (dataSources[i].length + 999)
+                    / -dataSources[i].usefulness;
+                else
+                total = dataSources[i].length
+                    / dataSources[i].usefulness;
+            }
+            if( dbgfp )
+                fprintf(dbgfp,
+                   "%s %s contributed %d bytes, "
+                   "usefulness = %d\n", dataSources[i].path,
+                   (dataSources[i].arg != NULL) ?
+                       dataSources[i].arg : "",
+                      dataSources[i].length, total);
+            if( dataSources[i].length )
+                usefulness += total;
+            }
+            dataSources[i].pipe = NULL;
+        }
+        else {
+            int currPos = bufPos;
+            int endPos = bufPos + noBytes;
 
-		    /* Run-length compress the input byte sequence */
-		    while (currPos < endPos) {
-			int ch = gather_buffer[currPos];
+            /* Run-length compress the input byte sequence */
+            while (currPos < endPos) {
+            int ch = gather_buffer[currPos];
 
-			/* If it's a single byte, just copy it over */
-			if (ch != gather_buffer[currPos + 1]) {
-			    gather_buffer[bufPos++] = ch;
-			    currPos++;
-			}
-			else {
-			    int count = 0;
+            /* If it's a single byte, just copy it over */
+            if (ch != gather_buffer[currPos + 1]) {
+                gather_buffer[bufPos++] = ch;
+                currPos++;
+            }
+            else {
+                int count = 0;
 
-			    /* It's a run of repeated bytes, replace them
-			     * with the byte count mod 256 */
-			    while ((ch == gather_buffer[currPos])
-				    && currPos < endPos) {
-				count++;
-				currPos++;
-			    }
-			    gather_buffer[bufPos++] = count;
-			    noBytes -= count - 1;
-			}
-		    }
+                /* It's a run of repeated bytes, replace them
+                 * with the byte count mod 256 */
+                while ((ch == gather_buffer[currPos])
+                    && currPos < endPos) {
+                count++;
+                currPos++;
+                }
+                gather_buffer[bufPos++] = count;
+                noBytes -= count - 1;
+            }
+            }
 
-		    /* Remember the number of (compressed) bytes of input we
-		     * obtained */
-		    dataSources[i].length += noBytes;
-		}
-	    }
-	}
+            /* Remember the number of (compressed) bytes of input we
+             * obtained */
+            dataSources[i].length += noBytes;
+        }
+        }
+    }
 
-	/* Check if there is more input available on any of the sources */
-	moreSources = 0;
-	FD_ZERO(&fds);
-	for (i = 0; dataSources[i].path != NULL; i++) {
-	    if (dataSources[i].pipe != NULL) {
-		FD_SET(dataSources[i].pipeFD, &fds);
-		moreSources = 1;
-	    }
-	}
+    /* Check if there is more input available on any of the sources */
+    moreSources = 0;
+    FD_ZERO(&fds);
+    for (i = 0; dataSources[i].path != NULL; i++) {
+        if (dataSources[i].pipe != NULL) {
+        FD_SET(dataSources[i].pipeFD, &fds);
+        moreSources = 1;
+        }
+    }
     }
 
     if( dbgfp ) {
-	fprintf(dbgfp, "Got %d bytes, usefulness = %d\n", bufPos, usefulness);
-	fflush(dbgfp);
+    fprintf(dbgfp, "Got %d bytes, usefulness = %d\n", bufPos, usefulness);
+    fflush(dbgfp);
     }
     *nbytes = bufPos;
     return usefulness;
@@ -680,37 +680,37 @@ start_gatherer( int pipefd )
     int dbgall;
 
     {
-	const char *s = getenv("GNUPG_RNDUNIX_DBG");
-	if( s ) {
-	    dbgfp = (*s=='-' && !s[1])? stdout : fopen(s, "a");
-	    if( !dbgfp )
-		log_info("can't open debug file `%s': %s\n",
-			     s, strerror(errno) );
-	    else
-		fprintf(dbgfp,"\nSTART RNDUNIX DEBUG pid=%d\n", (int)getpid());
-	}
-	dbgall = !!getenv("GNUPG_RNDUNIX_DBGALL");
+    const char *s = getenv("GNUPG_RNDUNIX_DBG");
+    if( s ) {
+        dbgfp = (*s=='-' && !s[1])? stdout : fopen(s, "a");
+        if( !dbgfp )
+        log_info("can't open debug file `%s': %s\n",
+                 s, strerror(errno) );
+        else
+        fprintf(dbgfp,"\nSTART RNDUNIX DEBUG pid=%d\n", (int)getpid());
+    }
+    dbgall = !!getenv("GNUPG_RNDUNIX_DBGALL");
     }
     /* close all files but the ones we need */
-    {	int nmax, n1, n2, i;
+    {    int nmax, n1, n2, i;
 #ifdef _SC_OPEN_MAX
-	if( (nmax=sysconf( _SC_OPEN_MAX )) < 0 ) {
+    if( (nmax=sysconf( _SC_OPEN_MAX )) < 0 ) {
 #ifdef _POSIX_OPEN_MAX
-	    nmax = _POSIX_OPEN_MAX;
+        nmax = _POSIX_OPEN_MAX;
 #else
-	    nmax = 20; /* assume a reasonable value */
+        nmax = 20; /* assume a reasonable value */
 #endif
-	}
+    }
 #else /*!_SC_OPEN_MAX*/
-	nmax = 20; /* assume a reasonable value */
+    nmax = 20; /* assume a reasonable value */
 #endif /*!_SC_OPEN_MAX*/
-	n1 = fileno( stderr );
-	n2 = dbgfp? fileno( dbgfp ) : -1;
-	for(i=0; i < nmax; i++ ) {
-	    if( i != n1 && i != n2 && i != pipefd )
-		close(i);
-	}
-	errno = 0;
+    n1 = fileno( stderr );
+    n2 = dbgfp? fileno( dbgfp ) : -1;
+    for(i=0; i < nmax; i++ ) {
+        if( i != n1 && i != n2 && i != pipefd )
+        close(i);
+    }
+    errno = 0;
     }
 
 
@@ -718,8 +718,8 @@ start_gatherer( int pipefd )
     gather_buffer_size = GATHER_BUFSIZE;
     gather_buffer = malloc( gather_buffer_size );
     if( !gather_buffer ) {
-	log_error("out of core while allocating the gatherer buffer\n");
-	exit(2);
+    log_error("out of core while allocating the gatherer buffer\n");
+    exit(2);
     }
 
     /* Reset the SIGC(H)LD handler to the system default.  This is necessary
@@ -736,43 +736,43 @@ start_gatherer( int pipefd )
     signal(SIGCHLD, SIG_DFL);
 #endif
 
-    fclose(stderr);		/* Arrghh!!  It's Stuart code!! */
+    fclose(stderr);        /* Arrghh!!  It's Stuart code!! */
 
     for(;;) {
-	GATHER_MSG msg;
-	size_t nbytes;
-	const char *p;
+    GATHER_MSG msg;
+    size_t nbytes;
+    const char *p;
 
-	msg.usefulness = slow_poll( dbgfp, dbgall, &nbytes );
-	p = gather_buffer;
-	while( nbytes ) {
-	    msg.ndata = nbytes > sizeof(msg.data)? sizeof(msg.data) : nbytes;
-	    memcpy( msg.data, p, msg.ndata );
-	    nbytes -= msg.ndata;
-	    p += msg.ndata;
+    msg.usefulness = slow_poll( dbgfp, dbgall, &nbytes );
+    p = gather_buffer;
+    while( nbytes ) {
+        msg.ndata = nbytes > sizeof(msg.data)? sizeof(msg.data) : nbytes;
+        memcpy( msg.data, p, msg.ndata );
+        nbytes -= msg.ndata;
+        p += msg.ndata;
 
-	    while( write( pipefd, &msg, sizeof(msg) ) != sizeof(msg) ) {
-		if( errno == EINTR )
-		    continue;
-		if( errno == EAGAIN ) {
-		    struct timeval tv;
-		    tv.tv_sec = 0;
-		    tv.tv_usec = 50000;
-		    select(0, NULL, NULL, NULL, &tv);
-		    continue;
-		}
-		if( errno == EPIPE ) /* parent has exited, so give up */
-		   exit(0);
+        while( write( pipefd, &msg, sizeof(msg) ) != sizeof(msg) ) {
+        if( errno == EINTR )
+            continue;
+        if( errno == EAGAIN ) {
+            struct timeval tv;
+            tv.tv_sec = 0;
+            tv.tv_usec = 50000;
+            select(0, NULL, NULL, NULL, &tv);
+            continue;
+        }
+        if( errno == EPIPE ) /* parent has exited, so give up */
+           exit(0);
 
-		/* we can't do very much here because stderr is closed */
-		if( dbgfp )
-		    fprintf(dbgfp, "gatherer can't write to pipe: %s\n",
-				    strerror(errno) );
-		/* we start a new poll to give the system some time */
-		nbytes = 0;
-		break;
-	    }
-	}
+        /* we can't do very much here because stderr is closed */
+        if( dbgfp )
+            fprintf(dbgfp, "gatherer can't write to pipe: %s\n",
+                    strerror(errno) );
+        /* we start a new poll to give the system some time */
+        nbytes = 0;
+        break;
+        }
+    }
     }
     /* we are killed when the parent dies */
 }
@@ -786,13 +786,13 @@ read_a_msg( int fd, GATHER_MSG *msg )
     int n;
 
     do {
-	do {
-	    n = read(fd, buffer, length );
-	} while( n == -1 && errno == EINTR );
-	if( n == -1 )
-	    return -1;
-	buffer += n;
-	length -= n;
+    do {
+        n = read(fd, buffer, length );
+    } while( n == -1 && errno == EINTR );
+    if( n == -1 )
+        return -1;
+    buffer += n;
+    length -= n;
     } while( length );
     return 0;
 }
@@ -814,69 +814,69 @@ _gcry_rndunix_gather_random (void (*add)(const void*, size_t,
     size_t n;
 
     if( !level )
-	return 0;
+    return 0;
 
     if( !gatherer_pid ) {
-	/* Make sure we are not setuid. */
-	if ( getuid() != geteuid() )
-	    BUG();
-	/* time to start the gatherer process */
-	if( pipe( pipedes ) ) {
-	    log_error("pipe() failed: %s\n", strerror(errno));
-	    return -1;
-	}
-	gatherer_pid = fork();
-	if( gatherer_pid == -1 ) {
-	    log_error("can't for gatherer process: %s\n", strerror(errno));
-	    return -1;
-	}
-	if( !gatherer_pid ) {
-	    start_gatherer( pipedes[1] );
-	    /* oops, can't happen */
-	    return -1;
-	}
+    /* Make sure we are not setuid. */
+    if ( getuid() != geteuid() )
+        BUG();
+    /* time to start the gatherer process */
+    if( pipe( pipedes ) ) {
+        log_error("pipe() failed: %s\n", strerror(errno));
+        return -1;
+    }
+    gatherer_pid = fork();
+    if( gatherer_pid == -1 ) {
+        log_error("can't for gatherer process: %s\n", strerror(errno));
+        return -1;
+    }
+    if( !gatherer_pid ) {
+        start_gatherer( pipedes[1] );
+        /* oops, can't happen */
+        return -1;
+    }
     }
 
     /* now read from the gatherer */
     while( length ) {
-	int goodness;
-	ulong subtract;
+    int goodness;
+    ulong subtract;
 
-	if( read_a_msg( pipedes[0], &msg ) ) {
-	    log_error("reading from gatherer pipe failed: %s\n",
-							    strerror(errno));
-	    return -1;
-	}
+    if( read_a_msg( pipedes[0], &msg ) ) {
+        log_error("reading from gatherer pipe failed: %s\n",
+                                strerror(errno));
+        return -1;
+    }
 
 
-	if( level > 1 ) {
-	    if( msg.usefulness > 30 )
-		goodness = 100;
-	    else if ( msg.usefulness )
-		goodness = msg.usefulness * 100 / 30;
-	    else
-		goodness = 0;
-	}
-	else if( level ) {
-	    if( msg.usefulness > 15 )
-		goodness = 100;
-	    else if ( msg.usefulness )
-		goodness = msg.usefulness * 100 / 15;
-	    else
-		goodness = 0;
-	}
-	else
-	    goodness = 100; /* goodness of level 0 is always 100 % */
+    if( level > 1 ) {
+        if( msg.usefulness > 30 )
+        goodness = 100;
+        else if ( msg.usefulness )
+        goodness = msg.usefulness * 100 / 30;
+        else
+        goodness = 0;
+    }
+    else if( level ) {
+        if( msg.usefulness > 15 )
+        goodness = 100;
+        else if ( msg.usefulness )
+        goodness = msg.usefulness * 100 / 15;
+        else
+        goodness = 0;
+    }
+    else
+        goodness = 100; /* goodness of level 0 is always 100 % */
 
-	n = msg.ndata;
-	if( n > length )
-	    n = length;
-	(*add)( msg.data, n, origin );
+    n = msg.ndata;
+    if( n > length )
+        n = length;
+    (*add)( msg.data, n, origin );
 
-	/* this is the trick how we cope with the goodness */
-	subtract = (ulong)n * goodness / 100;
-	/* subtract at least 1 byte to avoid infinite loops */
-	length -= subtract ? subtract : 1;
+    /* this is the trick how we cope with the goodness */
+    subtract = (ulong)n * goodness / 100;
+    /* subtract at least 1 byte to avoid infinite loops */
+    length -= subtract ? subtract : 1;
     }
 
     return 0;

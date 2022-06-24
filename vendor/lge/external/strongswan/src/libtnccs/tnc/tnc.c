@@ -26,6 +26,12 @@
 #include <utils/lexparser.h>
 #include <utils/debug.h>
 
+#ifdef WIN32
+# define DEFAULT_TNC_CONFIG "tnc_config"
+#else
+# define DEFAULT_TNC_CONFIG "/etc/tnc_config"
+#endif
+
 typedef struct private_tnc_t private_tnc_t;
 
 typedef tnccs_manager_t *(*tnc_create_tnccs_manager_t)(void);
@@ -47,6 +53,13 @@ struct private_tnc_t {
 	 */
 	refcount_t ref;
 };
+
+/**
+ * Register plugins if built statically
+ */
+#ifdef STATIC_PLUGIN_CONSTRUCTORS
+#include "plugin_constructors.c"
+#endif
 
 /**
  * Single instance of tnc_t.
@@ -251,7 +264,7 @@ bool tnc_manager_register(plugin_t *plugin, plugin_feature_t *feature,
 		{
 			load_imcvs_from_config(
 						lib->settings->get_str(lib->settings,
-								"%s.tnc.tnc_config", "/etc/tnc_config", lib->ns),
+							"%s.tnc.tnc_config", DEFAULT_TNC_CONFIG, lib->ns),
 						is_imc);
 		}
 	}

@@ -1,9 +1,9 @@
 /*
- * Copyright (C) 2006-2013 Tobias Brunner
+ * Copyright (C) 2006-2018 Tobias Brunner
  * Copyright (C) 2006 Daniel Roethlisberger
  * Copyright (C) 2005-2009 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,6 +16,28 @@
  * for more details.
  */
 
+/*
+ * Copyright (c) 2014 Volker Rümelin
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
 #include <string.h>
 #include <sys/stat.h>
 #include <errno.h>
@@ -24,7 +46,6 @@
 #include "ike_sa.h"
 
 #include <library.h>
-#include <hydra.h>
 #include <daemon.h>
 #include <collections/array.h>
 #include <utils/lexparser.h>
@@ -37,6 +58,7 @@
 #include <sa/ikev2/tasks/ike_auth_lifetime.h>
 #include <sa/ikev2/tasks/ike_reauth_complete.h>
 #include <sa/ikev2/tasks/ike_redirect.h>
+#include <credentials/sets/auth_cfg_wrapper.h>
 
 #ifdef ME
 #include <sa/ikev2/tasks/ike_me.h>
@@ -61,6 +83,7 @@ ENUM(ike_sa_state_names, IKE_CREATED, IKE_DESTROYING,
 	"ESTABLISHED",
 	"PASSIVE",
 	"REKEYING",
+	"REKEYED",
 	"DELETING",
 	"DESTROYING",
 );
@@ -91,7 +114,7 @@ struct private_ike_sa_t {
 	/**
 	 * unique numerical ID for this IKE_SA.
 	 */
-	u_int32_t unique_id;
+	uint32_t unique_id;
 
 	/**
 	 * Current state of the IKE_SA
@@ -244,18 +267,23 @@ struct private_ike_sa_t {
 	/**
 	 * number pending UPDATE_SA_ADDRESS (MOBIKE)
 	 */
-	u_int32_t pending_updates;
+	uint32_t pending_updates;
 
 	/**
 	 * NAT keep alive interval
 	 */
-	u_int32_t keepalive_interval;
+	uint32_t keepalive_interval;
+
+	/**
+	 * The schedueld keep alive job, if any
+	 */
+	send_keepalive_job_t *keepalive_job;
 
 	/**
 	 * interval for retries during initiation (e.g. if DNS resolution failed),
 	 * 0 to disable (default)
 	 */
-	u_int32_t retry_initiate_interval;
+	uint32_t retry_initiate_interval;
 
 	/**
 	 * TRUE if a retry_initiate_job has been queued
@@ -265,12 +293,12 @@ struct private_ike_sa_t {
 	/**
 	 * Timestamps for this IKE_SA
 	 */
-	u_int32_t stats[STAT_MAX];
+	uint32_t stats[STAT_MAX];
 
 	/**
 	 * how many times we have retried so far (keyingtries)
 	 */
-	u_int32_t keyingtry;
+	uint32_t keyingtry;
 
 	/**
 	 * local host address to be used for IKE, set via MIGRATE kernel message
@@ -288,6 +316,11 @@ struct private_ike_sa_t {
 	bool flush_auth_cfg;
 
 	/**
+	 * Maximum length of a single fragment, 0 for address-specific defaults
+	 */
+	size_t fragment_size;
+
+	/**
 	 * Whether to follow IKEv2 redirects
 	 */
 	bool follow_redirects;
@@ -301,10 +334,16 @@ struct private_ike_sa_t {
 	 * Timestamps of redirect attempts to handle loops
 	 */
 	array_t *redirected_at;
-        /**
-	 * Maximum length of a single fragment, 0 for address-specific defaults
-	 */
-	size_t fragment_size;
+
+	//LGP_DATA_IWLAN support_5gs [START]
+	//24.501 9.11.2.8.1: S-NSSAI information element
+	char len_snssai;
+	char sst;
+	char sd[3];
+	char hplmn_sst;
+	char hplmn_sd[3];
+	char plmn_id[3];
+	//LGP_DATA_IWLAN support_5gs [END]
 };
 
 /**
@@ -379,7 +418,7 @@ static bool do_dpd(private_ike_sa_t *this)
 }
 /* 2016-07-05 protocol-iwlan@lge.com LGP_DATA_IWLAN_CONNECTION_SYNC [END] */
 
-METHOD(ike_sa_t, get_unique_id, u_int32_t,
+METHOD(ike_sa_t, get_unique_id, uint32_t,
 	private_ike_sa_t *this)
 {
 	return this->unique_id;
@@ -395,7 +434,7 @@ METHOD(ike_sa_t, get_name, char*,
 	return "(unnamed)";
 }
 
-METHOD(ike_sa_t, get_statistic, u_int32_t,
+METHOD(ike_sa_t, get_statistic, uint32_t,
 	private_ike_sa_t *this, statistic_t kind)
 {
 	if (kind < STAT_MAX)
@@ -406,7 +445,7 @@ METHOD(ike_sa_t, get_statistic, u_int32_t,
 }
 
 METHOD(ike_sa_t, set_statistic, void,
-	private_ike_sa_t *this, statistic_t kind, u_int32_t value)
+	private_ike_sa_t *this, statistic_t kind, uint32_t value)
 {
 	if (kind < STAT_MAX)
 	{
@@ -464,6 +503,9 @@ METHOD(ike_sa_t, set_peer_cfg, void,
 		this->ike_cfg = peer_cfg->get_ike_cfg(peer_cfg);
 		this->ike_cfg->get_ref(this->ike_cfg);
 	}
+	/* 2019-11-06 lgsi-epdg-data@lge.com LGP_DATA_IWLAN [START] */
+	this->task_manager->initialize_retrans_prop(this->task_manager);
+	/* 2019-11-06 lgsi-epdg-data@lge.com LGP_DATA_IWLAN [END] */
 }
 
 METHOD(ike_sa_t, get_auth_cfg, auth_cfg_t*,
@@ -519,6 +561,113 @@ static void flush_auth_cfgs(private_ike_sa_t *this)
 	}
 }
 
+METHOD(ike_sa_t, verify_peer_certificate, bool,
+	private_ike_sa_t *this)
+{
+	enumerator_t *e1, *e2, *certs;
+	auth_cfg_t *cfg, *cfg_done;
+	certificate_t *peer, *cert;
+	public_key_t *key;
+	auth_cfg_t *auth;
+	auth_cfg_wrapper_t *wrapper;
+	time_t not_before, not_after;
+	bool valid = TRUE, found;
+
+	if (this->state != IKE_ESTABLISHED)
+	{
+		DBG1(DBG_IKE, "unable to verify peer certificate in state %N",
+			 ike_sa_state_names, this->state);
+		return FALSE;
+	}
+
+	if (!this->flush_auth_cfg &&
+		lib->settings->get_bool(lib->settings,
+								"%s.flush_auth_cfg", FALSE, lib->ns))
+	{	/* we can do this check only once if auth configs are flushed */
+		DBG1(DBG_IKE, "unable to verify peer certificate as authentication "
+			 "information has been flushed");
+		return FALSE;
+	}
+	this->public.set_condition(&this->public, COND_ONLINE_VALIDATION_SUSPENDED,
+							   FALSE);
+
+	e1 = this->peer_cfg->create_auth_cfg_enumerator(this->peer_cfg, FALSE);
+	e2 = array_create_enumerator(this->other_auths);
+	while (e1->enumerate(e1, &cfg))
+	{
+		if (!e2->enumerate(e2, &cfg_done))
+		{	/* this should not happen as the authentication should never have
+			 * succeeded */
+			valid = FALSE;
+			break;
+		}
+		if ((uintptr_t)cfg_done->get(cfg_done,
+									 AUTH_RULE_AUTH_CLASS) != AUTH_CLASS_PUBKEY)
+		{
+			continue;
+		}
+		peer = cfg_done->get(cfg_done, AUTH_RULE_SUBJECT_CERT);
+		if (!peer)
+		{
+			DBG1(DBG_IKE, "no subject certificate found, skipping certificate "
+				 "verification");
+			continue;
+		}
+		if (!peer->get_validity(peer, NULL, &not_before, &not_after))
+		{
+			DBG1(DBG_IKE, "peer certificate invalid (valid from %T to %T)",
+				 &not_before, FALSE, &not_after, FALSE);
+			valid = FALSE;
+			break;
+		}
+		key = peer->get_public_key(peer);
+		if (!key)
+		{
+			DBG1(DBG_IKE, "unable to retrieve public key, skipping certificate "
+				 "verification");
+			continue;
+		}
+		DBG1(DBG_IKE, "verifying peer certificate");
+		/* serve received certificates */
+		wrapper = auth_cfg_wrapper_create(cfg_done);
+		lib->credmgr->add_local_set(lib->credmgr, &wrapper->set, FALSE);
+		certs = lib->credmgr->create_trusted_enumerator(lib->credmgr,
+							key->get_type(key), peer->get_subject(peer), TRUE);
+		key->destroy(key);
+
+		found = FALSE;
+		while (certs->enumerate(certs, &cert, &auth))
+		{
+			if (peer->equals(peer, cert))
+			{
+				cfg_done->add(cfg_done, AUTH_RULE_CERT_VALIDATION_SUSPENDED,
+							  FALSE);
+				cfg_done->merge(cfg_done, auth, FALSE);
+				valid = cfg_done->complies(cfg_done, cfg, TRUE);
+				found = TRUE;
+				break;
+			}
+		}
+		certs->destroy(certs);
+		lib->credmgr->remove_local_set(lib->credmgr, &wrapper->set);
+		wrapper->destroy(wrapper);
+		if (!found || !valid)
+		{
+			valid = FALSE;
+			break;
+		}
+	}
+	e1->destroy(e1);
+	e2->destroy(e2);
+
+	if (this->flush_auth_cfg)
+	{
+		this->flush_auth_cfg = FALSE;
+		flush_auth_cfgs(this);
+	}
+	return valid;
+}
+
 METHOD(ike_sa_t, get_proposal, proposal_t*,
 	private_ike_sa_t *this)
 {
@@ -533,7 +682,7 @@ METHOD(ike_sa_t, set_proposal, void,
 }
 
 METHOD(ike_sa_t, set_message_id, void,
-	private_ike_sa_t *this, bool initiate, u_int32_t mid)
+	private_ike_sa_t *this, bool initiate, uint32_t mid)
 {
 	if (initiate)
 	{
@@ -545,33 +694,72 @@ METHOD(ike_sa_t, set_message_id, void,
 	}
 }
 
-METHOD(ike_sa_t, send_keepalive, void,
-	private_ike_sa_t *this)
+METHOD(ike_sa_t, get_message_id, uint32_t,
+	private_ike_sa_t *this, bool initiate)
 {
-	send_keepalive_job_t *job;
+	return this->task_manager->get_mid(this->task_manager, initiate);
+}
+
+METHOD(ike_sa_t, send_keepalive, void,
+	private_ike_sa_t *this, bool scheduled)
+{
 	time_t last_out, now, diff;
-	bool wdrv_keep_alive_enabled;
-
-	wdrv_keep_alive_enabled = get_cust_setting_bool(WIFI_DRIVER_KEEP_ALIVE);
-
-	if (!(this->conditions & COND_NAT_HERE) || this->keepalive_interval == 0 ||
-		this->state == IKE_PASSIVE)
-	{	/* disable keep alives if we are not NATed anymore, or we are passive */
-		if (wdrv_keep_alive_enabled)
-		{	/* Disable NAT keepalive by Wi-Fi driver */
-			set_cust_setting_int(WIFI_DRIVER_KEEP_ALIVE_TIMER, 0);
-		}
+    /* 2019-07-09 protocol-iwlan@lge.com LGP_DATA_IWLAN NATT_OFFLOAD[START] */
+	int st_hw_keepalive = 0;
+    /* 2019-07-09 protocol-iwlan@lge.com LGP_DATA_IWLAN NATT_OFFLOAD[END] */
+	/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
+	int slotid = get_slotid(get_name(this));
+	int keep_timer = get_cust_setting_int_by_slotid(slotid, IKE_KEEP_ALIVE_TIMER);
+	if (keep_timer > -1 && keep_timer != this->keepalive_interval)
+	{
+		DBG1(DBG_IKE, "NATT keepalive timer change to %d", keep_timer);
+		this->keepalive_interval = (u_int32_t)keep_timer;
+	}
+	DBG1(DBG_IKE, "NATT keepalive_internal: %d, conn:%s",this->keepalive_interval, get_name(this));
+	/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
+    /* 2019-07-09 protocol-iwlan@lge.com LGP_DATA_IWLAN NATT_OFFLOAD[START] */
+    if(strstr(get_name(this), "ims") || strstr(get_name(this), "IMS")) {
+        st_hw_keepalive = get_cust_setting_int_by_slotid(slotid, HW_KEEP_ALIVE_STATE);
+        DBG1(DBG_IKE, "NATT keepalive offloading check conn:%s,  hw_keepalive_st:%d", get_name(this), st_hw_keepalive);
+	}
+    /* 2019-07-09 protocol-iwlan@lge.com LGP_DATA_IWLAN NATT_OFFLOAD[END] */
+	if (scheduled)
+	{
+		this->keepalive_job = NULL;
+	}
+	if (!this->keepalive_interval || this->state == IKE_PASSIVE)
+	{	/* keepalives disabled either by configuration or for passive IKE_SAs */
+        /* 2019-07-09 protocol-iwlan@lge.com LGP_DATA_IWLAN NATT_OFFLOAD[START] */
+        if(strstr(get_name(this), "ims") || strstr(get_name(this), "IMS")) {
+            set_cust_setting_int_by_slotid(slotid, SW_KEEP_ALIVE_STATE, -1);
+        }
+        /* 2019-07-09 protocol-iwlan@lge.com LGP_DATA_IWLAN NATT_OFFLOAD[END] */
 		return;
 	}
-
-	if (wdrv_keep_alive_enabled)
+	if (!(this->conditions & COND_NAT_HERE) || (this->conditions & COND_STALE))
+	{	/* disable keepalives if we are not NATed anymore, or the SA is stale */
+        /* 2019-07-09 protocol-iwlan@lge.com LGP_DATA_IWLAN NATT_OFFLOAD[START] */
+        if(strstr(get_name(this), "ims") || strstr(get_name(this), "IMS")) {
+            set_cust_setting_int_by_slotid(slotid, SW_KEEP_ALIVE_STATE, -1);
+        }
+        /* 2019-07-09 protocol-iwlan@lge.com LGP_DATA_IWLAN NATT_OFFLOAD[END] */
+		return;
+	}
+    /* 2019-07-09 protocol-iwlan@lge.com LGP_DATA_IWLAN NATT_OFFLOAD[START] */
+	if (st_hw_keepalive == 1)
 	{	/* NAT keepalive by Wi-Fi driver */
-		set_cust_setting_int(WIFI_DRIVER_KEEP_ALIVE_TIMER, this->keepalive_interval);
-		DBG1(DBG_IKE, "NATT keepalive through Wi-Fi driver is enabled, interval:%d", this->keepalive_interval);
+		set_cust_setting_int_by_slotid(slotid, SW_KEEP_ALIVE_STATE, 0);
+		DBG1(DBG_IKE, "HW NATT keepalive started, interval:%d", this->keepalive_interval);
 		return;
 	}
+    if (!scheduled)
+    {
+        if(strstr(get_name(this), "ims") || strstr(get_name(this), "IMS")) {
+            set_cust_setting_int_by_slotid(slotid, SW_KEEP_ALIVE_STATE, 1);
+        }
+    }
+    /* 2019-07-09 protocol-iwlan@lge.com LGP_DATA_IWLAN NATT_OFFLOAD[END] */
 	DBG1(DBG_IKE, "NATT keepalive through charon is enabled, interval:%d", this->keepalive_interval);
-
 	last_out = get_use_time(this, FALSE);
 	now = time_monotonic(NULL);
 
@@ -593,9 +781,12 @@ METHOD(ike_sa_t, send_keepalive, void,
 		charon->sender->send_no_marker(charon->sender, packet);
 		diff = 0;
 	}
-	job = send_keepalive_job_create(this->ike_sa_id);
-	lib->scheduler->schedule_job(lib->scheduler, (job_t*)job,
-								 this->keepalive_interval - diff);
+	if (!this->keepalive_job)
+	{
+		this->keepalive_job = send_keepalive_job_create(this->ike_sa_id);
+		lib->scheduler->schedule_job(lib->scheduler, (job_t*)this->keepalive_job,
+									 this->keepalive_interval - diff);
+	}
 }
 
 METHOD(ike_sa_t, get_ike_cfg, ike_cfg_t*,
@@ -607,6 +798,7 @@ METHOD(ike_sa_t, get_ike_cfg, ike_cfg_t*,
 METHOD(ike_sa_t, set_ike_cfg, void,
 	private_ike_sa_t *this, ike_cfg_t *ike_cfg)
 {
+	DESTROY_IF(this->ike_cfg);
 	ike_cfg->get_ref(ike_cfg);
 	this->ike_cfg = ike_cfg;
 }
@@ -642,7 +834,7 @@ METHOD(ike_sa_t, set_condition, void,
 				case COND_NAT_HERE:
 					DBG1(DBG_IKE, "local host is behind NAT, sending keep alives");
 					this->conditions |= COND_NAT_ANY;
-					send_keepalive(this);
+					send_keepalive(this, FALSE);
 					break;
 				case COND_NAT_THERE:
 					DBG1(DBG_IKE, "remote host is behind NAT");
@@ -662,12 +854,18 @@ METHOD(ike_sa_t, set_condition, void,
 			switch (condition)
 			{
 				case COND_NAT_HERE:
-				case COND_NAT_FAKE:
 				case COND_NAT_THERE:
+					DBG1(DBG_IKE, "%s host is not behind NAT anymore",
+						 condition == COND_NAT_HERE ? "local" : "remote");
+					/* fall-through */
+				case COND_NAT_FAKE:
 					set_condition(this, COND_NAT_ANY,
 								  has_condition(this, COND_NAT_HERE) ||
 								  has_condition(this, COND_NAT_THERE) ||
 								  has_condition(this, COND_NAT_FAKE));
+					break;
+				case COND_STALE:
+					send_keepalive(this, FALSE);
 					break;
 				default:
 					break;
@@ -686,6 +884,10 @@ METHOD(ike_sa_t, send_dpd, status_t,
 	if (this->state == IKE_PASSIVE)
 	{
 		return INVALID_STATE;
+	}
+	if (this->version == IKEV1 && this->state == IKE_REKEYING)
+	{	/* don't send DPDs for rekeyed IKEv1 SAs */
+		return SUCCESS;
 	}
 	delay = this->peer_cfg->get_dpd(this->peer_cfg);
 	if (this->task_manager->busy(this->task_manager))
@@ -723,6 +925,20 @@ METHOD(ike_sa_t, send_dpd, status_t,
 	}
 	if (task_queued)
 	{
+        /* 2019-07-09 protocol-iwlan@lge.com LGP_DATA_IWLAN NATT_OFFLOAD [START] */
+        /* Check NAT Keep-alive state. If both (HW & SW keep alive state is off state, trigger SW NATT keepalive.*/
+        if(strstr(get_name(this), "ims") || strstr(get_name(this), "IMS")) {
+          int slotid = get_slotid(get_name(this));
+          int st_hwkeepalive = get_cust_setting_int_by_slotid(slotid, HW_KEEP_ALIVE_STATE);
+          int st_swkeepalive = get_cust_setting_int_by_slotid(slotid, SW_KEEP_ALIVE_STATE);
+          DBG1(DBG_IKE, "hw_keepalive_st: %d   sw_keepalive_st: %d  slotid: %d",st_hwkeepalive, st_swkeepalive, slotid);
+          if(st_hwkeepalive == 0 && st_swkeepalive == 0){
+            DBG1(DBG_IKE, "SW & HW NATT keep-alives are both off. trigger SW NAT keep-alive");
+            set_cust_setting_int_by_slotid(slotid, SW_KEEP_ALIVE_STATE, 1);
+            send_keepalive(this,FALSE);
+          }
+        }
+        /* 2019-07-09 protocol-iwlan@lge.com LGP_DATA_IWLAN NATT_OFFLOAD [END] */
 		return this->task_manager->initiate(this->task_manager);
 	}
 	return SUCCESS;
@@ -790,6 +1006,135 @@ METHOD(ike_sa_t, send_dpd_now_per_conn, status_t,
 }
 /* 2016-07-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_DPD_NOW [END] */
 
+/* LGP_DATA_IWLAN support_5gs [START] */
+METHOD(ike_sa_t, set_s_nssai, status_t,
+		private_ike_sa_t *this, chunk_t s_nssai_value)
+{
+           char s_nssai_len = 0;
+           int sst = 0;
+           DBG1(DBG_IKE, "set_s_nssai     data length : %d  ", s_nssai_value.len);
+           if (s_nssai_value.len  < 3) {
+               return INVALID_STATE;
+           }
+           DBG1(DBG_IKE, "set_s_nssai	  s_nssai IEI: %       s_nssai  length : %d  ", s_nssai_value.ptr[0], s_nssai_value.ptr[1]);
+           switch (s_nssai_value.ptr[1]) {
+              case 1:	//SST
+                         DBG1(DBG_IKE, "set_s_nssai  sst : %d  ",  s_nssai_value.ptr[2]);
+		   this->sst =  s_nssai_value.ptr[2];
+           	   break;
+              case 2:	//SST and mapped HPLMN SST
+              	   if(s_nssai_value.len < 7) {
+                            DBG1(DBG_IKE, "set_s_nssai  SST and mapped HPLMN SST case ivalid length : %d  ", s_nssai_value.len);
+                            return INVALID_STATE;
+              	   } else {
+                             this->sst = s_nssai_value.ptr[2];
+                             this->hplmn_sst = s_nssai_value.ptr[6];
+                             DBG1(DBG_IKE, "set_s_nssai  SST and mapped HPLMN SST    sst : %d , hplmn_sst : %d  ", this->sst,  this->hplmn_sst);
+              	   }
+           	   break;
+              case 4: //SST and SD
+                        if (s_nssai_value.len < 6) {
+                            DBG1(DBG_IKE, "set_s_nssai  SST and SD case   ivalid length : %d  ", s_nssai_value.len);
+                            return INVALID_STATE;
+                        } else {
+                            this->sst = s_nssai_value.ptr[2];
+                            this->sd[0] = s_nssai_value.ptr[5];
+                            this->sd[1] = s_nssai_value.ptr[4];
+                            this->sd[2] = s_nssai_value.ptr[3];
+                        }
+           	   break;
+              case 5: //SST, SD and mapped HPLMN SST
+                        if(s_nssai_value.len < 7) {
+                            DBG1(DBG_IKE, "set_s_nssai  SST, SD and mapped HPLMN SST case ivalid length : %d  ", s_nssai_value.len);
+                            return INVALID_STATE;
+                        } else {
+                            this->sst = s_nssai_value.ptr[2];
+                            this->sd[0] = s_nssai_value.ptr[5];
+                            this->sd[1] = s_nssai_value.ptr[4];
+                            this->sd[2] = s_nssai_value.ptr[3];
+                            this->hplmn_sst = s_nssai_value.ptr[6];
+                            DBG1(DBG_IKE, "set_s_nssai  SST, SD and mapped HPLMN SST	sst : %d , hplmn_sst : %d  ", this->sst,  this->hplmn_sst);
+                            DBG1(DBG_IKE, "set_s_nssai  SST, SD and mapped HPLMN SST	sd    [0] %d,   [1] %d,   [2] %d ", this->sd[0],  this->sd[1], this->sd[2]);
+                        }
+                        break;
+              case 8: //SST, SD, mapped HPLMN SST and mapped HPLMN SD
+                       if(s_nssai_value.len < 10) {
+                            DBG1(DBG_IKE, "set_s_nssai  SST, SD, mapped HPLMN SST and mapped HPLMN SD case ivalid length : %d  ", s_nssai_value.len);
+                            return INVALID_STATE;
+                        } else {
+                            this->sst = s_nssai_value.ptr[2];
+                            this->sd[0] = s_nssai_value.ptr[5];
+                            this->sd[1] = s_nssai_value.ptr[4];
+                            this->sd[2] = s_nssai_value.ptr[3];
+                            this->hplmn_sst = s_nssai_value.ptr[6];
+                            this->hplmn_sd[0] = s_nssai_value.ptr[9];
+                            this->hplmn_sd[1] = s_nssai_value.ptr[8];
+                            this->hplmn_sd[2] = s_nssai_value.ptr[7];
+                            DBG1(DBG_IKE, "set_s_nssai  SST, SD and mapped HPLMN SST	sst : %d , hplmn_sst : %d  ", this->sst,  this->hplmn_sst);
+                            DBG1(DBG_IKE, "set_s_nssai  SST, SD and mapped HPLMN SST	sd    [0] %d,   [1] %d,   [2] %d ", this->sd[0],  this->sd[1], this->sd[2]);
+                            DBG1(DBG_IKE, "set_s_nssai  SST, SD and mapped HPLMN SST	hplmn_sd    [0] %d,   [1] %d,   [2] %d ", this->hplmn_sd[0],  this->hplmn_sd[1], this->hplmn_sd[2]);
+                        }
+                        break;
+              default:
+                        DBG1(DBG_IKE, "set_s_nssai not supported s-nssai length value. %d", s_nssai_value.ptr[2]);
+           	   return INVALID_STATE;
+           }
+          this->len_snssai = s_nssai_value.ptr[1];
+	return SUCCESS;
+}
+
+METHOD(ike_sa_t, get_s_nssai, status_t,
+		private_ike_sa_t *this, char* s_nssai_value)
+{
+        int i =0;
+        if (s_nssai_value == NULL || this->len_snssai == 0) {
+            DBG1(DBG_IKE, "get_s_nssai   s_nssai_value is NULL or length of s-nssai is 0");
+            return INVALID_STATE;
+        } else {
+            s_nssai_value[0] = this->len_snssai;
+            s_nssai_value[1] = this->sst;
+            s_nssai_value[2] = this->sd[0];
+            s_nssai_value[3] = this->sd[1];
+            s_nssai_value[4] = this->sd[2];
+            s_nssai_value[5] = this->hplmn_sst;
+            s_nssai_value[6] = this->hplmn_sd[0];
+            s_nssai_value[7] = this->hplmn_sd[1];
+            s_nssai_value[8] = this->hplmn_sd[2];
+        }
+        return SUCCESS;
+}
+
+METHOD(ike_sa_t, set_plmn_id, status_t,
+		private_ike_sa_t *this, chunk_t plmn_id)
+{
+           DBG1(DBG_IKE, "set_plmn_id     data length : %d  ", plmn_id.len);
+           if (plmn_id.len  != 3) {
+               return INVALID_STATE;
+           }
+	this->plmn_id[0] = plmn_id.ptr[2];
+	this->plmn_id[1] = plmn_id.ptr[1];
+	this->plmn_id[2] = plmn_id.ptr[0];
+	DBG1(DBG_IKE, "set_s_nssai  SST, SD and mapped HPLMN SST	sd    [0] %d,   [1] %d,   [2] %d ", this->plmn_id[0],  this->plmn_id[1], this->plmn_id[2]);
+	return SUCCESS;
+}
+
+METHOD(ike_sa_t, get_plmn_id, status_t,
+		private_ike_sa_t *this, char* plmn_id)
+{
+        int i =0;
+        if (plmn_id == NULL) {
+            DBG1(DBG_IKE, "get_plmn_id   plmn_id pointer  is NULL ");
+            return INVALID_STATE;
+        } else {
+            plmn_id[0] = this->plmn_id[0];
+            plmn_id[1] = this->plmn_id[1];
+            plmn_id[2] = this->plmn_id[2];
+        }
+        return SUCCESS;
+}
+
+/* LGP_DATA_IWLAN support_5gs [END] */
+
 METHOD(ike_sa_t, get_state, ike_sa_state_t,
 	private_ike_sa_t *this)
 {
@@ -814,7 +1159,7 @@ METHOD(ike_sa_t, set_state, void,
 				this->state == IKE_PASSIVE)
 			{
 				job_t *job;
-				u_int32_t t;
+				uint32_t t;
 
 				/* calculate rekey, reauth and lifetime */
 				this->stats[STAT_ESTABLISHED] = time_monotonic(NULL);
@@ -898,14 +1243,20 @@ METHOD(ike_sa_t, set_state, void,
 	}
 	if (keepalives)
 	{
-		send_keepalive(this);
+		send_keepalive(this, FALSE);
 	}
 }
 
 METHOD(ike_sa_t, reset, void,
-	private_ike_sa_t *this)
+	private_ike_sa_t *this, bool new_spi)
 {
-	/*  the responder ID is reset, as peer may choose another one */
+	/* reset the initiator SPI if requested */
+	if (new_spi)
+	{
+		charon->ike_sa_manager->new_initiator_spi(charon->ike_sa_manager,
+												  &this->public);
+	}
+	/* the responder ID is reset, as peer may choose another one */
 	if (this->ike_sa_id->is_initiator(this->ike_sa_id))
 	{
 		this->ike_sa_id->set_responder_spi(this->ike_sa_id, 0);
@@ -920,6 +1271,7 @@ METHOD(ike_sa_t, reset, void,
 							this->ike_sa_id->is_initiator(this->ike_sa_id));
 
 	this->task_manager->reset(this->task_manager, 0, 0);
+	this->task_manager->queue_ike(this->task_manager);
 }
 
 METHOD(ike_sa_t, get_keymat, keymat_t*,
@@ -955,22 +1307,14 @@ METHOD(ike_sa_t, add_virtual_ip, void,
 	{
 		char *iface;
 
-		iface = this->ike_cfg->get_vif(this->ike_cfg);
+        iface = this->ike_cfg->get_vif(this->ike_cfg);
 
-		if (iface || hydra->kernel_interface->get_interface(hydra->kernel_interface, this->my_host, &iface))
+		if (iface || charon->kernel->get_interface(charon->kernel, this->my_host,
+										  &iface))
 		{
-			//	if vip in my_vips, did not remove it
-			if (hostarray_find(this->my_vips, ip))
-			{
-				DBG1(DBG_IKE, "%H Already in local virtual IPs", ip);
-			}
-			else if (ip->get_netbits(ip) &&
-					hydra->kernel_interface->add_ip(hydra->kernel_interface, ip, ip->get_netbits(ip), iface) == SUCCESS)
-			{
-				array_insert_create(&this->my_vips, ARRAY_TAIL, ip->clone(ip));
-			}
-			else if (hydra->kernel_interface->add_ip(hydra->kernel_interface, 
-													ip, -1, iface) == SUCCESS)
+			DBG1(DBG_IKE, "installing new virtual IP %H", ip);
+			if (charon->kernel->add_ip(charon->kernel, ip, -1,
+									   iface) == SUCCESS)
 			{
 				array_insert_create(&this->my_vips, ARRAY_TAIL, ip->clone(ip));
 			}
@@ -1002,30 +1346,28 @@ METHOD(ike_sa_t, clear_virtual_ips, void,
 {
 	array_t *vips;
 	host_t *vip;
-	char *iface;
+    char *iface;
 
 	vips = local ? this->my_vips : this->other_vips;
 	if (!local && array_count(vips))
 	{
 		charon->bus->assign_vips(charon->bus, &this->public, FALSE);
 	}
-
 	iface = this->ike_cfg->get_vif(this->ike_cfg);
-	if (iface || hydra->kernel_interface->get_interface(hydra->kernel_interface, this->my_host, &iface))
+	if (iface || charon->kernel->get_interface(charon->kernel, this->my_host, &iface))
 	{
 		DBG1(DBG_IKE, "clear virtual IPs on Interface %s", iface);
 	}
-
 	while (array_remove(vips, ARRAY_HEAD, &vip))
 	{
 		if (local)
 		{
-			hydra->kernel_interface->del_ip(hydra->kernel_interface,
-											vip, -1, TRUE);
+			charon->kernel->del_ip(charon->kernel, vip, -1, TRUE);
 		}
 		vip->destroy(vip);
 	}
 }
+
 
 METHOD(ike_sa_t, clear_virtual_ips2, void,
 	private_ike_sa_t *this, bool local, linked_list_t *new_vips)
@@ -1041,7 +1383,7 @@ METHOD(ike_sa_t, clear_virtual_ips2, void,
 	}
 
 	iface = this->ike_cfg->get_vif(this->ike_cfg);
-	if (iface || hydra->kernel_interface->get_interface(hydra->kernel_interface, this->my_host, &iface))
+	if (iface || charon->kernel->get_interface(charon->kernel, this->my_host, &iface))
 	{
 		DBG1(DBG_IKE, "clear virtual IPs on Interface %s", iface);
 	}
@@ -1057,7 +1399,7 @@ METHOD(ike_sa_t, clear_virtual_ips2, void,
 			}
 			else
 			{
-				hydra->kernel_interface->del_ip(hydra->kernel_interface, vip, -1, TRUE);
+				charon->kernel->del_ip(charon->kernel, vip, -1, TRUE);
 			}
 		}
 		vip->destroy(vip);
@@ -1072,7 +1414,6 @@ METHOD(ike_sa_t, clear_virtual_ips2, void,
 		array_destroy(keep_vips);
 	}
 }
-
 
 METHOD(ike_sa_t, create_virtual_ip_enumerator, enumerator_t*,
 	private_ike_sa_t *this, bool local)
@@ -1112,7 +1453,7 @@ METHOD(ike_sa_t, add_pcscf, void, private_ike_sa_t *this, host_t *ip)
 
 METHOD(ike_sa_t, set_imei, void, private_ike_sa_t *this, const char *imei)
 {
-	this->imei = strdupnull(imei);
+    this->imei = strdupnull(imei);
 }
 METHOD(ike_sa_t, clear_pcscfs, void, private_ike_sa_t *this)
 {
@@ -1126,7 +1467,7 @@ METHOD(ike_sa_t, clear_pcscfs, void, private_ike_sa_t *this)
 
 METHOD(ike_sa_t, unset_imei, void, private_ike_sa_t *this)
 {
-	free(this->imei);
+    free(this->imei);
 }
 
 METHOD(ike_sa_t, create_pcscf_enumerator, enumerator_t*, private_ike_sa_t *this)
@@ -1215,31 +1556,21 @@ METHOD(ike_sa_t, has_mapping_changed, bool,
 	return TRUE;
 }
 
-METHOD(ike_sa_t, set_pending_updates, void,
-	private_ike_sa_t *this, u_int32_t updates)
-{
-	this->pending_updates = updates;
-}
-
-METHOD(ike_sa_t, get_pending_updates, u_int32_t,
-	private_ike_sa_t *this)
-{
-	return this->pending_updates;
-}
-
 METHOD(ike_sa_t, float_ports, void,
 	   private_ike_sa_t *this)
 {
-	/* do not switch if we have a custom port from MOBIKE/NAT */
+	/* even if the remote port is not 500 (e.g. because the response was natted)
+	 * we switch the remote port if we used port 500 */
+	if (this->other_host->get_port(this->other_host) == IKEV2_UDP_PORT ||
+		this->my_host->get_port(this->my_host) == IKEV2_UDP_PORT)
+	{
+		this->other_host->set_port(this->other_host, IKEV2_NATT_PORT);
+	}
 	if (this->my_host->get_port(this->my_host) ==
 			charon->socket->get_port(charon->socket, FALSE))
 	{
 		this->my_host->set_port(this->my_host,
 								charon->socket->get_port(charon->socket, TRUE));
-	}
-	if (this->other_host->get_port(this->other_host) == IKEV2_UDP_PORT)
-	{
-		this->other_host->set_port(this->other_host, IKEV2_NATT_PORT);
 	}
 }
 
@@ -1270,16 +1601,21 @@ METHOD(ike_sa_t, update_hosts, void,
 		/* update our address in any case */
 		if (force && !me->equals(me, this->my_host))
 		{
+			charon->bus->ike_update(charon->bus, &this->public, TRUE, me);
 			set_my_host(this, me->clone(me));
 			update = TRUE;
 		}
 
-		if (!other->equals(other, this->other_host))
+		if (!other->equals(other, this->other_host) &&
+			(force || has_condition(this, COND_NAT_THERE)))
 		{
-			/* update others address if we are NOT NATed */
-			if ((has_condition(this, COND_NAT_THERE) &&
-				 !has_condition(this, COND_NAT_HERE)) || force )
+			/* only update other's address if we are behind a static NAT,
+			 * which we assume is the case if we are not initiator */
+			if (force ||
+				(!has_condition(this, COND_NAT_HERE) ||
+				 !has_condition(this, COND_ORIGINAL_INITIATOR)))
 			{
+				charon->bus->ike_update(charon->bus, &this->public, FALSE, other);
 				set_other_host(this, other->clone(other));
 				update = TRUE;
 			}
@@ -1299,6 +1635,10 @@ METHOD(ike_sa_t, update_hosts, void,
 		enumerator = array_create_enumerator(this->child_sas);
 		while (enumerator->enumerate(enumerator, &child_sa))
 		{
+			charon->child_sa_manager->remove(charon->child_sa_manager, child_sa);
+			charon->child_sa_manager->add(charon->child_sa_manager,
+										  child_sa, &this->public);
+
 			if (child_sa->update(child_sa, this->my_host, this->other_host,
 					vips, has_condition(this, COND_NAT_ANY)) == NOT_SUPPORTED)
 			{
@@ -1306,6 +1646,7 @@ METHOD(ike_sa_t, update_hosts, void,
 						child_sa->get_protocol(child_sa),
 						child_sa->get_spi(child_sa, TRUE));
 			}
+
 		}
 		enumerator->destroy(enumerator);
 
@@ -1369,12 +1710,20 @@ METHOD(ike_sa_t, generate_message, status_t,
 	return status;
 }
 
-static bool filter_fragments(private_ike_sa_t *this, packet_t **fragment,
-							 packet_t **packet)
+CALLBACK(filter_fragments, bool,
+	private_ike_sa_t *this, enumerator_t *orig, va_list args)
 {
-	*packet = (*fragment)->clone(*fragment);
-	set_dscp(this, *packet);
-	return TRUE;
+	packet_t *fragment, **packet;
+
+	VA_ARGS_VGET(args, packet);
+
+	if (orig->enumerate(orig, &fragment))
+	{
+		*packet = fragment->clone(fragment);
+		set_dscp(this, *packet);
+		return TRUE;
+	}
+	return FALSE;
 }
 
 METHOD(ike_sa_t, generate_message_fragmented, status_t,
@@ -1384,6 +1733,7 @@ METHOD(ike_sa_t, generate_message_fragmented, status_t,
 	packet_t *packet;
 	status_t status;
 	bool use_frags = FALSE;
+	bool pre_generated = FALSE;
 
 	if (this->ike_cfg)
 	{
@@ -1400,7 +1750,7 @@ METHOD(ike_sa_t, generate_message_fragmented, status_t,
 					/* It seems Windows 7 and 8 peers only accept proprietary
 					 * fragmented messages if they expect certificates. */
 					use_frags = message->get_payload(message,
-													 CERTIFICATE_V1) != NULL;
+													 PLV1_CERTIFICATE) != NULL;
 				}
 				break;
 			default:
@@ -1418,15 +1768,22 @@ METHOD(ike_sa_t, generate_message_fragmented, status_t,
 		return SUCCESS;
 	}
 
+	pre_generated = message->is_encoded(message);
 	this->stats[STAT_OUTBOUND] = time_monotonic(NULL);
 	message->set_ike_sa_id(message, this->ike_sa_id);
-	charon->bus->message(charon->bus, message, FALSE, TRUE);
+	if (!pre_generated)
+	{
+		charon->bus->message(charon->bus, message, FALSE, TRUE);
+	}
 	status = message->fragment(message, this->keymat, this->fragment_size,
 							   &fragments);
 	if (status == SUCCESS)
 	{
-		charon->bus->message(charon->bus, message, FALSE, FALSE);
-		*packets = enumerator_create_filter(fragments, (void*)filter_fragments,
+		if (!pre_generated)
+		{
+			charon->bus->message(charon->bus, message, FALSE, FALSE);
+		}
+		*packets = enumerator_create_filter(fragments, filter_fragments,
 											this, NULL);
 	}
 	return status;
@@ -1594,8 +1951,8 @@ static void resolve_hosts(private_ike_sa_t *this)
 			!this->other_host->is_anyaddr(this->other_host))
 		{
 			host->destroy(host);
-			host = hydra->kernel_interface->get_source_addr(
-							hydra->kernel_interface, this->other_host, NULL);
+			host = charon->kernel->get_source_addr(charon->kernel,
+												   this->other_host, NULL);
 			if (host)
 			{
 				host->set_port(host, this->ike_cfg->get_my_port(this->ike_cfg));
@@ -1613,7 +1970,7 @@ static void resolve_hosts(private_ike_sa_t *this)
 }
 
 METHOD(ike_sa_t, initiate, status_t,
-	private_ike_sa_t *this, child_cfg_t *child_cfg, u_int32_t reqid,
+	private_ike_sa_t *this, child_cfg_t *child_cfg, uint32_t reqid,
 	traffic_selector_t *tsi, traffic_selector_t *tsr)
 {
 	bool defer_initiate = FALSE;
@@ -1730,9 +2087,14 @@ METHOD(ike_sa_t, process_message, status_t,
 	status = this->task_manager->process_message(this->task_manager, message);
 	if (this->flush_auth_cfg && this->state == IKE_ESTABLISHED)
 	{
-		/* authentication completed */
-		this->flush_auth_cfg = FALSE;
-		flush_auth_cfgs(this);
+		/* authentication completed but if the online validation is suspended we
+		 * need the auth cfgs until we did the delayed verification, we flush
+		 * them afterwards */
+		if (!has_condition(this, COND_ONLINE_VALIDATION_SUSPENDED))
+		{
+			this->flush_auth_cfg = FALSE;
+			flush_auth_cfgs(this);
+		}
 	}
 	return status;
 }
@@ -1813,10 +2175,12 @@ METHOD(ike_sa_t, add_child_sa, void,
 	private_ike_sa_t *this, child_sa_t *child_sa)
 {
 	array_insert_create(&this->child_sas, ARRAY_TAIL, child_sa);
+	charon->child_sa_manager->add(charon->child_sa_manager,
+								  child_sa, &this->public);
 }
 
 METHOD(ike_sa_t, get_child_sa, child_sa_t*,
-	private_ike_sa_t *this, protocol_id_t protocol, u_int32_t spi, bool inbound)
+	private_ike_sa_t *this, protocol_id_t protocol, uint32_t spi, bool inbound)
 {
 	enumerator_t *enumerator;
 	child_sa_t *current, *found = NULL;
@@ -1853,8 +2217,11 @@ typedef struct {
 } child_enumerator_t;
 
 METHOD(enumerator_t, child_enumerate, bool,
-	child_enumerator_t *this, child_sa_t **child_sa)
+	child_enumerator_t *this, va_list args)
 {
+	child_sa_t **child_sa;
+
+	VA_ARGS_VGET(args, child_sa);
 	if (this->inner->enumerate(this->inner, &this->current))
 	{
 		*child_sa = this->current;
@@ -1877,7 +2244,8 @@ METHOD(ike_sa_t, create_child_sa_enumerator, enumerator_t*,
 
 	INIT(enumerator,
 		.public = {
-			.enumerate = (void*)_child_enumerate,
+			.enumerate = enumerator_enumerate_default,
+			.venumerate = _child_enumerate,
 			.destroy = _child_enumerator_destroy,
 		},
 		.inner = array_create_enumerator(this->child_sas),
@@ -1890,15 +2258,15 @@ METHOD(ike_sa_t, remove_child_sa, void,
 {
 	child_enumerator_t *ce = (child_enumerator_t*)enumerator;
 
+	charon->child_sa_manager->remove(charon->child_sa_manager, ce->current);
 	array_remove_at(this->child_sas, ce->inner);
 }
 
 METHOD(ike_sa_t, rekey_child_sa, status_t,
-	private_ike_sa_t *this, protocol_id_t protocol, u_int32_t spi)
+	private_ike_sa_t *this, protocol_id_t protocol, uint32_t spi)
 {
 	status_t status;
 	int slotid = 0;
-
 	if (this->state == IKE_PASSIVE)
 	{
 		return INVALID_STATE;
@@ -1925,7 +2293,7 @@ METHOD(ike_sa_t, rekey_child_sa, status_t,
 }
 
 METHOD(ike_sa_t, delete_child_sa, status_t,
-	private_ike_sa_t *this, protocol_id_t protocol, u_int32_t spi, bool expired)
+	private_ike_sa_t *this, protocol_id_t protocol, uint32_t spi, bool expired)
 {
 	if (this->state == IKE_PASSIVE)
 	{
@@ -1937,7 +2305,7 @@ METHOD(ike_sa_t, delete_child_sa, status_t,
 }
 
 METHOD(ike_sa_t, destroy_child_sa, status_t,
-	private_ike_sa_t *this, protocol_id_t protocol, u_int32_t spi)
+	private_ike_sa_t *this, protocol_id_t protocol, uint32_t spi)
 {
 	enumerator_t *enumerator;
 	child_sa_t *child_sa;
@@ -1960,36 +2328,53 @@ METHOD(ike_sa_t, destroy_child_sa, status_t,
 }
 
 METHOD(ike_sa_t, delete_, status_t,
-	private_ike_sa_t *this)
+	private_ike_sa_t *this, bool force)
 {
+	status_t status = DESTROY_ME;
+
 	switch (this->state)
 	{
-		case IKE_REKEYING:
-			if (this->version == IKEV1)
-			{	/* SA has been reauthenticated, delete */
-				charon->bus->ike_updown(charon->bus, &this->public, FALSE);
-				break;
-			}
-			/* FALL */
 		case IKE_ESTABLISHED:
-			if (time_monotonic(NULL) >= this->stats[STAT_DELETE])
-			{	/* IKE_SA hard lifetime hit */
+		case IKE_REKEYING:
+			if (time_monotonic(NULL) >= this->stats[STAT_DELETE] &&
+				!(this->version == IKEV1 && this->state == IKE_REKEYING))
+			{	/* IKE_SA hard lifetime hit, ignored for reauthenticated
+				 * IKEv1 SAs */
 				charon->bus->alert(charon->bus, ALERT_IKE_SA_EXPIRED);
 			}
 			this->task_manager->queue_ike_delete(this->task_manager);
-			return this->task_manager->initiate(this->task_manager);
+			status = this->task_manager->initiate(this->task_manager);
+			break;
 		case IKE_CREATED:
 			DBG1(DBG_IKE, "deleting unestablished IKE_SA");
 			break;
 		case IKE_PASSIVE:
 			break;
 		default:
-			DBG1(DBG_IKE, "destroying IKE_SA in state %N "
-				"without notification", ike_sa_state_names, this->state);
-			charon->bus->ike_updown(charon->bus, &this->public, FALSE);
+			DBG1(DBG_IKE, "destroying IKE_SA in state %N without notification",
+				 ike_sa_state_names, this->state);
+			force = TRUE;
 			break;
 	}
-	return DESTROY_ME;
+
+	if (force)
+	{
+		status = DESTROY_ME;
+
+		if (this->version == IKEV2)
+		{	/* for IKEv1 we trigger this in the ISAKMP delete task */
+			switch (this->state)
+			{
+				case IKE_ESTABLISHED:
+				case IKE_REKEYING:
+				case IKE_DELETING:
+					charon->bus->ike_updown(charon->bus, &this->public, FALSE);
+				default:
+					break;
+			}
+		}
+	}
+	return status;
 }
 
 METHOD(ike_sa_t, rekey, status_t,
@@ -2035,8 +2420,7 @@ METHOD(ike_sa_t, reauth, status_t,
 	{
 		DBG0(DBG_IKE, "reinitiating IKE_SA %s[%d]",
 			 get_name(this), this->unique_id);
-		reset(this);
-		this->task_manager->queue_ike(this->task_manager);
+		reset(this, TRUE);
 		return this->task_manager->initiate(this->task_manager);
 	}
 	/* we can't reauthenticate as responder when we use EAP or virtual IPs.
@@ -2156,23 +2540,18 @@ static status_t reestablish_children(private_ike_sa_t *this, ike_sa_t *new,
 	enumerator = create_child_sa_enumerator(this);
 	while (enumerator->enumerate(enumerator, (void**)&child_sa))
 	{
+		switch (child_sa->get_state(child_sa))
+		{
+			case CHILD_REKEYED:
+			case CHILD_DELETED:
+				/* ignore CHILD_SAs in these states */
+				continue;
+			default:
+				break;
+		}
 		if (force)
 		{
-			switch (child_sa->get_state(child_sa))
-			{
-				case CHILD_ROUTED:
-				{	/* move routed child directly */
-					remove_child_sa(this, enumerator);
-					new->add_child_sa(new, child_sa);
-					action = ACTION_NONE;
-					break;
-				}
-				default:
-				{	/* initiate/queue all other CHILD_SAs */
-					action = ACTION_RESTART;
-					break;
-				}
-			}
+			action = ACTION_RESTART;
 		}
 		else
 		{	/* only restart CHILD_SAs that are configured accordingly */
@@ -2250,6 +2629,15 @@ METHOD(ike_sa_t, reestablish, status_t,
 		enumerator = array_create_enumerator(this->child_sas);
 		while (enumerator->enumerate(enumerator, (void**)&child_sa))
 		{
+			switch (child_sa->get_state(child_sa))
+			{
+				case CHILD_REKEYED:
+				case CHILD_DELETED:
+					/* ignore CHILD_SAs in these states */
+					continue;
+				default:
+					break;
+			}
 			if (this->state == IKE_DELETING)
 			{
 				action = child_sa->get_close_action(child_sa);
@@ -2265,8 +2653,7 @@ METHOD(ike_sa_t, reestablish, status_t,
 					break;
 				case ACTION_ROUTE:
 					charon->traps->install(charon->traps, this->peer_cfg,
-										   child_sa->get_config(child_sa),
-										   child_sa->get_reqid(child_sa));
+										   child_sa->get_config(child_sa));
 					break;
 				default:
 					break;
@@ -2444,7 +2831,7 @@ static bool redirect_connecting(private_ike_sa_t *this, identification_t *to)
 	{
 		return FALSE;
 	}
-	reset(this);
+	reset(this, TRUE);
 	DESTROY_IF(this->redirected_from);
 	this->redirected_from = this->other_host->clone(this->other_host);
 	DESTROY_IF(this->remote_host);
@@ -2550,7 +2937,7 @@ METHOD(ike_sa_t, redirect, status_t,
 }
 
 METHOD(ike_sa_t, retransmit, status_t,
-	private_ike_sa_t *this, u_int32_t message_id)
+	private_ike_sa_t *this, uint32_t message_id)
 {
 #ifdef ANDROID
 	char status[PROPERTY_VALUE_MAX] = {0};
@@ -2569,7 +2956,7 @@ METHOD(ike_sa_t, retransmit, status_t,
 			case IKE_CONNECTING:
 			{
 				/* retry IKE_SA_INIT/Main Mode if we have multiple keyingtries */
-				u_int32_t tries = this->peer_cfg->get_keyingtries(this->peer_cfg);
+				uint32_t tries = this->peer_cfg->get_keyingtries(this->peer_cfg);
 				charon->bus->alert(charon->bus, ALERT_PEER_INIT_UNREACHABLE,
 								   this->keyingtry);
 				this->keyingtry++;
@@ -2577,9 +2964,8 @@ METHOD(ike_sa_t, retransmit, status_t,
 				{
 					DBG1(DBG_IKE, "peer not responding, trying again (%d/%d)",
 						 this->keyingtry + 1, tries);
-					reset(this);
+					reset(this, TRUE);
 					resolve_hosts(this);
-					this->task_manager->queue_ike(this->task_manager);
 					return this->task_manager->initiate(this->task_manager);
 				}
 				DBG1(DBG_IKE, "establishing IKE_SA failed, peer not responding");
@@ -2595,7 +2981,30 @@ METHOD(ike_sa_t, retransmit, status_t,
 					DBG1(DBG_CFG, "property_set fail with ('net.wo.statuscode', '1081')");
 				}
 #endif
+				if (this->version == IKEV1 && array_count(this->child_sas))
+				{
+					enumerator_t *enumerator;
+					child_sa_t *child_sa;
 
+					/* if reauthenticating an IKEv1 SA failed (assumed for an SA
+					 * in this state with CHILD_SAs), try again from scratch */
+					DBG1(DBG_IKE, "reauthentication failed, trying to "
+						 "reestablish IKE_SA");
+					reestablish(this);
+					/* trigger down events for the CHILD_SAs, as no down event
+					 * is triggered below for IKE SAs in this state */
+					enumerator = array_create_enumerator(this->child_sas);
+					while (enumerator->enumerate(enumerator, &child_sa))
+					{
+						if (child_sa->get_state(child_sa) != CHILD_REKEYED &&
+							child_sa->get_state(child_sa) != CHILD_DELETED)
+						{
+							charon->bus->child_updown(charon->bus, child_sa,
+													  FALSE);
+						}
+					}
+					enumerator->destroy(enumerator);
+				}
 				break;
 			}
 			case IKE_DELETING:
@@ -2614,7 +3023,8 @@ METHOD(ike_sa_t, retransmit, status_t,
 				reestablish(this);
 				break;
 		}
-		if (this->state != IKE_CONNECTING)
+		if (this->state != IKE_CONNECTING &&
+			this->state != IKE_REKEYED)
 		{
 			charon->bus->ike_updown(charon->bus, &this->public, FALSE);
 		}
@@ -2624,9 +3034,9 @@ METHOD(ike_sa_t, retransmit, status_t,
 }
 
 METHOD(ike_sa_t, set_auth_lifetime, status_t,
-	private_ike_sa_t *this, u_int32_t lifetime)
+	private_ike_sa_t *this, uint32_t lifetime)
 {
-	u_int32_t diff, hard, soft, now;
+	uint32_t diff, hard, soft, now;
 	bool send_update;
 
 	diff = this->peer_cfg->get_over_time(this->peer_cfg);
@@ -2710,8 +3120,27 @@ static bool is_current_path_valid(private_ike_sa_t *this)
 {
 	bool valid = FALSE;
 	host_t *src;
-	src = hydra->kernel_interface->get_source_addr(hydra->kernel_interface,
-											this->other_host, this->my_host);
+
+	if (supports_extension(this, EXT_MOBIKE) &&
+		lib->settings->get_bool(lib->settings,
+								"%s.prefer_best_path", FALSE, lib->ns))
+	{
+		/* check if the current path is the best path; migrate otherwise */
+		src = charon->kernel->get_source_addr(charon->kernel, this->other_host,
+											  NULL);
+		if (src)
+		{
+			valid = src->ip_equals(src, this->my_host);
+			src->destroy(src);
+		}
+		if (!valid)
+		{
+			DBG1(DBG_IKE, "old path is not preferred anymore");
+		}
+		return valid;
+	}
+	src = charon->kernel->get_source_addr(charon->kernel, this->other_host,
+										  this->my_host);
 	if (src)
 	{
 		if (src->ip_equals(src, this->my_host))
@@ -2719,6 +3148,10 @@ static bool is_current_path_valid(private_ike_sa_t *this)
 			valid = TRUE;
 		}
 		src->destroy(src);
+	}
+	if (!valid)
+	{
+		DBG1(DBG_IKE, "old path is not available anymore, try to find another");
 	}
 	return valid;
 }
@@ -2755,8 +3188,7 @@ static bool is_any_path_valid(private_ike_sa_t *this)
 			continue;
 		}
 		DBG1(DBG_IKE, "looking for a route to %H ...", addr);
-		src = hydra->kernel_interface->get_source_addr(
-										hydra->kernel_interface, addr, NULL);
+		src = charon->kernel->get_source_addr(charon->kernel, addr, NULL);
 		if (src)
 		{
 			break;
@@ -2780,25 +3212,89 @@ METHOD(ike_sa_t, roam, status_t,
 		case IKE_DELETING:
 		case IKE_DESTROYING:
 		case IKE_PASSIVE:
+		case IKE_REKEYED:
 			return SUCCESS;
 		default:
 			break;
 	}
 
+	if (!this->ike_cfg)
+	{	/* this is the case for new HA SAs not yet in state IKE_PASSIVE and
+		 * without config assigned */
+		return SUCCESS;
+	}
+
+    /* 2019-03-18 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [START] */
+    bool peer_mobike_support = FALSE;
+    int slotid = 0;
+    char srcifaces[128] = {0, };
+    char *iface = NULL;
+    iface = this->ike_cfg->get_vif(this->ike_cfg);
+    slotid = get_slotid(get_name(this));
+    peer_mobike_support = get_cust_setting_bool_by_slotid(slotid, PEER_MOBIKE);
+    if(peer_mobike_support)
+    {
+        patch_code_id("LPCP-2526@n@c@libcharon@ike_sa.c@1");
+        get_cust_setting_by_slotid(slotid, IWLAN_HO_SRCIFACES,srcifaces);
+
+    }
+    /* 2019-03-18 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [END] */
+
+	if (this->version == IKEV1)
+	{	/* ignore roam events for IKEv1 where we don't have MOBIKE and would
+		 * have to reestablish from scratch (reauth is not enough) */
+		return SUCCESS;
+	}
+
+	/* ignore roam events if MOBIKE is not supported/enabled and the local
+	 * address is statically configured */
+	if (!supports_extension(this, EXT_MOBIKE) &&
+		ike_cfg_has_address(this->ike_cfg, this->my_host, TRUE))
+	{
+		DBG1(DBG_IKE, "keeping statically configured path %H - %H",
+			 this->my_host, this->other_host);
+		/* 2016-07-05 protocol-iwlan@lge.com LGP_DATA_IWLAN_CONNECTION_SYNC [START] */
+		if(!is_current_path_valid(this)){
+			DBG1(DBG_IKE, "current path is not valid. COND_STALE TRUE");
+			set_condition(this, COND_STALE, TRUE);
+			if (!is_any_path_valid(this))
+			{
+				job_t *job;
+				int oos_timeout = 30;
+				DBG1(DBG_IKE, "no route found to reach %H, MOBIKE update deferred",
+					this->other_host);
+				oos_timeout = property_get_int32("persist.net.wo.oos", 30);
+				DBG1(DBG_IKE, "============================= oos: %d", oos_timeout);
+				job = (job_t*)send_dpd_job_create(this->ike_sa_id);
+				lib->scheduler->schedule_job(lib->scheduler, job, oos_timeout);
+				return SUCCESS;
+			} else {
+				job_t *job;
+				DBG1(DBG_IKE, "============================= Wi-Fi addr change dpd after 2sec");
+				job = (job_t*)send_dpd_job_create(this->ike_sa_id);
+				lib->scheduler->schedule_job(lib->scheduler, job, 2);
+				patch_code_id("LPCP-2149@n@c@libcharon@ike_sa.c@1");
+			}
+		} else {
+			if (has_condition(this, COND_STALE)) {
+				DBG1(DBG_IKE, "current path is valid. make COND_STALE FALSE");
+				do_dpd(this);
+				set_condition(this, COND_STALE, FALSE);
+			}
+		}
+		/* 2016-07-05 protocol-iwlan@lge.com LGP_DATA_IWLAN_CONNECTION_SYNC [END] */
+		return SUCCESS;
+	}
+
 	/* keep existing path if possible */
 	if (is_current_path_valid(this))
 	{
-		DBG2(DBG_IKE, "keeping connection path %H - %H",
+		DBG1(DBG_IKE, "keeping connection path %H - %H",
 			 this->my_host, this->other_host);
-		/* 2016-07-05 protocol-iwlan@lge.com LGP_DATA_IWLAN_CONNECTION_SYNC [START] */
-		if (has_condition(this, COND_STALE)) {
-			patch_code_id("LPCP-2149@n@c@libcharon@ike_sa.c@1");
-			do_dpd(this);
-		}
-		/* 2016-07-05 protocol-iwlan@lge.com LGP_DATA_IWLAN_CONNECTION_SYNC [END] */
 		set_condition(this, COND_STALE, FALSE);
-
-		if (supports_extension(this, EXT_MOBIKE) && address)
+		/* 2019-10-11 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [START] */
+                if (peer_mobike_support && supports_extension(this, EXT_MOBIKE) && address && (strstr(srcifaces, iface) == NULL) )
+		/* 2019-10-11 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [END] */
 		{	/* if any addresses changed, send an updated list */
 			DBG1(DBG_IKE, "sending address list update using MOBIKE");
 			this->task_manager->queue_mobike(this->task_manager, FALSE, TRUE);
@@ -2811,24 +3307,21 @@ METHOD(ike_sa_t, roam, status_t,
 	{
 		job_t *job;
 		int oos_timeout;
-
 		DBG1(DBG_IKE, "no route found to reach %H, MOBIKE update deferred",
 			 this->other_host);
 		set_condition(this, COND_STALE, TRUE);
-
 		oos_timeout = property_get_int32("persist.net.wo.oos", 30);
 		DBG1(DBG_IKE, "============================= oos: %d", oos_timeout);
 		job = (job_t*)send_dpd_job_create(this->ike_sa_id);
 		lib->scheduler->schedule_job(lib->scheduler, job, oos_timeout);
-
 		return SUCCESS;
 	}
 	set_condition(this, COND_STALE, FALSE);
 
 	/* update addresses with mobike, if supported ... */
-	// MOBIKE, when the peer did not support in notificationm but really support,
-	// we may skip this check
-	if (supports_extension(this, EXT_MOBIKE))
+	/* 2019-10-11 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [START] */
+	if (peer_mobike_support && supports_extension(this, EXT_MOBIKE) && (strstr(srcifaces, iface) == NULL))
+	/* 2019-10-11 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [END] */
 	{
 		if (!has_condition(this, COND_ORIGINAL_INITIATOR))
 		{	/* responder updates the peer about changed address config */
@@ -2851,7 +3344,7 @@ METHOD(ike_sa_t, roam, status_t,
 		return SUCCESS;
 	}
 
-	int slotid = get_slotid(get_name(this));
+	//int slotid = get_slotid(get_name(this));
 	if (get_cust_setting_bool_by_slotid(slotid, ADDR_CHANGE_N_REAUTH)) {
 		DBG1(DBG_IKE, "reauthenticating IKE_SA due to address change");
 		/* since our previous path is not valid anymore, try and find a new one */
@@ -2873,6 +3366,33 @@ METHOD(ike_sa_t, add_configuration_attribute, void,
 	array_insert(this->attributes, ARRAY_TAIL, &entry);
 }
 
+CALLBACK(filter_attribute, bool,
+	void *null, enumerator_t *orig, va_list args)
+{
+	attribute_entry_t *entry;
+	configuration_attribute_type_t *type;
+	chunk_t *data;
+	bool *handled;
+
+	VA_ARGS_VGET(args, type, data, handled);
+
+	if (orig->enumerate(orig, &entry))
+	{
+		*type = entry->type;
+		*data = entry->data;
+		*handled = entry->handler != NULL;
+		return TRUE;
+	}
+	return FALSE;
+}
+
+METHOD(ike_sa_t, create_attribute_enumerator, enumerator_t*,
+	private_ike_sa_t *this)
+{
+	return enumerator_create_filter(array_create_enumerator(this->attributes),
+									filter_attribute, NULL, NULL);
+}
+
 METHOD(ike_sa_t, create_task_enumerator, enumerator_t*,
 	private_ike_sa_t *this, task_queue_t queue)
 {
@@ -2891,7 +3411,30 @@ METHOD(ike_sa_t, queue_task, void,
 	this->task_manager->queue_task(this->task_manager, task);
 }
 
-METHOD(ike_sa_t, inherit, void,
+METHOD(ike_sa_t, queue_task_delayed, void,
+	private_ike_sa_t *this, task_t *task, uint32_t delay)
+{
+	this->task_manager->queue_task_delayed(this->task_manager, task, delay);
+}
+
+METHOD(ike_sa_t, inherit_pre, void,
+	private_ike_sa_t *this, ike_sa_t *other_public)
+{
+	private_ike_sa_t *other = (private_ike_sa_t*)other_public;
+
+	/* apply config and hosts */
+	set_peer_cfg(this, other->peer_cfg);
+	set_my_host(this, other->my_host->clone(other->my_host));
+	set_other_host(this, other->other_host->clone(other->other_host));
+
+	/* apply extensions and conditions with a few exceptions */
+	this->extensions = other->extensions;
+	this->conditions = other->conditions;
+	this->conditions &= ~COND_STALE;
+	this->conditions &= ~COND_REAUTHENTICATING;
+}
+
+METHOD(ike_sa_t, inherit_post, void,
 	private_ike_sa_t *this, ike_sa_t *other_public)
 {
 	private_ike_sa_t *other = (private_ike_sa_t*)other_public;
@@ -2921,6 +3464,12 @@ METHOD(ike_sa_t, inherit, void,
 		array_insert_create(&this->other_vips, ARRAY_TAIL, vip);
 	}
 
+	/* MOBIKE additional addresses */
+	while (array_remove(other->peer_addresses, ARRAY_HEAD, &vip))
+	{
+		array_insert_create(&this->peer_addresses, ARRAY_TAIL, vip);
+	}
+
 	/* authentication information */
 	enumerator = array_create_enumerator(other->my_auths);
 	while (enumerator->enumerate(enumerator, &cfg))
@@ -2945,7 +3494,7 @@ METHOD(ike_sa_t, inherit, void,
 	this->conditions = other->conditions;
 	if (this->conditions & COND_NAT_HERE)
 	{
-		send_keepalive(this);
+		send_keepalive(this, FALSE);
 	}
 
 #ifdef ME
@@ -2963,6 +3512,7 @@ METHOD(ike_sa_t, inherit, void,
 	/* adopt all children */
 	while (array_remove(other->child_sas, ARRAY_HEAD, &child_sa))
 	{
+		charon->child_sa_manager->remove(charon->child_sa_manager, child_sa);
 		add_child_sa(this, child_sa);
 	}
 
@@ -3003,21 +3553,26 @@ METHOD(ike_sa_t, destroy, void,
 	}
 
 	/* remove attributes first, as we pass the IKE_SA to the handler */
+	charon->bus->handle_vips(charon->bus, &this->public, FALSE);
 	while (array_remove(this->attributes, ARRAY_TAIL, &entry))
 	{
-		hydra->attributes->release(hydra->attributes, entry.handler,
-								   this->other_id, entry.type, entry.data);
+		if (entry.handler)
+		{
+			charon->attributes->release(charon->attributes, entry.handler,
+										&this->public, entry.type, entry.data);
+		}
 		free(entry.data.ptr);
 	}
 	/* uninstall CHILD_SAs before virtual IPs, otherwise we might kill
 	 * routes that the CHILD_SA tries to uninstall. */
 	while (array_remove(this->child_sas, ARRAY_TAIL, &child_sa))
 	{
+		charon->child_sa_manager->remove(charon->child_sa_manager, child_sa);
 		child_sa->destroy(child_sa);
 	}
 	while (array_remove(this->my_vips, ARRAY_TAIL, &vip))
 	{
-		hydra->kernel_interface->del_ip(hydra->kernel_interface, vip, -1, TRUE);
+		charon->kernel->del_ip(charon->kernel, vip, -1, TRUE);
 		vip->destroy(vip);
 	}
 	if (array_count(this->other_vips))
@@ -3029,16 +3584,16 @@ METHOD(ike_sa_t, destroy, void,
 		if (this->peer_cfg)
 		{
 			linked_list_t *pools;
-			identification_t *id;
 
-			id = get_other_eap_id(this);
 			pools = linked_list_create_from_enumerator(
 						this->peer_cfg->create_pool_enumerator(this->peer_cfg));
-			hydra->attributes->release_address(hydra->attributes, pools, vip, id);
+			charon->attributes->release_address(charon->attributes,
+												pools, vip, &this->public);
 			pools->destroy(pools);
 		}
 		vip->destroy(vip);
 	}
+
 	while (array_remove(this->my_dnss, ARRAY_TAIL, &vip))
 	{
 		vip->destroy(vip);
@@ -3112,7 +3667,6 @@ ike_sa_t * ike_sa_create(ike_sa_id_t *ike_sa_id, bool initiator,
 {
 	private_ike_sa_t *this;
 	static refcount_t unique_id = 0;
-	int keep_timer;
 
 	if (version == IKE_ANY)
 	{	/* prefer IKEv2 if protocol not specified */
@@ -3122,6 +3676,7 @@ ike_sa_t * ike_sa_create(ike_sa_id_t *ike_sa_id, bool initiator,
 		version = IKEV1;
 #endif
 	}
+
 	INIT(this,
 		.public = {
 			.get_version = _get_version,
@@ -3139,6 +3694,7 @@ ike_sa_t * ike_sa_create(ike_sa_id_t *ike_sa_id, bool initiator,
 			.set_peer_cfg = _set_peer_cfg,
 			.get_auth_cfg = _get_auth_cfg,
 			.create_auth_cfg_enumerator = _create_auth_cfg_enumerator,
+			.verify_peer_certificate = _verify_peer_certificate,
 			.add_auth_cfg = _add_auth_cfg,
 			.get_proposal = _get_proposal,
 			.set_proposal = _set_proposal,
@@ -3148,6 +3704,7 @@ ike_sa_t * ike_sa_create(ike_sa_id_t *ike_sa_id, bool initiator,
 			.get_other_host = _get_other_host,
 			.set_other_host = _set_other_host,
 			.set_message_id = _set_message_id,
+			.get_message_id = _get_message_id,
 			.float_ports = _float_ports,
 			.update_hosts = _update_hosts,
 			.get_my_id = _get_my_id,
@@ -3159,8 +3716,6 @@ ike_sa_t * ike_sa_create(ike_sa_id_t *ike_sa_id, bool initiator,
 			.supports_extension = _supports_extension,
 			.set_condition = _set_condition,
 			.has_condition = _has_condition,
-			.set_pending_updates = _set_pending_updates,
-			.get_pending_updates = _get_pending_updates,
 			.create_peer_address_enumerator = _create_peer_address_enumerator,
 			.add_peer_address = _add_peer_address,
 			.clear_peer_addresses = _clear_peer_addresses,
@@ -3173,6 +3728,12 @@ ike_sa_t * ike_sa_create(ike_sa_id_t *ike_sa_id, bool initiator,
 			.send_dpd_now = _send_dpd_now,
 			.send_dpd_now_per_conn = _send_dpd_now_per_conn,
 			/* 2016-07-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_DPD_NOW [END] */
+			/* LGP_DATA_IWLAN support_5gs [START] */
+			.set_s_nssai = _set_s_nssai,
+			.get_s_nssai = _get_s_nssai,
+			.set_plmn_id = _set_plmn_id,
+			.get_plmn_id = _get_plmn_id,
+			/* LGP_DATA_IWLAN support_5gs [END] */
 			.send_keepalive = _send_keepalive,
 			.redirect = _redirect,
 			.handle_redirect = _handle_redirect,
@@ -3191,7 +3752,8 @@ ike_sa_t * ike_sa_create(ike_sa_id_t *ike_sa_id, bool initiator,
 			.reestablish = _reestablish,
 			.set_auth_lifetime = _set_auth_lifetime,
 			.roam = _roam,
-			.inherit = _inherit,
+			.inherit_pre = _inherit_pre,
+			.inherit_post = _inherit_post,
 			.generate_message = _generate_message,
 			.generate_message_fragmented = _generate_message_fragmented,
 			.reset = _reset,
@@ -3216,10 +3778,12 @@ ike_sa_t * ike_sa_create(ike_sa_id_t *ike_sa_id, bool initiator,
 			.clear_dnss = _clear_dnss,
 			.create_dns_enumerator = _create_dns_enumerator,
 			.add_configuration_attribute = _add_configuration_attribute,
+			.create_attribute_enumerator = _create_attribute_enumerator,
 			.set_kmaddress = _set_kmaddress,
 			.create_task_enumerator = _create_task_enumerator,
 			.flush_queue = _flush_queue,
 			.queue_task = _queue_task,
+			.queue_task_delayed = _queue_task_delayed,
 #ifdef ME
 			.act_as_mediation_server = _act_as_mediation_server,
 			.get_server_reflexive_host = _get_server_reflexive_host,
@@ -3244,9 +3808,9 @@ ike_sa_t * ike_sa_create(ike_sa_id_t *ike_sa_id, bool initiator,
 		.stats[STAT_OUTBOUND] = time_monotonic(NULL),
 		.my_auth = auth_cfg_create(),
 		.other_auth = auth_cfg_create(),
+        .imei = NULL,
 		.my_auths = array_create(0, 0),
 		.other_auths = array_create(0, 0),
-		.imei = NULL,
 		.attributes = array_create(sizeof(attribute_entry_t), 0),
 		.unique_id = ref_get(&unique_id),
 		.keepalive_interval = lib->settings->get_time(lib->settings,
@@ -3255,10 +3819,24 @@ ike_sa_t * ike_sa_create(ike_sa_id_t *ike_sa_id, bool initiator,
 								"%s.retry_initiate_interval", 0, lib->ns),
 		.flush_auth_cfg = lib->settings->get_bool(lib->settings,
 								"%s.flush_auth_cfg", FALSE, lib->ns),
+		.fragment_size = lib->settings->get_int(lib->settings,
+								"%s.fragment_size", 1280, lib->ns),
 		.follow_redirects = lib->settings->get_bool(lib->settings,
 								"%s.follow_redirects", TRUE, lib->ns),
-		.fragment_size = lib->settings->get_int(lib->settings,
-								"%s.fragment_size", 0, lib->ns),
+		//LGP_DATA_IWLAN support_5gs [START]
+		.len_snssai = 0,
+		.sst = 0,
+		.sd[0] = 0xFF,
+		.sd[1] = 0xFF,
+		.sd[2] = 0xFF,
+		.hplmn_sst = 0,
+		.hplmn_sd[0] = 0xFF,
+		.hplmn_sd[1] = 0xFF,
+		.hplmn_sd[2] = 0xFF,
+		.plmn_id[0] = 0,
+		.plmn_id[1] = 0,
+		.plmn_id[2] = 0,
+		//LGP_DATA_IWLAN support_5gs [END]
 	);
 
 	if (version == IKEV2)
@@ -3275,14 +3853,6 @@ ike_sa_t * ike_sa_create(ike_sa_id_t *ike_sa_id, bool initiator,
 		DBG1(DBG_IKE, "IKE version %d not supported", this->version);
 		destroy(this);
 		return NULL;
-	}
-
-	/* If property is NULL or empty, use original settings in .conf file */
-	int slotid = get_slotid(get_name(this));
-	if ((keep_timer = get_cust_setting_int_by_slotid(slotid, IKE_KEEP_ALIVE_TIMER)) > -1)
-	{
-		DBG1(DBG_IKE, "NAT keepalive timer change to %d", keep_timer);
-		this->keepalive_interval = (u_int32_t)keep_timer;
 	}
 
 	return &this->public;

@@ -111,7 +111,7 @@ extern "C" {
 #ifdef _GCRYPT_IN_LIBGCRYPT
 #define _GCRY_ATTR_INTERNAL
 #else
-#define _GCRY_ATTR_INTERNAL	_GCRY_GCC_ATTR_DEPRECATED
+#define _GCRY_ATTR_INTERNAL    _GCRY_GCC_ATTR_DEPRECATED
 #endif
 
 /* Wrappers for the libgpg-error library.  */
@@ -214,7 +214,7 @@ struct gcry_thread_cbs
   ssize_t (*write) (int fd, const void *buf, size_t nbytes);
 #ifdef _WIN32
   ssize_t (*select) (int nfd, void *rset, void *wset, void *eset,
-		     struct timeval *timeout);
+             struct timeval *timeout);
   ssize_t (*waitpid) (pid_t pid, int *status, int options);
   int (*accept) (int s, void  *addr, int *length_ptr);
   int (*connect) (int s, void *addr, gcry_socklen_t length);
@@ -222,7 +222,7 @@ struct gcry_thread_cbs
   int (*recvmsg) (int s, void *msg, int flags);
 #else
   ssize_t (*select) (int nfd, fd_set *rset, fd_set *wset, fd_set *eset,
-		     struct timeval *timeout);
+             struct timeval *timeout);
   ssize_t (*waitpid) (pid_t pid, int *status, int options);
   int (*accept) (int s, struct sockaddr *addr, gcry_socklen_t *length_ptr);
   int (*connect) (int s, struct sockaddr *addr, gcry_socklen_t length);
@@ -232,111 +232,111 @@ struct gcry_thread_cbs
 };
 
 #ifdef _WIN32
-# define _GCRY_THREAD_OPTION_PTH_IMPL_NET				      \
-static ssize_t gcry_pth_select (int nfd, void *rset, void *wset,	      \
-				void *eset, struct timeval *timeout)	      \
-  { return pth_select (nfd, rset, wset, eset, timeout); }		      \
-static ssize_t gcry_pth_waitpid (pid_t pid, int *status, int options)	      \
-  { return pth_waitpid (pid, status, options); }			      \
+# define _GCRY_THREAD_OPTION_PTH_IMPL_NET                      \
+static ssize_t gcry_pth_select (int nfd, void *rset, void *wset,          \
+                void *eset, struct timeval *timeout)          \
+  { return pth_select (nfd, rset, wset, eset, timeout); }              \
+static ssize_t gcry_pth_waitpid (pid_t pid, int *status, int options)          \
+  { return pth_waitpid (pid, status, options); }                  \
 static int gcry_pth_accept (int s, void *addr,                                \
-			    gcry_socklen_t *length_ptr)			      \
-  { return pth_accept (s, addr, length_ptr); }				      \
-static int gcry_pth_connect (int s, void *addr,		                      \
-			     gcry_socklen_t length)			      \
+                gcry_socklen_t *length_ptr)                  \
+  { return pth_accept (s, addr, length_ptr); }                      \
+static int gcry_pth_connect (int s, void *addr,                              \
+                 gcry_socklen_t length)                  \
   { return pth_connect (s, addr, length); }
 #else /*!_WIN32*/
-# define _GCRY_THREAD_OPTION_PTH_IMPL_NET				      \
-static ssize_t gcry_pth_select (int nfd, fd_set *rset, fd_set *wset,	      \
-				fd_set *eset, struct timeval *timeout)	      \
-  { return pth_select (nfd, rset, wset, eset, timeout); }		      \
-static ssize_t gcry_pth_waitpid (pid_t pid, int *status, int options)	      \
-  { return pth_waitpid (pid, status, options); }			      \
-static int gcry_pth_accept (int s, struct sockaddr *addr,		      \
-			    gcry_socklen_t *length_ptr)			      \
-  { return pth_accept (s, addr, length_ptr); }				      \
-static int gcry_pth_connect (int s, struct sockaddr *addr,		      \
-			     gcry_socklen_t length)			      \
+# define _GCRY_THREAD_OPTION_PTH_IMPL_NET                      \
+static ssize_t gcry_pth_select (int nfd, fd_set *rset, fd_set *wset,          \
+                fd_set *eset, struct timeval *timeout)          \
+  { return pth_select (nfd, rset, wset, eset, timeout); }              \
+static ssize_t gcry_pth_waitpid (pid_t pid, int *status, int options)          \
+  { return pth_waitpid (pid, status, options); }                  \
+static int gcry_pth_accept (int s, struct sockaddr *addr,              \
+                gcry_socklen_t *length_ptr)                  \
+  { return pth_accept (s, addr, length_ptr); }                      \
+static int gcry_pth_connect (int s, struct sockaddr *addr,              \
+                 gcry_socklen_t length)                  \
   { return pth_connect (s, addr, length); }
 #endif /*!_WIN32*/
 
 
 
-#define GCRY_THREAD_OPTION_PTH_IMPL					      \
-static int gcry_pth_init (void)						      \
-{ return (pth_init () == FALSE) ? errno : 0; }				      \
-static int gcry_pth_mutex_init (void **priv)				      \
-{									      \
-  int err = 0;								      \
-  pth_mutex_t *lock = malloc (sizeof (pth_mutex_t));			      \
-									      \
-  if (!lock)								      \
-    err = ENOMEM;							      \
-  if (!err)								      \
-    {									      \
-      err = pth_mutex_init (lock);					      \
-      if (err == FALSE)							      \
-	err = errno;							      \
-      else								      \
-	err = 0;							      \
-      if (err)								      \
-	free (lock);							      \
-      else								      \
-	*priv = lock;							      \
-    }									      \
-  return err;								      \
-}									      \
-static int gcry_pth_mutex_destroy (void **lock)				      \
+#define GCRY_THREAD_OPTION_PTH_IMPL                          \
+static int gcry_pth_init (void)                              \
+{ return (pth_init () == FALSE) ? errno : 0; }                      \
+static int gcry_pth_mutex_init (void **priv)                      \
+{                                          \
+  int err = 0;                                      \
+  pth_mutex_t *lock = malloc (sizeof (pth_mutex_t));                  \
+                                          \
+  if (!lock)                                      \
+    err = ENOMEM;                                  \
+  if (!err)                                      \
+    {                                          \
+      err = pth_mutex_init (lock);                          \
+      if (err == FALSE)                                  \
+    err = errno;                                  \
+      else                                      \
+    err = 0;                                  \
+      if (err)                                      \
+    free (lock);                                  \
+      else                                      \
+    *priv = lock;                                  \
+    }                                          \
+  return err;                                      \
+}                                          \
+static int gcry_pth_mutex_destroy (void **lock)                      \
   { /* GNU Pth has no destructor function.  */ free (*lock); return 0; }      \
-static int gcry_pth_mutex_lock (void **lock)				      \
-  { return ((pth_mutex_acquire (*lock, 0, NULL)) == FALSE)		      \
-      ? errno : 0; }							      \
-static int gcry_pth_mutex_unlock (void **lock)				      \
-  { return ((pth_mutex_release (*lock)) == FALSE)			      \
-      ? errno : 0; }							      \
-static ssize_t gcry_pth_read (int fd, void *buf, size_t nbytes)		      \
-  { return pth_read (fd, buf, nbytes); }				      \
-static ssize_t gcry_pth_write (int fd, const void *buf, size_t nbytes)	      \
-  { return pth_write (fd, buf, nbytes); }				      \
+static int gcry_pth_mutex_lock (void **lock)                      \
+  { return ((pth_mutex_acquire (*lock, 0, NULL)) == FALSE)              \
+      ? errno : 0; }                                  \
+static int gcry_pth_mutex_unlock (void **lock)                      \
+  { return ((pth_mutex_release (*lock)) == FALSE)                  \
+      ? errno : 0; }                                  \
+static ssize_t gcry_pth_read (int fd, void *buf, size_t nbytes)              \
+  { return pth_read (fd, buf, nbytes); }                      \
+static ssize_t gcry_pth_write (int fd, const void *buf, size_t nbytes)          \
+  { return pth_write (fd, buf, nbytes); }                      \
 _GCRY_THREAD_OPTION_PTH_IMPL_NET                                              \
-									      \
-/* Note: GNU Pth is missing pth_sendmsg and pth_recvmsg.  */		      \
+                                          \
+/* Note: GNU Pth is missing pth_sendmsg and pth_recvmsg.  */              \
 static struct gcry_thread_cbs gcry_threads_pth = {                            \
   (GCRY_THREAD_OPTION_PTH | (GCRY_THREAD_OPTION_VERSION << 8)),               \
-  gcry_pth_init, gcry_pth_mutex_init, gcry_pth_mutex_destroy,		      \
+  gcry_pth_init, gcry_pth_mutex_init, gcry_pth_mutex_destroy,              \
   gcry_pth_mutex_lock, gcry_pth_mutex_unlock, gcry_pth_read, gcry_pth_write,  \
   gcry_pth_select, gcry_pth_waitpid, gcry_pth_accept, gcry_pth_connect,       \
   NULL, NULL }
 
 
-#define GCRY_THREAD_OPTION_PTHREAD_IMPL					      \
-static int gcry_pthread_mutex_init (void **priv)			      \
-{									      \
-  int err = 0;								      \
+#define GCRY_THREAD_OPTION_PTHREAD_IMPL                          \
+static int gcry_pthread_mutex_init (void **priv)                  \
+{                                          \
+  int err = 0;                                      \
   pthread_mutex_t *lock = (pthread_mutex_t*)malloc (sizeof (pthread_mutex_t));\
-									      \
-  if (!lock)								      \
-    err = ENOMEM;							      \
-  if (!err)								      \
-    {									      \
-      err = pthread_mutex_init (lock, NULL);				      \
-      if (err)								      \
-	free (lock);							      \
-      else								      \
-	*priv = lock;							      \
-    }									      \
-  return err;								      \
-}									      \
-static int gcry_pthread_mutex_destroy (void **lock)			      \
+                                          \
+  if (!lock)                                      \
+    err = ENOMEM;                                  \
+  if (!err)                                      \
+    {                                          \
+      err = pthread_mutex_init (lock, NULL);                      \
+      if (err)                                      \
+    free (lock);                                  \
+      else                                      \
+    *priv = lock;                                  \
+    }                                          \
+  return err;                                      \
+}                                          \
+static int gcry_pthread_mutex_destroy (void **lock)                  \
   { int err = pthread_mutex_destroy ((pthread_mutex_t*)*lock);                \
     free (*lock); return err; }                                               \
-static int gcry_pthread_mutex_lock (void **lock)			      \
-  { return pthread_mutex_lock ((pthread_mutex_t*)*lock); }		      \
-static int gcry_pthread_mutex_unlock (void **lock)			      \
-  { return pthread_mutex_unlock ((pthread_mutex_t*)*lock); }		      \
-									      \
-static struct gcry_thread_cbs gcry_threads_pthread = {			      \
+static int gcry_pthread_mutex_lock (void **lock)                  \
+  { return pthread_mutex_lock ((pthread_mutex_t*)*lock); }              \
+static int gcry_pthread_mutex_unlock (void **lock)                  \
+  { return pthread_mutex_unlock ((pthread_mutex_t*)*lock); }              \
+                                          \
+static struct gcry_thread_cbs gcry_threads_pthread = {                  \
   (GCRY_THREAD_OPTION_PTHREAD | (GCRY_THREAD_OPTION_VERSION << 8)),           \
-  NULL, gcry_pthread_mutex_init, gcry_pthread_mutex_destroy,		      \
+  NULL, gcry_pthread_mutex_init, gcry_pthread_mutex_destroy,              \
   gcry_pthread_mutex_lock, gcry_pthread_mutex_unlock,                         \
   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }
 
@@ -470,7 +470,7 @@ gcry_error_t gcry_sexp_build (gcry_sexp_t *retsexp, size_t *erroff,
 /* Like gcry_sexp_build, but uses an array instead of variable
    function arguments.  */
 gcry_error_t gcry_sexp_build_array (gcry_sexp_t *retsexp, size_t *erroff,
-				    const char *format, void **arg_list);
+                    const char *format, void **arg_list);
 
 /* Release the S-expression object SEXP */
 void gcry_sexp_release (gcry_sexp_t sexp);
@@ -1300,12 +1300,12 @@ typedef struct gcry_ac_key_pair *gcry_ac_key_pair_t;
 typedef struct gcry_ac_handle *gcry_ac_handle_t;
 
 typedef gpg_error_t (*gcry_ac_data_read_cb_t) (void *opaque,
-					       unsigned char *buffer,
-					       size_t *buffer_n);
+                           unsigned char *buffer,
+                           size_t *buffer_n);
 
 typedef gpg_error_t (*gcry_ac_data_write_cb_t) (void *opaque,
-						unsigned char *buffer,
-						size_t buffer_n);
+                        unsigned char *buffer,
+                        size_t buffer_n);
 
 typedef enum
   {
@@ -1332,13 +1332,13 @@ typedef struct gcry_ac_io
     {
       struct
       {
-	gcry_ac_data_read_cb_t cb;
-	void *opaque;
+    gcry_ac_data_read_cb_t cb;
+    void *opaque;
       } callback;
       struct
       {
-	unsigned char *data;
-	size_t data_n;
+    unsigned char *data;
+    size_t data_n;
       } string;
       void *opaque;
     } readable;
@@ -1346,13 +1346,13 @@ typedef struct gcry_ac_io
     {
       struct
       {
-	gcry_ac_data_write_cb_t cb;
-	void *opaque;
+    gcry_ac_data_write_cb_t cb;
+    void *opaque;
       } callback;
       struct
       {
-	unsigned char **data;
-	size_t *data_n;
+    unsigned char **data;
+    size_t *data_n;
       } string;
       void *opaque;
     } writable;
@@ -1435,25 +1435,25 @@ gcry_error_t gcry_ac_data_get_index (gcry_ac_data_t data, unsigned int flags,
    stored in SEXP, according to the identifiers contained in
    IDENTIFIERS.  */
 gcry_error_t gcry_ac_data_to_sexp (gcry_ac_data_t data, gcry_sexp_t *sexp,
-				   const char **identifiers);
+                   const char **identifiers);
 
 /* Create a new data set, which is to be stored in DATA_SET, from the
    S-Expression SEXP, according to the identifiers contained in
    IDENTIFIERS.  */
 gcry_error_t gcry_ac_data_from_sexp (gcry_ac_data_t *data, gcry_sexp_t sexp,
-				     const char **identifiers);
+                     const char **identifiers);
 
 /* Initialize AC_IO according to MODE, TYPE and the variable list of
    arguments.  The list of variable arguments to specify depends on
    the given TYPE.  */
 void gcry_ac_io_init (gcry_ac_io_t *ac_io, gcry_ac_io_mode_t mode,
-		      gcry_ac_io_type_t type, ...);
+              gcry_ac_io_type_t type, ...);
 
 /* Initialize AC_IO according to MODE, TYPE and the variable list of
    arguments AP.  The list of variable arguments to specify depends on
    the given TYPE.  */
 void gcry_ac_io_init_va (gcry_ac_io_t *ac_io, gcry_ac_io_mode_t mode,
-			 gcry_ac_io_type_t type, va_list ap);
+             gcry_ac_io_type_t type, va_list ap);
 
 /* Create a new ac handle.  */
 gcry_error_t gcry_ac_open (gcry_ac_handle_t *handle,
@@ -1505,17 +1505,17 @@ void gcry_ac_key_pair_destroy (gcry_ac_key_pair_t key_pair);
    must be a pointer to a method-specific structure
    (gcry_ac_em*_t).  */
 gcry_error_t gcry_ac_data_encode (gcry_ac_em_t method,
-				  unsigned int flags, void *options,
-				  gcry_ac_io_t *io_read,
-				  gcry_ac_io_t *io_write);
+                  unsigned int flags, void *options,
+                  gcry_ac_io_t *io_read,
+                  gcry_ac_io_t *io_write);
 
 /* Decodes a message according to the encoding method METHOD.  OPTIONS
    must be a pointer to a method-specific structure
    (gcry_ac_em*_t).  */
 gcry_error_t gcry_ac_data_decode (gcry_ac_em_t method,
-				  unsigned int flags, void *options,
-				  gcry_ac_io_t *io_read,
-				  gcry_ac_io_t *io_write);
+                  unsigned int flags, void *options,
+                  gcry_ac_io_t *io_read,
+                  gcry_ac_io_t *io_write);
 
 /* Encrypt the plain text MPI value DATA_PLAIN with the key KEY under
    the control of the flags FLAGS and store the resulting data set
@@ -1556,11 +1556,11 @@ gcry_error_t gcry_ac_data_verify (gcry_ac_handle_t handle,
    the chosen scheme (gcry_ac_es_*_t).  The encrypted message is
    written to IO_CIPHER. */
 gcry_error_t gcry_ac_data_encrypt_scheme (gcry_ac_handle_t handle,
-					  gcry_ac_scheme_t scheme,
-					  unsigned int flags, void *opts,
-					  gcry_ac_key_t key,
-					  gcry_ac_io_t *io_message,
-					  gcry_ac_io_t *io_cipher);
+                      gcry_ac_scheme_t scheme,
+                      unsigned int flags, void *opts,
+                      gcry_ac_key_t key,
+                      gcry_ac_io_t *io_message,
+                      gcry_ac_io_t *io_cipher);
 
 /* Decrypts the cipher text readable from IO_CIPHER through HANDLE
    with the secret key KEY according to SCHEME, @var{flags} and OPTS.
@@ -1568,11 +1568,11 @@ gcry_error_t gcry_ac_data_encrypt_scheme (gcry_ac_handle_t handle,
    to the chosen scheme (gcry_ac_es_*_t).  The decrypted message is
    written to IO_MESSAGE.  */
 gcry_error_t gcry_ac_data_decrypt_scheme (gcry_ac_handle_t handle,
-					  gcry_ac_scheme_t scheme,
-					  unsigned int flags, void *opts,
-					  gcry_ac_key_t key,
-					  gcry_ac_io_t *io_cipher,
-					  gcry_ac_io_t *io_message);
+                      gcry_ac_scheme_t scheme,
+                      unsigned int flags, void *opts,
+                      gcry_ac_key_t key,
+                      gcry_ac_io_t *io_cipher,
+                      gcry_ac_io_t *io_message);
 
 /* Signs the message readable from IO_MESSAGE through HANDLE with the
    secret key KEY according to SCHEME, FLAGS and OPTS.  If OPTS is not
@@ -1580,11 +1580,11 @@ gcry_error_t gcry_ac_data_decrypt_scheme (gcry_ac_handle_t handle,
    scheme (gcry_ac_ssa_*_t).  The signature is written to
    IO_SIGNATURE.  */
 gcry_error_t gcry_ac_data_sign_scheme (gcry_ac_handle_t handle,
-				       gcry_ac_scheme_t scheme,
-				       unsigned int flags, void *opts,
-				       gcry_ac_key_t key,
-				       gcry_ac_io_t *io_message,
-				       gcry_ac_io_t *io_signature);
+                       gcry_ac_scheme_t scheme,
+                       unsigned int flags, void *opts,
+                       gcry_ac_key_t key,
+                       gcry_ac_io_t *io_message,
+                       gcry_ac_io_t *io_signature);
 
 /* Verifies through HANDLE that the signature readable from
    IO_SIGNATURE is indeed the result of signing the message readable
@@ -1593,11 +1593,11 @@ gcry_error_t gcry_ac_data_sign_scheme (gcry_ac_handle_t handle,
    anonymous structure (gcry_ac_ssa_*_t) specific to the chosen
    scheme.  */
 gcry_error_t gcry_ac_data_verify_scheme (gcry_ac_handle_t handle,
-					 gcry_ac_scheme_t scheme,
-					 unsigned int flags, void *opts,
-					 gcry_ac_key_t key,
-					 gcry_ac_io_t *io_message,
-					 gcry_ac_io_t *io_signature);
+                     gcry_ac_scheme_t scheme,
+                     unsigned int flags, void *opts,
+                     gcry_ac_key_t key,
+                     gcry_ac_io_t *io_message,
+                     gcry_ac_io_t *io_signature);
 
 /* Store the textual representation of the algorithm whose id is given
    in ALGORITHM in NAME.  This function is deprecated; use

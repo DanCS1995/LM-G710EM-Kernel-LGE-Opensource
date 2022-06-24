@@ -18,7 +18,7 @@
 #include <errno.h>
 
 #include <encoding/payloads/sa_payload.h>
-#include <config/proposal.h>
+#include <crypto/proposal/proposal.h>
 
 typedef struct private_custom_proposal_t private_custom_proposal_t;
 
@@ -52,7 +52,7 @@ struct private_custom_proposal_t {
  * Load custom proposal configuration to proposal list
  */
 static linked_list_t* load_proposals(private_custom_proposal_t *this,
-									 protocol_id_t proto, u_int64_t spi)
+									 protocol_id_t proto, uint64_t spi)
 {
 	enumerator_t *props, *algs;
 	char *number, *key, *value;
@@ -65,7 +65,7 @@ static linked_list_t* load_proposals(private_custom_proposal_t *this,
 	{
 		const proposal_token_t *token = NULL;
 		proposal_t *proposal;
-		u_int16_t type, alg, keysize = 0;
+		uint16_t type, alg, keysize = 0;
 		char *end;
 
 		proposal = proposal_create(proto, atoi(number));
@@ -79,8 +79,7 @@ static linked_list_t* load_proposals(private_custom_proposal_t *this,
 			type = strtoul(key, &end, 10);
 			if (end == key || errno)
 			{
-				type = enum_from_name(transform_type_names, key);
-				if (type == -1)
+				if (!enum_from_name(transform_type_names, key, &type))
 				{
 					DBG1(DBG_CFG, "unknown transform: '%s', skipped", key);
 					continue;
@@ -125,7 +124,7 @@ METHOD(listener_t, message, bool,
 		enumerator = message->create_payload_enumerator(message);
 		while (enumerator->enumerate(enumerator, &payload))
 		{
-			if (payload->get_type(payload) == SECURITY_ASSOCIATION)
+			if (payload->get_type(payload) == PLV2_SECURITY_ASSOCIATION)
 			{
 				old = (sa_payload_t*)payload;
 				message->remove_payload_at(message, enumerator);

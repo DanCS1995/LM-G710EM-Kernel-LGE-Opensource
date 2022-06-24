@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2011 Andreas Steffen
- * Copyright (C) 2011 HSR Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -25,8 +25,6 @@ static const chunk_t MS_AVP_Success = chunk_from_chars(
 											0x80, 0x03, 0x00, 0x02, 0x00, 0x01);
 static const chunk_t MS_AVP_Failure = chunk_from_chars(
 											0x80, 0x03, 0x00, 0x02, 0x00, 0x02);
-static const chunk_t MS_SoH_Request = chunk_from_chars(
-			  0x00, 0x01, 0x37, 0x00, 0x00, 0x00, 0x21, 0x00, 0x02, 0x00, 0x00);
 
 typedef struct private_eap_peap_avp_t private_eap_peap_avp_t;
 
@@ -49,7 +47,7 @@ struct private_eap_peap_avp_t {
 METHOD(eap_peap_avp_t, build, void,
 	private_eap_peap_avp_t *this, bio_writer_t *writer, chunk_t data)
 {
-	u_int8_t code;
+	uint8_t code;
 	eap_packet_t *pkt;
 	chunk_t avp_data;
 
@@ -64,19 +62,6 @@ METHOD(eap_peap_avp_t, build, void,
 		writer->write_uint8(writer, EAP_MSTLV);
 		avp_data = (pkt->code == EAP_SUCCESS) ? MS_AVP_Success : MS_AVP_Failure;
 	}
-	/**
-	 * Still trying to form a correct MS SoH Request
-	 *
-	else if (pkt->type == EAP_MSCHAPV2)
-	{
-		code = (this->is_server) ? EAP_REQUEST : EAP_RESPONSE;
-		writer->write_uint8(writer, code);
-		writer->write_uint8(writer, pkt->identifier);
-		writer->write_uint16(writer, 16);
-		writer->write_uint8(writer, EAP_EXPANDED);
-		avp_data = MS_SoH_Request;
-	}
-	*/
 	else
 	{
 		avp_data = chunk_skip(data, 4);
@@ -86,10 +71,10 @@ METHOD(eap_peap_avp_t, build, void,
 
 METHOD(eap_peap_avp_t, process, status_t,
 	private_eap_peap_avp_t* this, bio_reader_t *reader, chunk_t *data,
-	u_int8_t identifier)
+	uint8_t identifier)
 {
-	u_int8_t code;
-	u_int16_t len;
+	uint8_t code;
+	uint16_t len;
 	eap_packet_t *pkt;
 	chunk_t avp_data;
 

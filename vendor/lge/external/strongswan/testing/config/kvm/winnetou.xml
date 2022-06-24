@@ -7,7 +7,7 @@
   <os>
     <type arch='x86_64' machine='pc'>hvm</type>
 	<kernel>/var/run/kvm-swan-kernel</kernel>
-    <cmdline>root=/dev/vda1 loglevel=1</cmdline>
+    <cmdline>root=/dev/vda1 loglevel=1 console=hvc0</cmdline>
     <boot dev='hd'/>
   </os>
   <features>
@@ -35,6 +35,11 @@
       <target dir='/hostshare'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x08' function='0x0'/>
     </filesystem>
+    <filesystem type='mount' accessmode='mapped'>
+      <source dir='/var/run/kvm-swan-testresults'/>
+      <target dir='/testresults'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x09' function='0x0'/>
+    </filesystem>
     <interface type='network'>
       <mac address='52:54:00:4b:23:fa'/>
       <source network='vnet1'/>
@@ -46,7 +51,7 @@
       <target port='0'/>
     </serial>
     <console type='pty'>
-      <target type='serial' port='0'/>
+      <target type='virtio' port='0'/>
     </console>
     <input type='tablet' bus='usb'/>
     <input type='mouse' bus='ps2'/>

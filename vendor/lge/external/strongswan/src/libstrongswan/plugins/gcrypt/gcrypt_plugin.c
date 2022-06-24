@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -28,6 +28,7 @@
 
 #include <errno.h>
 #include <gcrypt.h>
+#include <pthread.h>
 
 typedef struct private_gcrypt_plugin_t private_gcrypt_plugin_t;
 
@@ -43,55 +44,9 @@ struct private_gcrypt_plugin_t {
 };
 
 /**
- * gcrypt mutex initialization wrapper
+ * Define gcrypt multi-threading callbacks as gcry_threads_pthread
  */
-static int mutex_init(void **lock)
-{
-	*lock = mutex_create(MUTEX_TYPE_DEFAULT);
-	return 0;
-}
-
-/**
- * gcrypt mutex cleanup wrapper
- */
-static int mutex_destroy(void **lock)
-{
-	mutex_t *mutex = *lock;
-
-	mutex->destroy(mutex);
-	return 0;
-}
-
-/**
- * gcrypt mutex lock wrapper
- */
-static int mutex_lock(void **lock)
-{
-	mutex_t *mutex = *lock;
-
-	mutex->lock(mutex);
-	return 0;
-}
-
-/**
- * gcrypt mutex unlock wrapper
- */
-static int mutex_unlock(void **lock)
-{
-	mutex_t *mutex = *lock;
-
-	mutex->unlock(mutex);
-	return 0;
-}
-
-/**
- * gcrypt locking functions using our mutex_t
- */
-static struct gcry_thread_cbs thread_functions = {
-	GCRY_THREAD_OPTION_USER, NULL,
-	mutex_init, mutex_destroy, mutex_lock, mutex_unlock,
-	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
-};
+GCRY_THREAD_OPTION_PTHREAD_IMPL;
 
 METHOD(plugin_t, get_name, char*,
 	private_gcrypt_plugin_t *this)
@@ -103,6 +58,8 @@ METHOD(plugin_t, get_features, int,
 	private_gcrypt_plugin_t *this, plugin_feature_t *features[])
 {
 	static plugin_feature_t f[] = {
+		/* we provide threading-safe initialization of libgcrypt */
+		PLUGIN_PROVIDE(CUSTOM, "gcrypt-threading"),
 		/* crypters */
 		PLUGIN_REGISTER(CRYPTER, gcrypt_crypter_create),
 			PLUGIN_PROVIDE(CRYPTER, ENCR_AES_CTR, 16),
@@ -141,14 +98,14 @@ METHOD(plugin_t, get_features, int,
 			PLUGIN_PROVIDE(HASHER, HASH_SHA512),
 		/* MODP DH groups */
 		PLUGIN_REGISTER(DH, gcrypt_dh_create),
-			PLUGIN_PROVIDE(DH, MODP_2048_BIT),
-			PLUGIN_PROVIDE(DH, MODP_2048_224),
-			PLUGIN_PROVIDE(DH, MODP_2048_256),
-			PLUGIN_PROVIDE(DH, MODP_1536_BIT),
 			PLUGIN_PROVIDE(DH, MODP_3072_BIT),
 			PLUGIN_PROVIDE(DH, MODP_4096_BIT),
 			PLUGIN_PROVIDE(DH, MODP_6144_BIT),
 			PLUGIN_PROVIDE(DH, MODP_8192_BIT),
+			PLUGIN_PROVIDE(DH, MODP_2048_BIT),
+			PLUGIN_PROVIDE(DH, MODP_2048_224),
+			PLUGIN_PROVIDE(DH, MODP_2048_256),
+			PLUGIN_PROVIDE(DH, MODP_1536_BIT),
 			PLUGIN_PROVIDE(DH, MODP_1024_BIT),
 			PLUGIN_PROVIDE(DH, MODP_1024_160),
 			PLUGIN_PROVIDE(DH, MODP_768_BIT),
@@ -161,6 +118,28 @@ METHOD(plugin_t, get_features, int,
 			PLUGIN_PROVIDE(PRIVKEY, KEY_RSA),
 		PLUGIN_REGISTER(PRIVKEY_GEN, gcrypt_rsa_private_key_gen, FALSE),
 			PLUGIN_PROVIDE(PRIVKEY_GEN, KEY_RSA),
+		/* signature schemes, private */
+#if GCRYPT_VERSION_NUMBER >= 0x010700
+		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PSS),
+#endif
+		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_NULL),
+		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_SHA2_224),
+		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_SHA2_256),
+		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_SHA2_384),
+		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_SHA2_512),
+		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_SHA1),
+		PLUGIN_PROVIDE(PRIVKEY_SIGN, SIGN_RSA_EMSA_PKCS1_MD5),
+		/* signature verification schemes */
+#if GCRYPT_VERSION_NUMBER >= 0x010700
+		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PSS),
+#endif
+		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_NULL),
+		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_SHA2_224),
+		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_SHA2_256),
+		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_SHA2_384),
+		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_SHA2_512),
+		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_SHA1),
+		PLUGIN_PROVIDE(PUBKEY_VERIFY, SIGN_RSA_EMSA_PKCS1_MD5),
 		/* random numbers */
 		PLUGIN_REGISTER(RNG, gcrypt_rng_create),
 			PLUGIN_PROVIDE(RNG, RNG_WEAK),
@@ -184,7 +163,7 @@ plugin_t *gcrypt_plugin_create()
 {
 	private_gcrypt_plugin_t *this;
 
-	gcry_control(GCRYCTL_SET_THREAD_CBS, &thread_functions);
+	gcry_control(GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
 
 	if (!gcry_check_version(GCRYPT_VERSION))
 	{
@@ -201,6 +180,9 @@ plugin_t *gcrypt_plugin_create()
 	}
 	gcry_control(GCRYCTL_INITIALIZATION_FINISHED, 0);
 
+	/* initialize static allocations we want to exclude from leak-detective */
+	gcry_create_nonce(NULL, 0);
+
 	INIT(this,
 		.public = {
 			.plugin = {
@@ -213,4 +195,3 @@ plugin_t *gcrypt_plugin_create()
 
 	return &this->public.plugin;
 }
-

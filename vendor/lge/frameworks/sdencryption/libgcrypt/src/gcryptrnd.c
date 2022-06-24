@@ -593,7 +593,7 @@ handle_signal (int signo)
         {
           logit (LOG_NOTICE, "shutdown forced");
           return 1;
-	}
+    }
       break;
         
     case SIGINT:
@@ -649,7 +649,7 @@ serve (int listen_fd)
             if (handle_signal (signo))
               break; /* Stop the loop. */
           continue;
-	}
+    }
 
       gcry_fast_random_poll ();
       fd = pth_accept_ev (listen_fd, (struct sockaddr *)&paddr, &plen, ev);
@@ -660,20 +660,20 @@ serve (int listen_fd)
               if (handle_signal (signo))
                 break; /* Stop the loop. */
               continue;
-	    }
+        }
           logit (LOG_WARNING, "accept failed: %s - waiting 1s\n",
                  strerror (errno));
           gcry_fast_random_poll ();
           pth_sleep (1);
           continue;
-	}
+    }
 
       if (!pth_spawn (tattr, connection_thread, (void*)fd))
         {
           logit (LOG_ERR, "error spawning connection handler: %s\n",
                  strerror (errno) );
           close (fd);
-	}
+    }
     }
   
   pth_event_free (ev, PTH_FREE_ALL);

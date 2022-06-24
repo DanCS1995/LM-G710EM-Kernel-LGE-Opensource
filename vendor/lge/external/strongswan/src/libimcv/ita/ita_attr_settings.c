@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Andreas Steffen
+ * Copyright (C) 2012-2014 Andreas Steffen
  * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -29,7 +29,7 @@ typedef struct private_ita_attr_settings_t private_ita_attr_settings_t;
 typedef struct entry_t entry_t;
 
 /**
- * Contains a settins name/value pair
+ * Contains a settings name/value pair
  */
 struct entry_t {
 	char *name;
@@ -91,7 +91,12 @@ struct private_ita_attr_settings_t {
 	pen_type_t type;
 
 	/**
-	 * Attribute value
+	 * Length of attribute value
+	 */
+	size_t length;
+
+	/**
+	 * Attribute value or segment
 	 */
 	chunk_t value;
 
@@ -159,22 +164,28 @@ METHOD(pa_tnc_attr_t, build, void,
 	enumerator->destroy(enumerator);
 
 	this->value = writer->extract_buf(writer);
+	this->length = this->value.len;
 	writer->destroy(writer);
 }
 
 METHOD(pa_tnc_attr_t, process, status_t,
-	private_ita_attr_settings_t *this, u_int32_t *offset)
+	private_ita_attr_settings_t *this, uint32_t *offset)
 {
 	bio_reader_t *reader;
-	u_int32_t count;
+	uint32_t count;
 	chunk_t name, value;
 	entry_t *entry;
 	status_t status = FAILED;
 
+	*offset = 0;
+
+	if (this->value.len < this->length)
+	{
+		return NEED_MORE;
+	}
 	if (this->value.len < ITA_SETTINGS_MIN_SIZE)
 	{
 		DBG1(DBG_TNC, "insufficient data for ITA Settings attribute");
-		*offset = 0;
 		return FAILED;
 	}
 
@@ -216,6 +227,12 @@ end:
 	return status;
 }
 
+METHOD(pa_tnc_attr_t, add_segment, void,
+	private_ita_attr_settings_t *this, chunk_t segment)
+{
+	this->value = chunk_cat("mc", this->value, segment);
+}
+
 METHOD(pa_tnc_attr_t, get_ref, pa_tnc_attr_t*,
 	private_ita_attr_settings_t *this)
 {
@@ -245,22 +262,29 @@ METHOD(ita_attr_settings_t, add, void,
 	this->list->insert_last(this->list, entry);
 }
 
-/**
- * Enumerate name/value pairs
- */
-static bool entry_filter(void *null, entry_t **entry, char **name,
-						 void *i2, chunk_t *value)
+CALLBACK(entry_filter, bool,
+	void *null, enumerator_t *orig, va_list args)
 {
-	*name = (*entry)->name;
-	*value = (*entry)->value;
-	return TRUE;
+	entry_t *entry;
+	chunk_t *value;
+	char **name;
+
+	VA_ARGS_VGET(args, name, value);
+
+	while (orig->enumerate(orig, &entry))
+	{
+		*name = entry->name;
+		*value = entry->value;
+		return TRUE;
+	}
+	return FALSE;
 }
 
 METHOD(ita_attr_settings_t, create_enumerator, enumerator_t*,
 	private_ita_attr_settings_t *this)
 {
 	return enumerator_create_filter(this->list->create_enumerator(this->list),
-								   (void*)entry_filter, NULL, NULL);
+									entry_filter, NULL, NULL);
 }
 
 /**
@@ -279,6 +303,7 @@ pa_tnc_attr_t *ita_attr_settings_create(void)
 				.set_noskip_flag = _set_noskip_flag,
 				.build = _build,
 				.process = _process,
+				.add_segment = _add_segment,
 				.get_ref = _get_ref,
 				.destroy = _destroy,
 			},
@@ -296,7 +321,7 @@ pa_tnc_attr_t *ita_attr_settings_create(void)
 /**
  * Described in header.
  */
-pa_tnc_attr_t *ita_attr_settings_create_from_data(chunk_t data)
+pa_tnc_attr_t *ita_attr_settings_create_from_data(size_t length, chunk_t data)
 {
 	private_ita_attr_settings_t *this;
 
@@ -309,6 +334,7 @@ pa_tnc_attr_t *ita_attr_settings_create_from_data(chunk_t data)
 				.set_noskip_flag = _set_noskip_flag,
 				.build = _build,
 				.process = _process,
+				.add_segment = _add_segment,
 				.get_ref = _get_ref,
 				.destroy = _destroy,
 			},
@@ -316,6 +342,7 @@ pa_tnc_attr_t *ita_attr_settings_create_from_data(chunk_t data)
 			.create_enumerator = _create_enumerator,
 		},
 		.type = { PEN_ITA, ITA_ATTR_SETTINGS },
+		.length = length,
 		.value = chunk_clone(data),
 		.list = linked_list_create(),
 		.ref = 1,

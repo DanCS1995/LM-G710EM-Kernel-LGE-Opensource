@@ -254,11 +254,6 @@ static int xtables_lock(int wait, struct timeval *wait_interval)
 
 	time_left.tv_sec = wait;
 	time_left.tv_usec = 0;
-/* 2014-12-18 kyungsu.mok@lge.com LGP_DATA_TOOLS_IPTABLES_FORCE_WAIT_OPTION [START] */
-#ifdef LGP_DATA_TOOLS_IPTABLES_FORCE_WAIT_OPTION
-    int retry_cnt = 0;
-#endif
-/* 2014-12-18 kyungsu.mok@lge.com LGP_DATA_TOOLS_IPTABLES_FORCE_WAIT_OPTION [END] */
 
 	fd = open(XT_LOCK_NAME, O_CREAT, 0600);
 	if (fd < 0) {
@@ -292,7 +287,7 @@ static int xtables_lock(int wait, struct timeval *wait_interval)
 		select(0, NULL, NULL, NULL, &wait_time);
 		timersub(&time_left, wait_interval, &time_left);
 /* 2014-12-18 kyungsu.mok@lge.com LGP_DATA_TOOLS_IPTABLES_FORCE_WAIT_OPTION [START] */
-        patch_code_id("LPCP-704@n@c@iptables@xshared.c@1");
+		patch_code_id("LPCP-704@n@c@iptables@xshared.c@1");
 #ifndef LGP_DATA_TOOLS_IPTABLES_FORCE_WAIT_OPTION
 		sleep(1);
 #endif

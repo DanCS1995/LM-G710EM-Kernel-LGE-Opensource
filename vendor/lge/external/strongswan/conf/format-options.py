@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
-# Copyright (C) 2014 Tobias Brunner
-# Hochschule fuer Technik Rapperswil
+# Copyright (C) 2014-2017 Tobias Brunner
+# HSR Hochschule fuer Technik Rapperswil
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
@@ -48,28 +48,43 @@ full.section.name {[#]}
 
 If a # is added between the curly braces the section header will be commented
 out in the configuration file snippet, which is useful for example sections.
+
+To add include statements to generated config files (ignored when generating
+man pages) the following format can be used:
+
+full.section.name.include files/to/include
+	Description of this include statement
+
+Dots in section/option names may be escaped with a backslash.  For instance,
+with the following section description
+
+charon.filelog./var/log/daemon\.log {}
+	Section to define logging into /var/log/daemon.log
+
+/var/log/daemon.log will be the name of the last section.
 """
 
 import sys
 import re
 from textwrap import TextWrapper
 from optparse import OptionParser
+from functools import cmp_to_key
 
 class ConfigOption:
 	"""Representing a configuration option or described section in strongswan.conf"""
-	def __init__(self, name, default = None, section = False, commented = False):
-		self.name = name.split('.')[-1]
-		self.fullname = name
+	def __init__(self, path, default = None, section = False, commented = False, include = False):
+		self.path = path
+		self.name = path[-1]
+		self.fullname = '.'.join(path)
 		self.default = default
 		self.section = section
 		self.commented = commented
+		self.include = include
 		self.desc = []
 		self.options = []
 
-	def __cmp__(self, other):
-		if self.section == other.section:
-			return  cmp(self.name, other.name)
-		return 1 if self.section else -1
+	def __lt__(self, other):
+		return self.name < other.name
 
 	def add_paragraph(self):
 		"""Adds a new paragraph to the description"""
@@ -91,10 +106,18 @@ class ConfigOption:
 		self.commented = other.commented
 		self.desc = other.desc
 
+	@staticmethod
+	def cmp(a, b):
+		# order options before sections and includes last
+		if a.include or b.include:
+			return a.include - b.include
+		return a.section - b.section
+
 class Parser:
 	"""Parses one or more files of configuration options"""
-	def __init__(self):
+	def __init__(self, sort = True):
 		self.options = []
+		self.sort = sort
 
 	def parse(self, file):
 		"""Parses the given file and adds all options to the internal store"""
@@ -113,7 +136,8 @@ class Parser:
 		if m:
 			if self.__current:
 				self.__add_option(self.__current)
-			self.__current = ConfigOption(m.group('name'), m.group('default'),
+			path = self.__split_name(m.group('name'))
+			self.__current = ConfigOption(path, m.group('default'),
 										  commented = not m.group('assign'))
 			return
 		# section definition
@@ -121,8 +145,17 @@ class Parser:
 		if m:
 			if self.__current:
 				self.__add_option(self.__current)
-			self.__current = ConfigOption(m.group('name'), section = True,
+			path = self.__split_name(m.group('name'))
+			self.__current = ConfigOption(path, section = True,
 										  commented = m.group('comment'))
+			return
+		# include definition
+		m = re.match(r'^(?P<name>\S+\.include|include)\s+(?P<pattern>\S+)\s*$', line)
+		if m:
+			if self.__current:
+				self.__add_option(self.__current)
+			path = self.__split_name(m.group('name'))
+			self.__current = ConfigOption(path, m.group('pattern'), include = True)
 			return
 		# paragraph separator
 		m = re.match(r'^\s*$', line)
@@ -133,11 +166,14 @@ class Parser:
 		if m and self.__current:
 			self.__current.add(m.group('text'))
 
+	def __split_name(self, name):
+		"""Split the given full name in a list of section/option names"""
+		return [x.replace('\.', '.') for x in re.split(r'(?<!\\)\.', name)]
+
 	def __add_option(self, option):
 		"""Adds the given option to the abstract storage"""
 		option.desc = [desc for desc in option.desc if len(desc)]
-		parts = option.fullname.split('.')
-		parent = self.__get_option(parts[:-1], True)
+		parent = self.__get_option(option.path[:-1], True)
 		if not parent:
 			parent = self
 		found = next((x for x in parent.options if x.name == option.name
@@ -146,28 +182,28 @@ class Parser:
 			found.adopt(option)
 		else:
 			parent.options.append(option)
-			parent.options.sort()
+			if self.sort:
+				parent.options.sort()
 
-	def __get_option(self, parts, create = False):
+	def __get_option(self, path, create = False):
 		"""Searches/Creates the option (section) based on a list of section names"""
 		option = None
 		options = self.options
-		fullname = ""
-		for name in parts:
-			fullname += '.' + name if len(fullname) else name
+		for i, name in enumerate(path, 1):
 			option = next((x for x in options if x.name == name and x.section), None)
 			if not option:
 				if not create:
 					break
-				option = ConfigOption(fullname, section = True)
+				option = ConfigOption(path[:i], section = True)
 				options.append(option)
-				options.sort()
+				if self.sort:
+					options.sort()
 			options = option.options
 		return option
 
 	def get_option(self, name):
 		"""Retrieves the option with the given name"""
-		return self.__get_option(name.split('.'))
+		return self.__get_option(self.__split_name(name))
 
 class TagReplacer:
 	"""Replaces formatting tags in text"""
@@ -181,7 +217,7 @@ class TagReplacer:
 		return re.compile(r'''
 			(^|\s|(?P<brack>[(\[])) # prefix with optional opening bracket
 			(?P<tag>''' + tag + r''') # start tag
-			(?P<text>\w|\S.*?\S) # text
+			(?P<text>\S|\S.*?\S) # text
 			''' + tag + r''' # end tag
 			(?P<punct>([.,!:)\]]|\(\d+\))*) # punctuation
 			(?=$|\s) # suffix (don't consume it so that subsequent tags can match)
@@ -228,37 +264,40 @@ class ConfFormatter:
 		if len(opt.desc):
 			self.__wrapper.initial_indent = '{0}# '.format(self.__indent * indent)
 			self.__wrapper.subsequent_indent = self.__wrapper.initial_indent
-			print format(self.__wrapper.fill(self.__tags.replace(opt.desc[0])))
+			print(self.__wrapper.fill(self.__tags.replace(opt.desc[0])))
 
 	def __print_option(self, opt, indent, commented):
 		"""Print a single option with description and default value"""
 		comment = "# " if commented or opt.commented else ""
 		self.__print_description(opt, indent)
-		if opt.default:
-			print '{0}{1}{2} = {3}'.format(self.__indent * indent, comment, opt.name, opt.default)
+		if opt.include:
+			print('{0}{1} {2}'.format(self.__indent * indent, opt.name, opt.default))
+		elif opt.default:
+			print('{0}{1}{2} = {3}'.format(self.__indent * indent, comment, opt.name, opt.default))
 		else:
-			print '{0}{1}{2} ='.format(self.__indent * indent, comment, opt.name)
-		print
+			print('{0}{1}{2} ='.format(self.__indent * indent, comment, opt.name))
+		print('')
 
 	def __print_section(self, section, indent, commented):
 		"""Print a section with all options"""
-		comment = "# " if commented or section.commented else ""
+		commented = commented or section.commented
+		comment = "# " if commented else ""
 		self.__print_description(section, indent)
-		print '{0}{1}{2} {{'.format(self.__indent * indent, comment, section.name)
-		print
-		for o in section.options:
+		print('{0}{1}{2} {{'.format(self.__indent * indent, comment, section.name))
+		print('')
+		for o in sorted(section.options, key=cmp_to_key(ConfigOption.cmp)):
 			if o.section:
-				self.__print_section(o, indent + 1, section.commented)
+				self.__print_section(o, indent + 1, commented)
 			else:
-				self.__print_option(o, indent + 1, section.commented)
-		print '{0}{1}}}'.format(self.__indent * indent, comment)
-		print
+				self.__print_option(o, indent + 1, commented)
+		print('{0}{1}}}'.format(self.__indent * indent, comment))
+		print('')
 
 	def format(self, options):
 		"""Print a list of options"""
 		if not options:
 			return
-		for option in options:
+		for option in sorted(options, key=cmp_to_key(ConfigOption.cmp)):
 			if option.section:
 				self.__print_section(option, 0, False)
 			else:
@@ -282,15 +321,17 @@ class ManFormatter:
 		"""Print a single option"""
 		if option.section and not len(option.desc):
 			return
+		if option.include:
+			return
 		if option.section:
-			print '.TP\n.B {0}\n.br'.format(option.fullname)
+			print('.TP\n.B {0}\n.br'.format(option.fullname))
 		else:
-			print '.TP'
+			print('.TP')
 			default = option.default if option.default else ''
-			print '.BR {0} " [{1}]"'.format(option.fullname, default)
+			print('.BR {0} " [{1}]"'.format(option.fullname, default))
 		for para in option.desc if len(option.desc) < 2 else option.desc[1:]:
-			print self.__groffize(self.__wrapper.fill(para))
-			print ''
+			print(self.__groffize(self.__wrapper.fill(para)))
+			print('')
 
 	def format(self, options):
 		"""Print a list of options"""
@@ -310,9 +351,12 @@ options.add_option("-f", "--format", dest="format", type="choice", choices=["con
 options.add_option("-r", "--root", dest="root", metavar="NAME",
 				   help="root section of which options are printed, "
 				   "if not found everything is printed")
+options.add_option("-n", "--nosort", action="store_false", dest="sort",
+				   default=True, help="do not sort sections alphabetically")
+
 (opts, args) = options.parse_args()
 
-parser = Parser()
+parser = Parser(opts.sort)
 if len(args):
 	for filename in args:
 		try:

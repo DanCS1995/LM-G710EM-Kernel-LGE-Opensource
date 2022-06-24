@@ -2,7 +2,7 @@
  * Copyright (C) 2012 Tobias Brunner
  * Copyright (C) 2012 Giuliano Grassi
  * Copyright (C) 2012 Ralf Sager
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  * Copyright (C) 2012 Martin Willi
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -16,6 +16,30 @@
  * for more details.
  */
 
+#include "tun_device.h"
+
+#include <utils/debug.h>
+#include <threading/thread.h>
+
+#if defined(__APPLE__)
+#include "TargetConditionals.h"
+#if !TARGET_OS_OSX
+#define TUN_DEVICE_NOT_SUPPORTED
+#endif
+#elif !defined(__linux__) && !defined(HAVE_NET_IF_TUN_H)
+#define TUN_DEVICE_NOT_SUPPORTED
+#endif
+
+#ifdef TUN_DEVICE_NOT_SUPPORTED
+
+tun_device_t *tun_device_create(const char *name_tmpl)
+{
+	DBG1(DBG_LIB, "TUN devices are not supported");
+	return NULL;
+}
+
+#else /* TUN devices supported */
+
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -27,22 +51,6 @@
 #include <unistd.h>
 #include <net/if.h>
 
-#if !defined(__APPLE__) && !defined(__linux__) && !defined(HAVE_NET_IF_TUN_H)
-
-#include "tun_device.h"
-
-#include <utils/debug.h>
-
-#warning TUN devices are not supported!
-
-tun_device_t *tun_device_create(const char *name_tmpl)
-{
-	DBG1(DBG_LIB, "TUN devices are not supported");
-	return NULL;
-}
-
-#else /* TUN devices supported */
-
 #ifdef __APPLE__
 #include <net/if_utun.h>
 #include <netinet/in_var.h>
@@ -50,14 +58,13 @@ tun_device_t *tun_device_create(const char *name_tmpl)
 #elif defined(__linux__)
 #include <linux/types.h>
 #include <linux/if_tun.h>
+#elif __FreeBSD__ >= 10
+#include <net/if_tun.h>
+#include <net/if_var.h>
+#include <netinet/in_var.h>
 #else
 #include <net/if_tun.h>
 #endif
-
-#include "tun_device.h"
-
-#include <utils/debug.h>
-#include <threading/thread.h>
 
 #define TUN_DEFAULT_MTU 1500
 
@@ -98,11 +105,82 @@ struct private_tun_device_t {
 	/**
 	 * Netmask for address
 	 */
-	u_int8_t netmask;
+	uint8_t netmask;
 };
 
-METHOD(tun_device_t, set_address, bool,
-	private_tun_device_t *this, host_t *addr, u_int8_t netmask)
+/**
+ * FreeBSD 10 deprecated the SIOCSIFADDR etc. commands.
+ */
+#if __FreeBSD__ >= 10
+
+static bool set_address_and_mask(struct in_aliasreq *ifra, host_t *addr,
+								 uint8_t netmask)
+{
+	host_t *mask;
+
+	memcpy(&ifra->ifra_addr, addr->get_sockaddr(addr),
+		   *addr->get_sockaddr_len(addr));
+	/* set the same address as destination address */
+	memcpy(&ifra->ifra_dstaddr, addr->get_sockaddr(addr),
+		   *addr->get_sockaddr_len(addr));
+
+	mask = host_create_netmask(addr->get_family(addr), netmask);
+	if (!mask)
+	{
+		DBG1(DBG_LIB, "invalid netmask: %d", netmask);
+		return FALSE;
+	}
+	memcpy(&ifra->ifra_mask, mask->get_sockaddr(mask),
+		   *mask->get_sockaddr_len(mask));
+	mask->destroy(mask);
+	return TRUE;
+}
+
+/**
+ * Set the address using the more flexible SIOCAIFADDR/SIOCDIFADDR commands
+ * on FreeBSD 10 an newer.
+ */
+static bool set_address_impl(private_tun_device_t *this, host_t *addr,
+							 uint8_t netmask)
+{
+	struct in_aliasreq ifra;
+
+	memset(&ifra, 0, sizeof(ifra));
+	strncpy(ifra.ifra_name, this->if_name, IFNAMSIZ);
+
+	if (this->address)
+	{	/* remove the existing address first */
+		if (!set_address_and_mask(&ifra, this->address, this->netmask))
+		{
+			return FALSE;
+		}
+		if (ioctl(this->sock, SIOCDIFADDR, &ifra) < 0)
+		{
+			DBG1(DBG_LIB, "failed to remove existing address on %s: %s",
+				 this->if_name, strerror(errno));
+			return FALSE;
+		}
+	}
+	if (!set_address_and_mask(&ifra, addr, netmask))
+	{
+		return FALSE;
+	}
+	if (ioctl(this->sock, SIOCAIFADDR, &ifra) < 0)
+	{
+		DBG1(DBG_LIB, "failed to add address on %s: %s",
+			 this->if_name, strerror(errno));
+		return FALSE;
+	}
+	return TRUE;
+}
+
+#else /* __FreeBSD__ */
+
+/**
+ * Set the address using the classic SIOCSIFADDR etc. commands on other systems.
+ */
+static bool set_address_impl(private_tun_device_t *this, host_t *addr,
+							 uint8_t netmask)
 {
 	struct ifreq ifr;
 	host_t *mask;
@@ -143,13 +221,26 @@ METHOD(tun_device_t, set_address, bool,
 			 this->if_name, strerror(errno));
 		return FALSE;
 	}
+	return TRUE;
+}
+
+#endif /* __FreeBSD__ */
+
+METHOD(tun_device_t, set_address, bool,
+	private_tun_device_t *this, host_t *addr, uint8_t netmask)
+{
+	if (!set_address_impl(this, addr, netmask))
+	{
+		return FALSE;
+	}
+	DESTROY_IF(this->address);
 	this->address = addr->clone(addr);
 	this->netmask = netmask;
 	return TRUE;
 }
 
 METHOD(tun_device_t, get_address, host_t*,
-	private_tun_device_t *this, u_int8_t *netmask)
+	private_tun_device_t *this, uint8_t *netmask)
 {
 	if (netmask && this->address)
 	{
@@ -244,7 +335,7 @@ METHOD(tun_device_t, write_packet, bool,
 #ifdef __APPLE__
 	/* UTUN's expect the packets to be prepended by a 32-bit protocol number
 	 * instead of parsing the packet again, we assume IPv4 for now */
-	u_int32_t proto = htonl(AF_INET);
+	uint32_t proto = htonl(AF_INET);
 	packet = chunk_cata("cc", chunk_from_thing(proto), packet);
 #endif
 	s = write(this->tunfd, packet.ptr, packet.len);
@@ -264,40 +355,27 @@ METHOD(tun_device_t, write_packet, bool,
 METHOD(tun_device_t, read_packet, bool,
 	private_tun_device_t *this, chunk_t *packet)
 {
+	chunk_t data;
 	ssize_t len;
-	fd_set set;
 	bool old;
 
-	FD_ZERO(&set);
-	FD_SET(this->tunfd, &set);
+	data = chunk_alloca(get_mtu(this));
 
 	old = thread_cancelability(TRUE);
-	len = select(this->tunfd + 1, &set, NULL, NULL, NULL);
+	len = read(this->tunfd, data.ptr, data.len);
 	thread_cancelability(old);
-
-	if (len < 0)
-	{
-		DBG1(DBG_LIB, "select on TUN device %s failed: %s", this->if_name,
-			 strerror(errno));
-		return FALSE;
-	}
-	/* FIXME: this is quite expensive for lots of small packets, copy from
-	 * local buffer instead? */
-	*packet = chunk_alloc(get_mtu(this));
-	len = read(this->tunfd, packet->ptr, packet->len);
 	if (len < 0)
 	{
 		DBG1(DBG_LIB, "reading from TUN device %s failed: %s", this->if_name,
 			 strerror(errno));
-		chunk_free(packet);
 		return FALSE;
 	}
-	packet->len = len;
+	data.len = len;
 #ifdef __APPLE__
 	/* UTUN's prepend packets with a 32-bit protocol number */
-	packet->len -= sizeof(u_int32_t);
-	memmove(packet->ptr, packet->ptr + sizeof(u_int32_t), packet->len);
+	data = chunk_skip(data, sizeof(uint32_t));
 #endif
+	*packet = chunk_clone(data);
 	return TRUE;
 }
 
@@ -412,10 +490,25 @@ static bool init_tun(private_tun_device_t *this, const char *name_tmpl)
 	strncpy(this->if_name, ifr.ifr_name, IFNAMSIZ);
 	return TRUE;
 
-#else /* !IFF_TUN */
+#elif defined(__FreeBSD__)
 
-	/* this works on FreeBSD and might also work on Linux with older TUN
-	 * driver versions (no IFF_TUN) */
+	if (name_tmpl)
+	{
+		DBG1(DBG_LIB, "arbitrary naming of TUN devices is not supported");
+	}
+
+	this->tunfd = open("/dev/tun", O_RDWR);
+	if (this->tunfd < 0)
+	{
+		DBG1(DBG_LIB, "failed to open /dev/tun: %s", strerror(errno));
+		return FALSE;
+	}
+	fdevname_r(this->tunfd, this->if_name, IFNAMSIZ);
+	return TRUE;
+
+#else /* !__FreeBSD__ */
+
+	/* this might work on Linux with older TUN driver versions (no IFF_TUN) */
 	char devname[IFNAMSIZ];
 	/* the same process is allowed to open a device again, but that's not what
 	 * we want (unless we previously closed a device, which we don't know at

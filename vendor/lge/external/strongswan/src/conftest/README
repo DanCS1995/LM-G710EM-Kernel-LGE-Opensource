@@ -100,7 +100,7 @@ The IKE_SA configuration uses the following options (as key/value pairs):
                   scenario
   rsa_strength:   Connection requires a trustchain with RSA keys of given bits
   ecdsa_strength: Connection requires a trustchain with ECDSA keys of given bits
-  cert_policy:    Connection requries a certificate with the given OID policy
+  cert_policy:    Connection requires a certificate with the given OID policy
   named_pool:     Name of an IP pool defined e.g. in a database backend
 
 The following CHILD_SA specific configuration options are supported:
@@ -304,7 +304,7 @@ Compile time options required depend on the test suite. A minimalistic
 strongSwan build with the OpenSSL crypto backend can be configured with:
 
 ./configure --sysconfdir=/etc --disable-pluto --disable-scripts \
-  --disable-tools --disable-aes --disable-des --disable-md5 \
+  --disable-scepclient --disable-aes --disable-des --disable-md5 \
   --disable-sha1 --disable-sha2 --disable-fips-prf --disable-gmp \
   --disable-pubkey --disable-pgp --disable-dnskey --disable-updown \
   --disable-attr --disable-resolve --enable-openssl --enable-conftest \

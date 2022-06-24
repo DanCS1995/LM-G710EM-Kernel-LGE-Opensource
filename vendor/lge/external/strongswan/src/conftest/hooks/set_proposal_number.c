@@ -57,7 +57,7 @@ static void copy_proposal_algs(proposal_t *from, proposal_t *to,
 							   transform_type_t type)
 {
 	enumerator_t *enumerator;
-	u_int16_t alg, key_size;
+	uint16_t alg, key_size;
 
 	enumerator = from->create_enumerator(from, type);
 	while (enumerator->enumerate(enumerator, &alg, &key_size))
@@ -85,7 +85,7 @@ METHOD(listener_t, message, bool,
 		enumerator = message->create_payload_enumerator(message);
 		while (enumerator->enumerate(enumerator, &payload))
 		{
-			if (payload->get_type(payload) == SECURITY_ASSOCIATION)
+			if (payload->get_type(payload) == PLV2_SECURITY_ASSOCIATION)
 			{
 				sa = (sa_payload_t*)payload;
 				list = sa->get_proposals(sa);

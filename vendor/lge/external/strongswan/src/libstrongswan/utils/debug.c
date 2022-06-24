@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2006 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -27,48 +27,50 @@
 
 #include "debug.h"
 
-ENUM(debug_names, DBG_DMN, DBG_MAX,
-      "DMN",
-      "MGR",
-      "IKE",
-      "CHD",
-      "JOB",
-      "CFG",
-      "KNL",
-      "NET",
-      "ASN",
-      "ENC",
-      "TNC",
-      "IMC",
-      "IMV",
-      "PTS",
-      "TLS",
-      "APP",
-      "ESP",
-      "LIB",
-      "KEY",
+ENUM(debug_names, DBG_DMN, DBG_ANY,
+	"DMN",
+	"MGR",
+	"IKE",
+	"CHD",
+	"JOB",
+	"CFG",
+	"KNL",
+	"NET",
+	"ASN",
+	"ENC",
+	"TNC",
+	"IMC",
+	"IMV",
+	"PTS",
+	"TLS",
+	"APP",
+	"ESP",
+	"LIB",
+	"KEY",
+	"ANY",
 );
 
-ENUM(debug_lower_names, DBG_DMN, DBG_MAX,
-      "dmn",
-      "mgr",
-      "ike",
-      "chd",
-      "job",
-      "cfg",
-      "knl",
-      "net",
-      "asn",
-      "enc",
-      "tnc",
-      "imc",
-      "imv",
-      "pts",
-      "tls",
-      "app",
-      "esp",
-      "lib",
-      "key",
+ENUM(debug_lower_names, DBG_DMN, DBG_ANY,
+	"dmn",
+	"mgr",
+	"ike",
+	"chd",
+	"job",
+	"cfg",
+	"knl",
+	"net",
+	"asn",
+	"enc",
+	"tnc",
+	"imc",
+	"imv",
+	"pts",
+	"tls",
+	"app",
+	"esp",
+	"lib",
+	"key"
+	"any",
 );
 
 /* declaration of some help functions */
@@ -91,19 +93,19 @@ static FILE *default_stream = NULL;
  */
 void dbg_default(debug_t group, level_t level, char *fmt, ...)
 {
-   if (!default_stream)
-   {
-      default_stream = stderr;
-   }
-   if (level <= default_level)
-   {
-      va_list args;
+	if (!default_stream)
+	{
+		default_stream = stderr;
+	}
+	if (level <= default_level)
+	{
+		va_list args;
 
-      va_start(args, fmt);
-      vfprintf(default_stream, fmt, args);
-      fprintf(default_stream, "\n");
-      va_end(args);
-   }
+		va_start(args, fmt);
+		vfprintf(default_stream, fmt, args);
+		fprintf(default_stream, "\n");
+		va_end(args);
+	}
 }
 
 /**
@@ -111,7 +113,7 @@ void dbg_default(debug_t group, level_t level, char *fmt, ...)
  */
 void dbg_default_set_level(level_t level)
 {
-   default_level = level;
+	default_level = level;
 }
 
 /**
@@ -119,7 +121,7 @@ void dbg_default_set_level(level_t level)
  */
 void dbg_default_set_stream(FILE *stream)
 {
-   default_stream = stream;
+	default_stream = stream;
 }
 
 /**

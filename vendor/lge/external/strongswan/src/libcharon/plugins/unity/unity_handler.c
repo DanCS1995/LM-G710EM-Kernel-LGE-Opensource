@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * Copyright (C) 2012 Martin Willi
  * Copyright (C) 2012 revosec AG
@@ -50,8 +50,8 @@ struct private_unity_handler_t {
  * Traffic selector entry for networks to include under a given IKE_SA
  */
 typedef struct {
-	/** associated IKE_SA, unique ID */
-	u_int32_t sa;
+	/** associated IKE_SA COOKIEs */
+	ike_sa_id_t *id;
 	/** traffic selector to include/exclude */
 	traffic_selector_t *ts;
 } entry_t;
@@ -61,6 +61,7 @@ typedef struct {
  */
 static void entry_destroy(entry_t *this)
 {
+	this->id->destroy(this->id);
 	this->ts->destroy(this->ts);
 	free(this);
 }
@@ -131,9 +132,10 @@ static bool add_include(private_unity_handler_t *this, chunk_t data)
 	while (list->remove_first(list, (void**)&ts) == SUCCESS)
 	{
 		INIT(entry,
-			.sa = ike_sa->get_unique_id(ike_sa),
+			.id = ike_sa->get_id(ike_sa),
 			.ts = ts,
 		);
+		entry->id = entry->id->clone(entry->id);
 
 		this->mutex->lock(this->mutex);
 		this->include->insert_last(this->include, entry);
@@ -171,7 +173,7 @@ static bool remove_include(private_unity_handler_t *this, chunk_t data)
 		enumerator = this->include->create_enumerator(this->include);
 		while (enumerator->enumerate(enumerator, &entry))
 		{
-			if (entry->sa == ike_sa->get_unique_id(ike_sa) &&
+			if (entry->id->equals(entry->id, ike_sa->get_id(ike_sa)) &&
 				ts->equals(ts, entry->ts))
 			{
 				this->include->remove_at(this->include, enumerator);
@@ -204,20 +206,19 @@ static job_requeue_t add_exclude_async(entry_t *entry)
 {
 	enumerator_t *enumerator;
 	child_cfg_t *child_cfg;
-	lifetime_cfg_t lft = { .time = { .life = 0 } };
+	child_cfg_create_t child = {
+		.mode = MODE_PASS,
+	};
 	ike_sa_t *ike_sa;
 	char name[128];
 	host_t *host;
 
-	ike_sa = charon->ike_sa_manager->checkout_by_id(charon->ike_sa_manager,
-													entry->sa, FALSE);
+	ike_sa = charon->ike_sa_manager->checkout(charon->ike_sa_manager, entry->id);
 	if (ike_sa)
 	{
 		create_shunt_name(ike_sa, entry->ts, name, sizeof(name));
 
-		child_cfg = child_cfg_create(name, &lft, NULL, TRUE, MODE_PASS,
-									 ACTION_NONE, ACTION_NONE, ACTION_NONE,
-									 FALSE, 0, 0, NULL, NULL, FALSE);
+		child_cfg = child_cfg_create(name, &child);
 		child_cfg->add_traffic_selector(child_cfg, FALSE,
 										entry->ts->clone(entry->ts));
 		host = ike_sa->get_my_host(ike_sa);
@@ -234,7 +235,7 @@ static job_requeue_t add_exclude_async(entry_t *entry)
 		enumerator->destroy(enumerator);
 		charon->ike_sa_manager->checkin(charon->ike_sa_manager, ike_sa);
 
-		charon->shunts->install(charon->shunts, child_cfg);
+		charon->shunts->install(charon->shunts, "unity", child_cfg);
 		child_cfg->destroy(child_cfg);
 
 		DBG1(DBG_IKE, "installed %N bypass policy for %R",
@@ -267,9 +268,10 @@ static bool add_exclude(private_unity_handler_t *this, chunk_t data)
 	while (list->remove_first(list, (void**)&ts) == SUCCESS)
 	{
 		INIT(entry,
-			.sa = ike_sa->get_unique_id(ike_sa),
+			.id = ike_sa->get_id(ike_sa),
 			.ts = ts,
 		);
+		entry->id = entry->id->clone(entry->id);
 
 		/* we can't install the shunt policy yet, as we don't know the virtual IP.
 		 * Defer installation using an async callback. */
@@ -308,14 +310,15 @@ static bool remove_exclude(private_unity_handler_t *this, chunk_t data)
 		DBG1(DBG_IKE, "uninstalling %N bypass policy for %R",
 			 configuration_attribute_type_names, UNITY_LOCAL_LAN, ts);
 		ts->destroy(ts);
-		success = charon->shunts->uninstall(charon->shunts, name) && success;
+		success = charon->shunts->uninstall(charon->shunts, "unity",
+											name) && success;
 	}
 	list->destroy(list);
 	return success;
 }
 
 METHOD(attribute_handler_t, handle, bool,
-	private_unity_handler_t *this, identification_t *id,
+	private_unity_handler_t *this, ike_sa_t *ike_sa,
 	configuration_attribute_type_t type, chunk_t data)
 {
 	switch (type)
@@ -330,7 +333,7 @@ METHOD(attribute_handler_t, handle, bool,
 }
 
 METHOD(attribute_handler_t, release, void,
-	private_unity_handler_t *this, identification_t *server,
+	private_unity_handler_t *this, ike_sa_t *ike_sa,
 	configuration_attribute_type_t type, chunk_t data)
 {
 	switch (type)
@@ -365,9 +368,12 @@ typedef struct {
 } attribute_enumerator_t;
 
 METHOD(enumerator_t, enumerate_attributes, bool,
-	attribute_enumerator_t *this, configuration_attribute_type_t *type,
-	chunk_t *data)
+	attribute_enumerator_t *this, va_list args)
 {
+	configuration_attribute_type_t *type;
+	chunk_t *data;
+
+	VA_ARGS_VGET(args, type, data);
 	if (this->i < countof(attributes))
 	{
 		*type = attributes[this->i++];
@@ -378,10 +384,9 @@ METHOD(enumerator_t, enumerate_attributes, bool,
 }
 
 METHOD(attribute_handler_t, create_attribute_enumerator, enumerator_t *,
-	unity_handler_t *this, identification_t *id, linked_list_t *vips)
+	unity_handler_t *this, ike_sa_t *ike_sa, linked_list_t *vips)
 {
 	attribute_enumerator_t *enumerator;
-	ike_sa_t *ike_sa;
 
 	ike_sa = charon->bus->get_sa(charon->bus);
 	if (!ike_sa || ike_sa->get_version(ike_sa) != IKEV1 ||
@@ -391,7 +396,8 @@ METHOD(attribute_handler_t, create_attribute_enumerator, enumerator_t *,
 	}
 	INIT(enumerator,
 		.public = {
-			.enumerate = (void*)_enumerate_attributes,
+			.enumerate = enumerator_enumerate_default,
+			.venumerate = _enumerate_attributes,
 			.destroy = (void*)free,
 		},
 	);
@@ -402,34 +408,37 @@ typedef struct {
 	/** mutex to unlock */
 	mutex_t *mutex;
 	/** IKE_SA ID to filter for */
-	u_int32_t id;
+	ike_sa_id_t *id;
 } include_filter_t;
 
-/**
- * Include enumerator filter function
- */
-static bool include_filter(include_filter_t *data,
-						   entry_t **entry, traffic_selector_t **ts)
+CALLBACK(include_filter, bool,
+	include_filter_t *data, enumerator_t *orig, va_list args)
 {
-	if ((*entry)->sa == data->id)
+	entry_t *entry;
+	traffic_selector_t **ts;
+
+	VA_ARGS_VGET(args, ts);
+
+	while (orig->enumerate(orig, &entry))
 	{
-		*ts = (*entry)->ts;
-		return TRUE;
+		if (data->id->equals(data->id, entry->id))
+		{
+			*ts = entry->ts;
+			return TRUE;
+		}
 	}
 	return FALSE;
 }
 
-/**
- * Destroy include filter data, unlock mutex
- */
-static void destroy_filter(include_filter_t *data)
+CALLBACK(destroy_filter, void,
+	include_filter_t *data)
 {
 	data->mutex->unlock(data->mutex);
 	free(data);
 }
 
 METHOD(unity_handler_t, create_include_enumerator, enumerator_t*,
-	private_unity_handler_t *this, u_int32_t id)
+	private_unity_handler_t *this, ike_sa_id_t *id)
 {
 	include_filter_t *data;
 
@@ -440,7 +449,7 @@ METHOD(unity_handler_t, create_include_enumerator, enumerator_t*,
 	data->mutex->lock(data->mutex);
 	return enumerator_create_filter(
 					this->include->create_enumerator(this->include),
-					(void*)include_filter, data, (void*)destroy_filter);
+					include_filter, data, destroy_filter);
 }
 
 METHOD(unity_handler_t, destroy, void,

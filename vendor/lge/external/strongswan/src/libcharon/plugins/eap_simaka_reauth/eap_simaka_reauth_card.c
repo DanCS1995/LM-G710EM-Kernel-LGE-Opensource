@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -57,12 +57,12 @@ typedef struct {
 	/** associated permanent identity */
 	identification_t *permanent;
 	/** counter value */
-	u_int16_t counter;
+	uint16_t counter;
 	/** master key */
 	char mk[HASH_SIZE_SHA1];
 } reauth_data_t;
 
-#ifdef ANDROID
+#ifdef ANDROID			 
 char mtk_rand[AKA_RAND_LEN];
 char mtk_auts[AKA_AUTS_LEN];
 #endif
@@ -85,7 +85,7 @@ static bool equals(identification_t *key1, identification_t *key2)
 
 METHOD(simaka_card_t, get_reauth, identification_t*,
 	private_eap_simaka_reauth_card_t *this, identification_t *id,
-	char mk[HASH_SIZE_SHA1], u_int16_t *counter)
+	char mk[HASH_SIZE_SHA1], uint16_t *counter)
 {
 	reauth_data_t *data;
 	identification_t *reauth;
@@ -106,7 +106,7 @@ METHOD(simaka_card_t, get_reauth, identification_t*,
 
 METHOD(simaka_card_t, set_reauth, void,
 	private_eap_simaka_reauth_card_t *this, identification_t *id,
-	identification_t* next, char mk[HASH_SIZE_SHA1], u_int16_t counter)
+	identification_t* next, char mk[HASH_SIZE_SHA1], uint16_t counter)
 {
 	reauth_data_t *data;
 
@@ -141,7 +141,7 @@ static int buf2hexstr(char *in_buf, int in_len, char *out_buf, int out_len)
 	for (i = 0; i < in_len; i++)
 	{
 		out_buf[i*2]   = hexdig[(in_buf[i] >> 4) & 0xF];
-		out_buf[i*2+1] = hexdig[(in_buf[i]     ) & 0xF];
+		out_buf[i*2+1] = hexdig[(in_buf[i]     ) & 0xF];		
 	}
 	out_buf[in_len*2] = 0;
 
@@ -151,7 +151,7 @@ static int buf2hexstr(char *in_buf, int in_len, char *out_buf, int out_len)
 static void showbufhex(char *msg, char *buf, int len)
 {
 	char hexstr[MAX_BUF_LEN] = {0};
-
+	
 	if (msg != NULL) {
 		DBG2(DBG_IKE, "[%s] length: %d", msg, len);
 	}
@@ -201,7 +201,7 @@ METHOD(simaka_card_t, resync, bool,
 	}
 
 	memcpy(auts, mtk_auts, AKA_AUTS_LEN);
-
+	
 	return TRUE;
 }
 
@@ -221,7 +221,7 @@ METHOD(simaka_card_t, get_triplet, bool,
 
 	DBG1(DBG_IKE, "enter request SIM...");
 	showbufhex("rand", rand, AKA_RAND_LEN);
-
+	
 	//	AT+EAUTH="F5427D46CC36495E4451E8950F641FF8"
 	buf2hexstr(rand, SIM_RAND_LEN, rand_hexstr, SIM_RAND_LEN*2+1);
 	sprintf(txbuf, "AT+EAUTH=\"%s\",\"%s\"\r", name, rand_hexstr);
@@ -243,16 +243,16 @@ METHOD(simaka_card_t, get_triplet, bool,
 		ptr = ptrE = rxbuf+7;
 		while (*ptrE != ',')
 			ptrE++;
-		*ptrE = 0;
+		*ptrE = 0;		
 		sw1 = atol(ptr);
-
+		
 		//	got SW2
 		ptr = ptrE + 1;
 		while (*ptrE != ',')
 			ptrE++;
 		*ptrE = 0;
 		sw2 = atol(ptr);
-
+		
 		//	got Response
 		ptr = ptrE + 1;
 		while (*ptrE != '\"')
@@ -262,14 +262,14 @@ METHOD(simaka_card_t, get_triplet, bool,
 		while (*ptrE != '\"')
 			ptrE++;
 		*ptrE = 0;
-		strcpy(at_rsp, ptr);
-		DBG2(DBG_IKE, " SW[%02X%02X]: %s (%d)", sw1, sw2, at_rsp, strlen(at_rsp));
+		strcpy(at_rsp, ptr);		
+		DBG1(DBG_IKE, " SW[%02X%02X]: %s (%d)", sw1, sw2, at_rsp, strlen(at_rsp));
 
 		rxlen = strlen(at_rsp);
-
+		
 		rxlen = hexstr2buf(at_rsp, rxlen, rxbuf, MAX_BUF_LEN);
 		showbufhex("at_rsp", rxbuf, rxlen);
-
+	
 		//	parse response
 		//	offset 0	: Len of sRES, Ls
 		//	offset 1	: sRES
@@ -286,7 +286,7 @@ METHOD(simaka_card_t, get_triplet, bool,
 		memcpy(sres, rxbuf+off, len);
 		off += len;
 		showbufhex("sRES", sres, len);
-
+			
 		//	Kc
 		len = rxbuf[off++];
 		if ((off + len) > rxlen)
@@ -344,9 +344,9 @@ METHOD(simaka_card_t, get_quintuplet, status_t,
 		ptr = ptrE = rxbuf+7;
 		while (*ptrE != ',')
 			ptrE++;
-		*ptrE = 0;
+		*ptrE = 0;		
 		sw1 = atol(ptr);
-
+		
 		//	got SW2
 		ptr = ptrE + 1;
 		while (*ptrE != ',' && ptrE <= (rxbuf+rxlen))
@@ -354,7 +354,7 @@ METHOD(simaka_card_t, get_quintuplet, status_t,
 		if (*ptrE == ',')
 		{
 			*ptrE = 0;
-			sw2 = atol(ptr);
+			sw2 = atol(ptr);			
 			//	got Response
 			ptr = ptrE + 1;
 			while (*ptrE != '\"')
@@ -364,29 +364,29 @@ METHOD(simaka_card_t, get_quintuplet, status_t,
 			while (*ptrE != '\"')
 				ptrE++;
 			*ptrE = 0;
-			strcpy(at_rsp, ptr);
-			DBG2(DBG_IKE, " SW[%02X%02X]: %s (%d)", sw1, sw2, at_rsp, strlen(at_rsp));
+			strcpy(at_rsp, ptr);		
+			DBG1(DBG_IKE, " SW[%02X%02X]: %s (%d)", sw1, sw2, at_rsp, strlen(at_rsp));
 
 			rxlen = strlen(at_rsp);
-
+			
 			rxlen = hexstr2buf(at_rsp, rxlen, rxbuf, MAX_BUF_LEN);
 
 			showbufhex("at_rsp", rxbuf, rxlen);
 			//	parse response
-		}
+		} 
 		else
 		{
 			*ptrE = 0;
-			sw2 = atol(ptr);
-			DBG2(DBG_IKE, " SW[%02X%02X]", sw1, sw2);
+			sw2 = atol(ptr);			
+			DBG1(DBG_IKE, " SW[%02X%02X]", sw1, sw2);
 			rxbuf[0] = 0;
 		}
-
+		
 		off = 0;
-
+		
 		if ((unsigned char)rxbuf[off] == 0xDB)
 		{
-			DBG2(DBG_IKE, "Go DB");
+			DBG1(DBG_IKE, "Go DB");			
 			// 	Successful 3G authentication
 			//	offset 0	: 0xDB
 			//	offset 1	: Len of RES, Lr
@@ -402,7 +402,7 @@ METHOD(simaka_card_t, get_quintuplet, status_t,
 			off += len;
 			*res_len = len;
 			showbufhex("RES", res, len);
-
+				
 			//	CK
 			len = rxbuf[off++];
 			memcpy(ck, rxbuf+off, len);
@@ -431,7 +431,7 @@ METHOD(simaka_card_t, get_quintuplet, status_t,
 			//	offset 0	: 0xDC
 			//	offset 1	: Len of AUTS
 			//	offset 2	: RES
-			DBG2(DBG_IKE, "Go DC");
+			DBG1(DBG_IKE, "Go DC");			
 
 			off++;
 			//	AUTS
@@ -440,15 +440,15 @@ METHOD(simaka_card_t, get_quintuplet, status_t,
 			off += len;
 			showbufhex("AUTS", mtk_auts, len);
 			memcpy(mtk_rand, rand, AKA_RAND_LEN);
-
+			
 			return INVALID_STATE;
 		}
 		else
 		{
-			DBG2(DBG_IKE, "Go Other");
+			DBG1(DBG_IKE, "Go Other");			
 		}
 	}
-
+	
 	return FAILED;
 }
 

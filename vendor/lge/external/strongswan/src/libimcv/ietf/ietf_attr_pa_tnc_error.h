@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Andreas Steffen
+ * Copyright (C) 2011-2018 Andreas Steffen
  * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -27,15 +27,24 @@ typedef enum pa_tnc_error_code_t pa_tnc_error_code_t;
 #include "ietf_attr.h"
 #include "pa_tnc/pa_tnc_attr.h"
 
-
 /**
- * IETF Standard PA-TNC Error Codes as defined in section 4.2.8 of RFC 5792
+ * IETF Standard PA-TNC Error Codes
  */
 enum  pa_tnc_error_code_t {
-    PA_ERROR_RESERVED =                 0,
-	PA_ERROR_INVALID_PARAMETER =        1,
-	PA_ERROR_VERSION_NOT_SUPPORTED =    2,
-	PA_ERROR_ATTR_TYPE_NOT_SUPPORTED =  3,
+
+	/* RFC 5792 PA-TNC */
+	PA_ERROR_RESERVED =                         0,
+	PA_ERROR_INVALID_PARAMETER =                1,
+	PA_ERROR_VERSION_NOT_SUPPORTED =            2,
+	PA_ERROR_ATTR_TYPE_NOT_SUPPORTED =          3,
+	PA_ERROR_PA_TNC_MSG_ROOF =                  3,
+
+	/* RFC 8412 SWIMA */
+	PA_ERROR_SWIMA =                            4,
+	PA_ERROR_SWIMA_SUBSCRIPTION_DENIED =        5,
+	PA_ERROR_SWIMA_RESPONSE_TOO_LARGE =         6,
+	PA_ERROR_SWIMA_SUBSCRIPTION_FULFILLMENT =   7,
+	PA_ERROR_SWIMA_SUBSCRIPTION_ID_REUSE =      8
 };
 
 /**
@@ -69,25 +78,29 @@ struct ietf_attr_pa_tnc_error_t {
 	chunk_t (*get_msg_info)(ietf_attr_pa_tnc_error_t *this);
 
 	/**
-	 * Get first 8 bytes of unsupported PA-TNC attribute
+	 * Get flags, vendor ID and type of unsupported PA-TNC attribute
 	 *
-	 * @return				PA-TNC attribute info
+	 * @param flags			PA-TNC attribute flags
+	 * @return				PA-TNC attribute vendor ID and type
 	 */
-	chunk_t (*get_attr_info)(ietf_attr_pa_tnc_error_t *this);
+	pen_type_t (*get_unsupported_attr)(ietf_attr_pa_tnc_error_t *this,
+									   uint8_t *flags);
 
 	/**
-	 * Set first 8 bytes of unsupported PA-TNC attribute
+	 * Set flags, vendor ID and type of unsupported PA-TNC attribute
 	 *
-	 * @param attr_info		PA-TNC message info
+	 * @param flags			PA-TNC attribute flags
+	 * @param attr_info		PA-TNC attribute vendor ID and type
 	 */
-	void (*set_attr_info)(ietf_attr_pa_tnc_error_t *this, chunk_t attr_info);
+	void (*set_unsupported_attr)(ietf_attr_pa_tnc_error_t *this, uint8_t flags,
+								 pen_type_t type);
 
 	/**
 	 * Get the PA-TNC error offset
 	 *
 	 * @return				PA-TNC error offset
 	 */
-	u_int32_t (*get_offset)(ietf_attr_pa_tnc_error_t *this);
+	uint32_t (*get_offset)(ietf_attr_pa_tnc_error_t *this);
 
 };
 
@@ -111,13 +124,15 @@ pa_tnc_attr_t* ietf_attr_pa_tnc_error_create(pen_type_t error_code,
  */
 pa_tnc_attr_t* ietf_attr_pa_tnc_error_create_with_offset(pen_type_t error_code,
 														 chunk_t header,
-														 u_int32_t error_offset);
+														 uint32_t error_offset);
 
 /**
  * Creates an ietf_attr_pa_tnc_error_t object from received data
  *
- * @param value				unparsed attribute value
+ * @param length			Total length of attribute value
+ * @param value				Unparsed attribute value (might be a segment)
  */
-pa_tnc_attr_t* ietf_attr_pa_tnc_error_create_from_data(chunk_t value);
+pa_tnc_attr_t* ietf_attr_pa_tnc_error_create_from_data(size_t length,
+													   chunk_t value);
 
 #endif /** IETF_ATTR_PA_TNC_ERROR_H_ @}*/

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2012 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * Copyright (C) 2012-2017 Tobias Brunner
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * Copyright (C) 2012 Martin Willi
  * Copyright (C) 2012 revosec AG
@@ -102,6 +102,31 @@ static auth_cfg_t *get_auth_cfg(peer_cfg_t *peer_cfg, bool local)
 }
 
 /**
+ * Find a shared key for the given identities
+ */
+static shared_key_t *find_shared_key(identification_t *my_id, host_t *me,
+									 identification_t *other_id, host_t *other)
+{
+	identification_t *any_id = NULL;
+	shared_key_t *shared_key;
+
+	if (!other_id)
+	{
+		any_id = identification_create_from_encoding(ID_ANY, chunk_empty);
+		other_id = any_id;
+	}
+	shared_key = lib->credmgr->get_shared(lib->credmgr, SHARED_IKE,
+										  my_id, other_id);
+	if (!shared_key)
+	{
+		DBG1(DBG_IKE, "no shared key found for '%Y'[%H] - '%Y'[%H]",
+			 my_id, me, other_id, other);
+	}
+	DESTROY_IF(any_id);
+	return shared_key;
+}
+
+/**
  * Lookup a shared secret for this IKE_SA
  */
 static shared_key_t *lookup_shared_key(private_phase1_t *this,
@@ -113,22 +138,8 @@ static shared_key_t *lookup_shared_key(private_phase1_t *this,
 	auth_cfg_t *my_auth, *other_auth;
 	enumerator_t *enumerator;
 
-	/* try to get a PSK for IP addresses */
 	me = this->ike_sa->get_my_host(this->ike_sa);
 	other = this->ike_sa->get_other_host(this->ike_sa);
-	my_id = identification_create_from_sockaddr(me->get_sockaddr(me));
-	other_id = identification_create_from_sockaddr(other->get_sockaddr(other));
-	if (my_id && other_id)
-	{
-		shared_key = lib->credmgr->get_shared(lib->credmgr, SHARED_IKE,
-											  my_id, other_id);
-	}
-	DESTROY_IF(my_id);
-	DESTROY_IF(other_id);
-	if (shared_key)
-	{
-		return shared_key;
-	}
 
 	if (peer_cfg)
 	{	/* as initiator or aggressive responder, use identities */
@@ -145,50 +156,53 @@ static shared_key_t *lookup_shared_key(private_phase1_t *this,
 			{
 				other_id = other_auth->get(other_auth, AUTH_RULE_IDENTITY);
 			}
-			if (my_id && other_id)
-			{
-				shared_key = lib->credmgr->get_shared(lib->credmgr, SHARED_IKE,
-													  my_id, other_id);
-				if (!shared_key)
-				{
-					DBG1(DBG_IKE, "no shared key found for '%Y'[%H] - '%Y'[%H]",
-						 my_id, me, other_id, other);
-				}
-			}
-		}
-		return shared_key;
-	}
-	/* as responder, we try to find a config by IP */
-	enumerator = charon->backends->create_peer_cfg_enumerator(charon->backends,
-												me, other, NULL, NULL, IKEV1);
-	while (enumerator->enumerate(enumerator, &peer_cfg))
-	{
-		my_auth = get_auth_cfg(peer_cfg, TRUE);
-		other_auth = get_auth_cfg(peer_cfg, FALSE);
-		if (my_auth && other_auth)
-		{
-			my_id = my_auth->get(my_auth, AUTH_RULE_IDENTITY);
-			other_id = other_auth->get(other_auth, AUTH_RULE_IDENTITY);
 			if (my_id)
 			{
-				shared_key = lib->credmgr->get_shared(lib->credmgr, SHARED_IKE,
-													  my_id, other_id);
-				if (shared_key)
-				{
-					break;
-				}
-				else
-				{
-					DBG1(DBG_IKE, "no shared key found for '%Y'[%H] - '%Y'[%H]",
-						 my_id, me, other_id, other);
-				}
+				shared_key = find_shared_key(my_id, me, other_id, other);
 			}
 		}
 	}
-	enumerator->destroy(enumerator);
+	else
+	{	/* as responder, we try to find a config by IP addresses and use the
+		 * configured identities to find the PSK */
+		enumerator = charon->backends->create_peer_cfg_enumerator(
+								charon->backends, me, other, NULL, NULL, IKEV1);
+		while (enumerator->enumerate(enumerator, &peer_cfg))
+		{
+			my_auth = get_auth_cfg(peer_cfg, TRUE);
+			other_auth = get_auth_cfg(peer_cfg, FALSE);
+			if (my_auth && other_auth)
+			{
+				my_id = my_auth->get(my_auth, AUTH_RULE_IDENTITY);
+				other_id = other_auth->get(other_auth, AUTH_RULE_IDENTITY);
+				if (my_id)
+				{
+					shared_key = find_shared_key(my_id, me, other_id, other);
+					if (shared_key)
+					{
+						break;
+					}
+				}
+			}
+		}
+		enumerator->destroy(enumerator);
+	}
 	if (!shared_key)
-	{
-		DBG1(DBG_IKE, "no shared key found for %H - %H", me, other);
+	{	/* try to get a PSK for IP addresses */
+		my_id = identification_create_from_sockaddr(me->get_sockaddr(me));
+		other_id = identification_create_from_sockaddr(
+													other->get_sockaddr(other));
+		if (my_id && other_id)
+		{
+			shared_key = lib->credmgr->get_shared(lib->credmgr, SHARED_IKE,
+												  my_id, other_id);
+		}
+		DESTROY_IF(my_id);
+		DESTROY_IF(other_id);
+		if (!shared_key)
+		{
+			DBG1(DBG_IKE, "no shared key found for %H - %H", me, other);
+		}
 	}
 	return shared_key;
 }
@@ -297,7 +311,7 @@ static void save_auth_cfg(private_phase1_t *this,
 		return;
 	}
 	auth = auth_cfg_create();
-	/* for local config, we _copy_ entires from the config, as it contains
+	/* for local config, we _copy_ entries from the config, as it contains
 	 * certificates we must send later. */
 	auth->merge(auth, this->ike_sa->get_auth_cfg(this->ike_sa, local), local);
 	this->ike_sa->add_auth_cfg(this->ike_sa, local, auth);
@@ -536,6 +550,7 @@ METHOD(phase1_t, select_config, peer_cfg_t*,
 	enumerator_t *enumerator;
 	peer_cfg_t *current;
 	host_t *me, *other;
+	int unusable = 0;
 
 	if (this->peer_cfg)
 	{	/* try to find an alternative config */
@@ -571,6 +586,10 @@ METHOD(phase1_t, select_config, peer_cfg_t*,
 				this->candidates->insert_last(this->candidates, current);
 			}
 		}
+		else
+		{
+			unusable++;
+		}
 	}
 	enumerator->destroy(enumerator);
 
@@ -579,6 +598,13 @@ METHOD(phase1_t, select_config, peer_cfg_t*,
 		DBG1(DBG_CFG, "selected peer config \"%s\"",
 			 this->peer_cfg->get_name(this->peer_cfg));
 		return this->peer_cfg->get_ref(this->peer_cfg);
+	}
+	if (unusable)
+	{
+		DBG1(DBG_IKE, "found %d matching config%s, but none allows %N "
+			 "authentication using %s Mode", unusable, unusable > 1 ? "s" : "",
+			 auth_method_names, method, aggressive ? "Aggressive" : "Main");
+		return NULL;
 	}
 	DBG1(DBG_IKE, "no peer config found");
 	return NULL;
@@ -648,7 +674,7 @@ METHOD(phase1_t, save_sa_payload, bool,
 	enumerator = message->create_payload_enumerator(message);
 	while (enumerator->enumerate(enumerator, &payload))
 	{
-		if (payload->get_type(payload) == SECURITY_ASSOCIATION_V1)
+		if (payload->get_type(payload) == PLV1_SECURITY_ASSOCIATION)
 		{
 			sa = payload;
 			break;
@@ -682,7 +708,13 @@ METHOD(phase1_t, add_nonce_ke, bool,
 	nonce_gen_t *nonceg;
 	chunk_t nonce;
 
-	ke_payload = ke_payload_create_from_diffie_hellman(KEY_EXCHANGE_V1, this->dh);
+	ke_payload = ke_payload_create_from_diffie_hellman(PLV1_KEY_EXCHANGE,
+													   this->dh);
+	if (!ke_payload)
+	{
+		DBG1(DBG_IKE, "creating KE payload failed");
+		return FALSE;
+	}
 	message->add_payload(message, &ke_payload->payload_interface);
 
 	nonceg = this->keymat->keymat.create_nonce_gen(&this->keymat->keymat);
@@ -699,7 +731,7 @@ METHOD(phase1_t, add_nonce_ke, bool,
 	}
 	nonceg->destroy(nonceg);
 
-	nonce_payload = nonce_payload_create(NONCE_V1);
+	nonce_payload = nonce_payload_create(PLV1_NONCE);
 	nonce_payload->set_nonce(nonce_payload, nonce);
 	message->add_payload(message, &nonce_payload->payload_interface);
 
@@ -720,16 +752,20 @@ METHOD(phase1_t, get_nonce_ke, bool,
 	nonce_payload_t *nonce_payload;
 	ke_payload_t *ke_payload;
 
-	ke_payload = (ke_payload_t*)message->get_payload(message, KEY_EXCHANGE_V1);
+	ke_payload = (ke_payload_t*)message->get_payload(message, PLV1_KEY_EXCHANGE);
 	if (!ke_payload)
 	{
 		DBG1(DBG_IKE, "KE payload missing in message");
 		return FALSE;
 	}
 	this->dh_value = chunk_clone(ke_payload->get_key_exchange_data(ke_payload));
-	this->dh->set_other_public_value(this->dh, this->dh_value);
+	if (!this->dh->set_other_public_value(this->dh, this->dh_value))
+	{
+		DBG1(DBG_IKE, "unable to apply received KE value");
+		return FALSE;
+	}
 
-	nonce_payload = (nonce_payload_t*)message->get_payload(message, NONCE_V1);
+	nonce_payload = (nonce_payload_t*)message->get_payload(message, PLV1_NONCE);
 	if (!nonce_payload)
 	{
 		DBG1(DBG_IKE, "NONCE payload missing in message");

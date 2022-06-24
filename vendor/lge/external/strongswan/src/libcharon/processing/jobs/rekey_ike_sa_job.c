@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2006 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -48,6 +48,42 @@ METHOD(job_t, destroy, void,
 	free(this);
 }
 
+/**
+ * Check if we should delay a reauth, and by how many seconds
+ */
+static uint32_t get_retry_delay(ike_sa_t *ike_sa)
+{
+	enumerator_t *enumerator;
+	child_sa_t *child_sa;
+	uint32_t retry = 0;
+
+	/* avoid reauth collisions for certain IKE_SA/CHILD_SA states */
+	if (ike_sa->get_state(ike_sa) != IKE_ESTABLISHED)
+	{
+		retry = RETRY_INTERVAL - (random() % RETRY_JITTER);
+		DBG1(DBG_IKE, "unable to reauthenticate in %N state, delaying for %us",
+			 ike_sa_state_names, ike_sa->get_state(ike_sa), retry);
+	}
+	else
+	{
+		enumerator = ike_sa->create_child_sa_enumerator(ike_sa);
+		while (enumerator->enumerate(enumerator, &child_sa))
+		{
+			if (child_sa->get_state(child_sa) != CHILD_INSTALLED &&
+				child_sa->get_state(child_sa) != CHILD_REKEYED)
+			{
+				retry = RETRY_INTERVAL - (random() % RETRY_JITTER);
+				DBG1(DBG_IKE, "unable to reauthenticate in CHILD_SA %N state, "
+					 "delaying for %us", child_sa_state_names,
+					 child_sa->get_state(child_sa), retry);
+				break;
+			}
+		}
+		enumerator->destroy(enumerator);
+	}
+	return retry;
+}
+/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 METHOD(job_t, checkout, ike_sa_t *,
 	private_rekey_ike_sa_job_t *this)
 {
@@ -71,22 +107,21 @@ METHOD(job_t, checkout, ike_sa_t *,
 
 	return ike_sa;
 }
-
+/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
 METHOD(job_t, execute, job_requeue_t,
 	private_rekey_ike_sa_job_t *this)
 {
-	ike_sa_t *ike_sa = NULL;
+	ike_sa_t *ike_sa= NULL;
+/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 	status_t status = SUCCESS;
+	uint32_t retry = 0;
 	int i = 0;
 	struct timespec tsa, tsr;
 	int slotid = 0;
-/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 	ike_sa_t *ike_sa_current_thread = NULL;
-/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
 
-/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 	ike_sa_current_thread = charon->ike_sa_manager->get_sa_by_ikeid_rekey(charon->ike_sa_manager, this->ike_sa_id);
-    if (ike_sa_current_thread != NULL)
+	if (ike_sa_current_thread != NULL)
 	{
 		slotid = get_slotid(ike_sa_current_thread->get_name(ike_sa_current_thread));
 	}
@@ -98,37 +133,30 @@ METHOD(job_t, execute, job_requeue_t,
 	else
 	{
 /* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
-		ike_sa = charon->ike_sa_manager->checkout(charon->ike_sa_manager, this->ike_sa_id);
+	ike_sa = charon->ike_sa_manager->checkout(charon->ike_sa_manager,
+							this->ike_sa_id);
 	}
-
 	if (ike_sa == NULL)
 	{
-/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
-		if (get_cust_setting_bool_by_slotid(slotid, REKEY_DELAY))
-		{
-			DBG1(DBG_JOB, "IKE_SA to rekey not found");
-		}
-/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
-		else
-		{
-			DBG2(DBG_JOB, "IKE_SA with ike_sa_id %d not found for rekeying", this->ike_sa_id);
-		}
+		DBG2(DBG_JOB, "IKE_SA to rekey not found");
 	}
 	else
 	{
 		if (this->reauth)
 		{
-			status = ike_sa->reauth(ike_sa);
+			retry = get_retry_delay(ike_sa);
+			if (!retry)
+			{
+				status = ike_sa->reauth(ike_sa);
+			}
 		}
 		else
 		{
 			status = ike_sa->rekey(ike_sa);
 		}
-
 /* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 		if (get_cust_setting_bool_by_slotid(slotid, REKEY_DELAY))
 		{
-/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
 			for (i = 1; (i < 60) && (status == NEED_MORE); i++)
 			{
 				charon->ike_sa_manager->checkin(charon->ike_sa_manager, ike_sa);
@@ -149,7 +177,12 @@ METHOD(job_t, execute, job_requeue_t,
 
 				if (this->reauth)
 				{
-					status = ike_sa->reauth(ike_sa);
+					if (!retry)
+					{
+						status = ike_sa->reauth(ike_sa);
+					} else {
+						break;
+					}
 				}
 				else
 				{
@@ -157,15 +190,20 @@ METHOD(job_t, execute, job_requeue_t,
 				}
 			}
 		}
-
+/* 2016-02-26 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
 		if (status == DESTROY_ME)
 		{
-			charon->ike_sa_manager->checkin_and_destroy(charon->ike_sa_manager, ike_sa);
+			charon->ike_sa_manager->checkin_and_destroy(charon->ike_sa_manager,
+														ike_sa);
 		}
 		else
 		{
 			charon->ike_sa_manager->checkin(charon->ike_sa_manager, ike_sa);
 		}
+	}
+	if (retry)
+	{
+		return JOB_RESCHEDULE(retry);
 	}
 	return JOB_REQUEUE_NONE;
 }

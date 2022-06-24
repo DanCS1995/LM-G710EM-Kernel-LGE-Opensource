@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2009 Tobias Brunner
+ * Copyright (C) 2009-2018 Tobias Brunner
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -26,8 +26,13 @@
 #include <collections/hashtable.h>
 #include <utils/backtrace.h>
 #include <selectors/traffic_selector.h>
+#include <crypto/proposal/proposal.h>
 
 #define CHECKSUM_LIBRARY IPSEC_LIB_DIR"/libchecksum.so"
+
+#ifndef STRONGSWAN_CONF
+#define STRONGSWAN_CONF NULL
+#endif
 
 typedef struct private_library_t private_library_t;
 
@@ -49,13 +54,52 @@ struct private_library_t {
 	/**
 	 * Integrity check failed?
 	 */
-	bool integrity_failed;
+	bool init_failed;
+
+#ifdef LEAK_DETECTIVE
+	/**
+	 * Where to write leak detective output to
+	 */
+	FILE *ld_out;
+#endif
 
 	/**
 	 * Number of times we have been initialized
 	 */
 	refcount_t ref;
 };
+
+#define MAX_NAMESPACES 5
+
+/**
+ * Additional namespaces registered using __atrribute__((constructor))
+ */
+static char *namespaces[MAX_NAMESPACES];
+static int ns_count;
+
+/**
+ * Described in header
+ */
+void library_add_namespace(char *ns)
+{
+	if (ns_count < MAX_NAMESPACES - 1)
+	{
+		namespaces[ns_count] = ns;
+		ns_count++;
+	}
+	else
+	{
+		fprintf(stderr, "failed to register additional namespace alias, please "
+				"increase MAX_NAMESPACES");
+	}
+}
+
+/**
+ * Register plugins if built statically
+ */
+#ifdef STATIC_PLUGIN_CONSTRUCTORS
+#include "plugin_constructors.c"
+#endif
 
 /**
  * library instance
@@ -66,32 +110,34 @@ library_t *lib = NULL;
 /**
  * Default leak report callback
  */
-static void report_leaks(void *user, int count, size_t bytes,
-						 backtrace_t *bt, bool detailed)
+CALLBACK(report_leaks, void,
+	private_library_t *this, int count, size_t bytes, backtrace_t *bt,
+	bool detailed)
 {
-	fprintf(stderr, "%zu bytes total, %d allocations, %zu bytes average:\n",
+	fprintf(this->ld_out, "%zu bytes total, %d allocations, %zu bytes average:\n",
 			bytes, count, bytes / count);
-	bt->log(bt, stderr, detailed);
+	bt->log(bt, this->ld_out, detailed);
 }
 
 /**
  * Default leak report summary callback
  */
-static void sum_leaks(void* user, int count, size_t bytes, int whitelisted)
+CALLBACK(sum_leaks, void,
+	private_library_t *this, int count, size_t bytes, int whitelisted)
 {
 	switch (count)
 	{
 		case 0:
-			fprintf(stderr, "No leaks detected");
+			fprintf(this->ld_out, "No leaks detected");
 			break;
 		case 1:
-			fprintf(stderr, "One leak detected");
+			fprintf(this->ld_out, "One leak detected");
 			break;
 		default:
-			fprintf(stderr, "%d leaks detected, %zu bytes", count, bytes);
+			fprintf(this->ld_out, "%d leaks detected, %zu bytes", count, bytes);
 			break;
 	}
-	fprintf(stderr, ", %d suppressed by whitelist\n", whitelisted);
+	fprintf(this->ld_out, ", %d suppressed by whitelist\n", whitelisted);
 }
 #endif /* LEAK_DETECTIVE */
 
@@ -141,12 +187,21 @@ void library_deinit()
 	{
 		lib->leak_detective->report(lib->leak_detective, detailed);
 		lib->leak_detective->destroy(lib->leak_detective);
+		lib->leak_detective = NULL;
 	}
+#ifdef LEAK_DETECTIVE
+	if (this->ld_out && this->ld_out != stderr)
+	{
+		fclose(this->ld_out);
+	}
+#endif /* LEAK_DETECTIVE */
 
-	arrays_deinit();
-	threads_deinit();
 	backtrace_deinit();
+	arrays_deinit();
+	utils_deinit();
+	threads_deinit();
 
+	free(this->public.conf);
 	free((void*)this->public.ns);
 	free(this);
 	lib = NULL;
@@ -194,6 +249,8 @@ static bool equals(char *a, char *b)
  */
 #define MEMWIPE_WIPE_WORDS 16
 
+#ifndef NO_CHECK_MEMWIPE
+
 /**
  * Write magic to memory, and try to clear it with memwipe()
  */
@@ -234,6 +291,8 @@ static bool check_memwipe()
 	return TRUE;
 }
 
+#endif
+
 /*
  * see header file
  */
@@ -241,32 +300,51 @@ bool library_init(char *settings, const char *namespace)
 {
 	private_library_t *this;
 	printf_hook_t *pfh;
+	int i;
 
 	if (lib)
 	{	/* already initialized, increase refcount */
 		this = (private_library_t*)lib;
 		ref_get(&this->ref);
-		return !this->integrity_failed;
+		return !this->init_failed;
 	}
+
+	chunk_hash_seed();
 
 	INIT(this,
 		.public = {
 			.get = _get,
 			.set = _set,
 			.ns = strdup(namespace ?: "libstrongswan"),
+			.conf = strdupnull(settings ?: (getenv("STRONGSWAN_CONF") ?: STRONGSWAN_CONF)),
 		},
 		.ref = 1,
 	);
 	lib = &this->public;
 
-	backtrace_init();
 	threads_init();
+	utils_init();
 	arrays_init();
+	backtrace_init();
 
 #ifdef LEAK_DETECTIVE
+	{
+		FILE *out = NULL;
+		char *log;
+
+		log = getenv("LEAK_DETECTIVE_LOG");
+		if (log)
+		{
+			out = fopen(log, "a");
+		}
+		this->ld_out = out ?: stderr;
+	}
 	lib->leak_detective = leak_detective_create();
-	lib->leak_detective->set_report_cb(lib->leak_detective,
-									   report_leaks, sum_leaks, NULL);
+	if (lib->leak_detective)
+	{
+		lib->leak_detective->set_report_cb(lib->leak_detective,
+										   report_leaks, sum_leaks, this);
+	}
 #endif /* LEAK_DETECTIVE */
 
 	pfh = printf_hook_create();
@@ -292,10 +370,25 @@ bool library_init(char *settings, const char *namespace)
 					 PRINTF_HOOK_ARGTYPE_POINTER, PRINTF_HOOK_ARGTYPE_END);
 	pfh->add_handler(pfh, 'R', traffic_selector_printf_hook,
 					 PRINTF_HOOK_ARGTYPE_POINTER, PRINTF_HOOK_ARGTYPE_END);
+	pfh->add_handler(pfh, 'P', proposal_printf_hook,
+					 PRINTF_HOOK_ARGTYPE_POINTER, PRINTF_HOOK_ARGTYPE_END);
 
 	this->objects = hashtable_create((hashtable_hash_t)hash,
 									 (hashtable_equals_t)equals, 4);
-	this->public.settings = settings_create(settings);
+
+	this->public.settings = settings_create(NULL);
+	if (!this->public.settings->load_files(this->public.settings,
+										   this->public.conf, FALSE))
+	{
+		DBG1(DBG_LIB, "abort initialization due to invalid configuration");
+		this->init_failed = TRUE;
+	}
+
+	/* add registered aliases */
+	for (i = 0; i < ns_count; ++i)
+	{
+		lib->settings->add_fallback(lib->settings, lib->ns, namespaces[i]);
+	}
 	/* all namespace settings may fall back to libstrongswan */
 	lib->settings->add_fallback(lib->settings, lib->ns, "libstrongswan");
 
@@ -315,10 +408,12 @@ bool library_init(char *settings, const char *namespace)
 	this->public.streams = stream_manager_create();
 	this->public.plugins = plugin_loader_create();
 
+#ifndef NO_CHECK_MEMWIPE
 	if (!check_memwipe())
 	{
 		return FALSE;
 	}
+#endif
 
 	if (lib->settings->get_bool(lib->settings,
 								"%s.integrity_test", FALSE, lib->ns))
@@ -328,13 +423,15 @@ bool library_init(char *settings, const char *namespace)
 		if (!lib->integrity->check(lib->integrity, "libstrongswan", library_init))
 		{
 			DBG1(DBG_LIB, "integrity check of libstrongswan failed");
-			this->integrity_failed = TRUE;
+			this->init_failed = TRUE;
 		}
 #else /* !INTEGRITY_TEST */
 		DBG1(DBG_LIB, "integrity test enabled, but not supported");
-		this->integrity_failed = TRUE;
+		this->init_failed = TRUE;
 #endif /* INTEGRITY_TEST */
 	}
 
-	return !this->integrity_failed;
+	diffie_hellman_init();
+
+	return !this->init_failed;
 }

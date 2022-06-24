@@ -358,8 +358,8 @@ sha256_final(void *context)
 #ifdef WORDS_BIGENDIAN
 #define X(a) do { *(u32*)p = hd->h##a ; p += 4; } while(0)
 #else /* little endian */
-#define X(a) do { *p++ = hd->h##a >> 24; *p++ = hd->h##a >> 16;	 \
-		  *p++ = hd->h##a >> 8; *p++ = hd->h##a; } while(0)
+#define X(a) do { *p++ = hd->h##a >> 24; *p++ = hd->h##a >> 16;     \
+          *p++ = hd->h##a >> 8; *p++ = hd->h##a; } while(0)
 #endif
   X(0);
   X(1);

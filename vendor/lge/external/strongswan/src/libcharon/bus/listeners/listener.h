@@ -1,6 +1,7 @@
 /*
+ * Copyright (C) 2011-2016 Tobias Brunner
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -83,8 +84,8 @@ struct listener_t {
 	 * @param ike_sa	IKE_SA this keymat belongs to
 	 * @param dh		diffie hellman shared secret
 	 * @param dh_other	others DH public value (IKEv1 only)
-	 * @param nonce_i	initiators nonce
-	 * @param nonce_r	responders nonce
+	 * @param nonce_i	initiator's nonce
+	 * @param nonce_r	responder's nonce
 	 * @param rekey		IKE_SA we are rekeying, if any (IKEv2 only)
 	 * @param shared	shared key used for key derivation (IKEv1-PSK only)
 	 * @return			TRUE to stay registered, FALSE to unregister
@@ -94,19 +95,47 @@ struct listener_t {
 					 ike_sa_t *rekey, shared_key_t *shared);
 
 	/**
+	 * Hook called with derived IKE_SA keys.
+	 *
+	 * @param ike_sa	IKE_SA these keys belong to
+	 * @param sk_ei		SK_ei, or Ka for IKEv1
+	 * @param sk_er		SK_er
+	 * @param sk_ai		SK_ai, or SKEYID_a for IKEv1
+	 * @param sk_ar		SK_ar
+	 */
+	bool (*ike_derived_keys)(listener_t *this, ike_sa_t *ike_sa, chunk_t sk_ei,
+							 chunk_t sk_er, chunk_t sk_ai, chunk_t sk_ar);
+
+	/**
 	 * Hook called with CHILD_SA key material.
 	 *
 	 * @param ike_sa	IKE_SA the child sa belongs to
 	 * @param child_sa	CHILD_SA this keymat is used for
 	 * @param initiator	initiator of the CREATE_CHILD_SA exchange
 	 * @param dh		diffie hellman shared secret
-	 * @param nonce_i	initiators nonce
-	 * @param nonce_r	responders nonce
+	 * @param nonce_i	initiator's nonce
+	 * @param nonce_r	responder's nonce
 	 * @return			TRUE to stay registered, FALSE to unregister
 	 */
 	bool (*child_keys)(listener_t *this, ike_sa_t *ike_sa, child_sa_t *child_sa,
 					   bool initiator, diffie_hellman_t *dh,
 					   chunk_t nonce_i, chunk_t nonce_r);
+
+	/**
+	 * Hook called with derived CHILD_SA keys.
+	 *
+	 * @param ike_sa	IKE_SA the child sa belongs to
+	 * @param child_sa	CHILD_SA these keys are used for
+	 * @param initiator	initiator of the CREATE_CHILD_SA exchange
+	 * @param encr_i	initiator's encryption key
+	 * @param encr_o	responder's encryption key
+	 * @param integ_i	initiator's integrity key
+	 * @param integ_r	responder's integrity key
+	 */
+	bool (*child_derived_keys)(listener_t *this, ike_sa_t *ike_sa,
+							   child_sa_t *child_sa, bool initiator,
+							   chunk_t encr_i, chunk_t encr_r,
+							   chunk_t integ_i, chunk_t integ_r);
 
 	/**
 	 * Hook called if an IKE_SA gets up or down.
@@ -187,6 +216,21 @@ struct listener_t {
 						child_sa_t *old, child_sa_t *new);
 
 	/**
+	 * Hook called when CHILD_SAs get migrated from one IKE_SA to another during
+	 * IKEv1 reauthentication.
+	 *
+	 * This is called twice, once for the old IKE_SA before the CHILD_SAs are
+	 * removed, and once for the new IKE_SA just after they got added.
+	 *
+	 * @param ike_sa	new or old IKE_SA
+	 * @param new		ID of new SA when called for the old, NULL otherwise
+	 * @param unique	unique ID of new SA when called for the old, 0 otherwise
+	 * @return			TRUE to stay registered, FALSE to unregister
+	 */
+	bool (*children_migrate)(listener_t *this, ike_sa_t *ike_sa,
+							 ike_sa_id_t *new, uint32_t unique);
+
+	/**
 	 * Hook called to invoke additional authorization rules.
 	 *
 	 * An authorization hook gets invoked several times: After each
@@ -218,10 +262,10 @@ struct listener_t {
 				narrow_hook_t type, linked_list_t *local, linked_list_t *remote);
 
 	/**
-	 * Virtual IP address assignment hook
+	 * Virtual IP address assignment hook.
 	 *
-	 * This hook gets invoked when a a Virtual IP address is assigned to an
-	 * IKE_SA (assign = TRUE) and again when it is released (assign = FALSE)
+	 * This hook gets invoked after virtual IPs have been assigned to a peer
+	 * for a specific IKE_SA, and again before they get released.
 	 *
 	 * @param ike_sa	IKE_SA the VIPs are assigned to
 	 * @param assign	TRUE if assigned to IKE_SA, FALSE if released
@@ -229,6 +273,18 @@ struct listener_t {
 	 */
 	bool (*assign_vips)(listener_t *this, ike_sa_t *ike_sa, bool assign);
 
+	/**
+	 * Virtual IP and configuration attribute handler hook.
+	 *
+	 * This hook gets invoked after virtual IP and other configuration
+	 * attributes just got installed or are about to get uninstalled on a peer
+	 * receiving them.
+	 *
+	 * @param ike_sa	IKE_SA the VIPs/attributes are handled on
+	 * @param handle	TRUE if handled by IKE_SA, FALSE on release
+	 * @return			TRUE to stay registered, FALSE to unregister
+	 */
+	bool (*handle_vips)(listener_t *this, ike_sa_t *ike_sa, bool handle);
 };
 
 #endif /** LISTENER_H_ @}*/

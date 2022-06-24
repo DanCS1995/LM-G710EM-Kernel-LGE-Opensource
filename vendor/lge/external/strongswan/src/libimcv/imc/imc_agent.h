@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Andreas Steffen
+ * Copyright (C) 2011-2014 Andreas Steffen
  * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -172,6 +172,23 @@ struct imc_agent_t {
 	enumerator_t* (*create_id_enumerator)(imc_agent_t *this);
 
 	/**
+	 * Add an item to the list of non-fatal unsupported PA-TNC attribute types
+	 */
+	void (*add_non_fatal_attr_type)(imc_agent_t *this, pen_type_t type);
+
+	/**
+	 * Get a list of non-fatal unsupported PA-TNC attribute types
+	 */
+	linked_list_t* (*get_non_fatal_attr_types)(imc_agent_t *this);
+
+	/**
+	 * Is the transport protocol PT-TLS?
+	 *
+	 * return					TRUE if PT-TLS
+	 */
+	bool (*has_pt_tls)(imc_agent_t *this);
+
+	/**
 	 * Destroys an imc_agent_t object
 	 */
 	void (*destroy)(imc_agent_t *this);
@@ -188,7 +205,7 @@ struct imc_agent_t {
  *
  */
 imc_agent_t *imc_agent_create(const char *name,
-							  pen_type_t *supported_types, u_int32_t type_count,
+							  pen_type_t *supported_types, uint32_t type_count,
 							  TNC_IMCID id, TNC_Version *actual_version);
 
 #endif /** IMC_AGENT_H_ @}*/

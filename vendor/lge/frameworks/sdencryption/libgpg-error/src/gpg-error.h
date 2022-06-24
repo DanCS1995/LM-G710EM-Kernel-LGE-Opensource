@@ -21,7 +21,7 @@
 
 
 #ifndef GPG_ERROR_H
-#define GPG_ERROR_H	1
+#define GPG_ERROR_H    1
 
 #include <stddef.h>
 
@@ -71,7 +71,7 @@ extern "C" {
 
    Where as the Poo out of a welle small
    Taketh his firste springing and his sours.
-					--Chaucer.  */
+                    --Chaucer.  */
 
 /* Only use free slots, never change or reorder the existing
    entries.  */
@@ -356,7 +356,7 @@ typedef enum
     GPG_ERR_EOF = 16383,
 
     /* The following error codes are used to map system errors.  */
-#define GPG_ERR_SYSTEM_ERROR	(1 << 15)
+#define GPG_ERR_SYSTEM_ERROR    (1 << 15)
     GPG_ERR_E2BIG = GPG_ERR_SYSTEM_ERROR | 0,
     GPG_ERR_EACCES = GPG_ERR_SYSTEM_ERROR | 1,
     GPG_ERR_EADDRINUSE = GPG_ERR_SYSTEM_ERROR | 2,
@@ -514,13 +514,13 @@ typedef unsigned int gpg_error_t;
 
 /* We use the lowest 16 bits of gpg_error_t for error codes.  The 16th
    bit indicates system errors.  */
-#define GPG_ERR_CODE_MASK	(GPG_ERR_CODE_DIM - 1)
+#define GPG_ERR_CODE_MASK    (GPG_ERR_CODE_DIM - 1)
 
 /* Bits 17 to 24 are reserved.  */
 
 /* We use the upper 7 bits of gpg_error_t for error sources.  */
-#define GPG_ERR_SOURCE_MASK	(GPG_ERR_SOURCE_DIM - 1)
-#define GPG_ERR_SOURCE_SHIFT	24
+#define GPG_ERR_SOURCE_MASK    (GPG_ERR_SOURCE_DIM - 1)
+#define GPG_ERR_SOURCE_SHIFT    24
 
 /* The highest bit is reserved.  It shouldn't be used to prevent
    potential negative numbers when transmitting error values as
@@ -535,7 +535,7 @@ typedef unsigned int gpg_error_t;
                             + __GNUC_PATCHLEVEL__)
 
 #if _GPG_ERR_GCC_VERSION > 30100
-#define _GPG_ERR_CONSTRUCTOR	__attribute__ ((__constructor__))
+#define _GPG_ERR_CONSTRUCTOR    __attribute__ ((__constructor__))
 #define _GPG_ERR_HAVE_CONSTRUCTOR
 #endif
 #endif
@@ -554,7 +554,7 @@ gpg_error_t gpg_err_init (void) _GPG_ERR_CONSTRUCTOR;
    constructor and does not need to be initialized explicitely.  */
 #undef GPG_ERR_INITIALIZED
 #ifdef _GPG_ERR_HAVE_CONSTRUCTOR
-#define GPG_ERR_INITIALIZED	1
+#define GPG_ERR_INITIALIZED    1
 #endif
 
 /* See the source on how to use the deinit function; it is usually not
@@ -578,7 +578,7 @@ gpg_err_make (gpg_err_source_t source, gpg_err_code_t code)
 /* The user should define GPG_ERR_SOURCE_DEFAULT before including this
    file to specify a default source for gpg_error.  */
 #ifndef GPG_ERR_SOURCE_DEFAULT
-#define GPG_ERR_SOURCE_DEFAULT	GPG_ERR_SOURCE_UNKNOWN
+#define GPG_ERR_SOURCE_DEFAULT    GPG_ERR_SOURCE_UNKNOWN
 #endif
 
 static GPG_ERR_INLINE gpg_error_t
@@ -601,7 +601,7 @@ static GPG_ERR_INLINE gpg_err_source_t
 gpg_err_source (gpg_error_t err)
 {
   return (gpg_err_source_t) ((err >> GPG_ERR_SOURCE_SHIFT)
-			     & GPG_ERR_SOURCE_MASK);
+                 & GPG_ERR_SOURCE_MASK);
 }
 
 
@@ -675,4 +675,4 @@ gpg_error_from_syserror (void)
 #endif
 
 
-#endif	/* GPG_ERROR_H */
+#endif    /* GPG_ERROR_H */

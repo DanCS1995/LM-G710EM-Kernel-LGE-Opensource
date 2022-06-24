@@ -36,13 +36,20 @@ struct private_config_t {
 	linked_list_t *configs;
 };
 
-/**
- * filter function for ike configs
- */
-static bool ike_filter(void *data, peer_cfg_t **in, ike_cfg_t **out)
+CALLBACK(ike_filter, bool,
+	void *data, enumerator_t *orig, va_list args)
 {
-	*out = (*in)->get_ike_cfg(*in);
-	return TRUE;
+	peer_cfg_t *cfg;
+	ike_cfg_t **out;
+
+	VA_ARGS_VGET(args, out);
+
+	if (orig->enumerate(orig, &cfg))
+	{
+		*out = cfg->get_ike_cfg(cfg);
+		return TRUE;
+	}
+	return FALSE;
 }
 
 METHOD(backend_t, create_ike_cfg_enumerator, enumerator_t*,
@@ -51,7 +58,7 @@ METHOD(backend_t, create_ike_cfg_enumerator, enumerator_t*,
 
 	return enumerator_create_filter(
 							this->configs->create_enumerator(this->configs),
-							(void*)ike_filter, NULL, NULL);
+							ike_filter, NULL, NULL);
 }
 
 METHOD(backend_t, create_peer_cfg_enumerator, enumerator_t*,
@@ -129,6 +136,7 @@ static ike_cfg_t *load_ike_config(private_config_t *this,
 	else
 	{
 		ike_cfg->add_proposal(ike_cfg, proposal_create_default(PROTO_IKE));
+		ike_cfg->add_proposal(ike_cfg, proposal_create_default_aead(PROTO_IKE));
 	}
 	return ike_cfg;
 }
@@ -138,25 +146,23 @@ static ike_cfg_t *load_ike_config(private_config_t *this,
 static child_cfg_t *load_child_config(private_config_t *this,
 							settings_t *settings, char *config, char *child)
 {
+	child_cfg_create_t data = {
+		.mode = MODE_TUNNEL,
+	};
 	child_cfg_t *child_cfg;
-	lifetime_cfg_t lifetime = {};
 	enumerator_t *enumerator;
 	proposal_t *proposal;
 	traffic_selector_t *ts;
-	ipsec_mode_t mode = MODE_TUNNEL;
 	char *token;
-	u_int32_t tfc;
 
 	if (settings->get_bool(settings, "configs.%s.%s.transport",
 						   FALSE, config, child))
 	{
-		mode = MODE_TRANSPORT;
+		data.mode = MODE_TRANSPORT;
 	}
-	tfc = settings->get_int(settings, "configs.%s.%s.tfc_padding",
-							0, config, child);
-	child_cfg = child_cfg_create(child, &lifetime, NULL, FALSE, mode,
-								 ACTION_NONE, ACTION_NONE, ACTION_NONE,
-								 FALSE, 0, 0, NULL, NULL, tfc);
+	data.tfc = settings->get_int(settings, "configs.%s.%s.tfc_padding",
+								  0, config, child);
+	child_cfg = child_cfg_create(child, &data);
 
 	token = settings->get_str(settings, "configs.%s.%s.proposal",
 							  NULL, config, child);
@@ -180,6 +186,8 @@ static child_cfg_t *load_child_config(private_config_t *this,
 	else
 	{
 		child_cfg->add_proposal(child_cfg, proposal_create_default(PROTO_ESP));
+		child_cfg->add_proposal(child_cfg,
+								proposal_create_default_aead(PROTO_ESP));
 	}
 
 	token = settings->get_str(settings, "configs.%s.%s.lts", NULL, config, child);
@@ -246,11 +254,15 @@ static peer_cfg_t *load_peer_config(private_config_t *this,
 	identification_t *lid, *rid;
 	char *child, *policy, *pool;
 	uintptr_t strength;
+	peer_cfg_create_t peer = {
+		.cert_policy = CERT_ALWAYS_SEND,
+		.unique = UNIQUE_NO,
+		.keyingtries = 1,
+		.no_mobike = TRUE,
+	};
 
 	ike_cfg = load_ike_config(this, settings, config);
-	peer_cfg = peer_cfg_create(config, ike_cfg, CERT_ALWAYS_SEND,
-							   UNIQUE_NO, 1, 0, 0, 0, 0, FALSE, FALSE, TRUE,
-							   0, 0, FALSE, NULL, NULL);
+	peer_cfg = peer_cfg_create(config, ike_cfg, &peer);
 
 	auth = auth_cfg_create();
 	auth->add(auth, AUTH_RULE_AUTH_CLASS, AUTH_CLASS_PUBKEY);

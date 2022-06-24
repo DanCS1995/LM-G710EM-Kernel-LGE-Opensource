@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2005-2006 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -37,7 +37,7 @@ typedef struct encoding_rule_t encoding_rule_t;
  * Header is parsed like a payload and gets its one payload_id
  * from PRIVATE USE space. Also the substructures
  * of specific payload types get their own payload_id
- * from PRIVATE_USE space. See IKEv2-Draft for more informations.
+ * from PRIVATE_USE space. See IKEv2-Draft for more information.
  */
 enum encoding_type_t {
 
@@ -289,10 +289,10 @@ enum encoding_type_t {
 	/**
 	 * Representating an IKE_SPI field in an IKEv2 Header.
 	 *
-	 * When generating the value of the u_int64_t pointing to
+	 * When generating the value of the uint64_t pointing to
 	 * is written (host and networ order is not changed).
 	 *
-	 * When parsing 8 bytes are read and written into the u_int64_t pointing to.
+	 * When parsing 8 bytes are read and written into the uint64_t pointing to.
 	 */
 	IKE_SPI,
 
@@ -342,7 +342,7 @@ struct encoding_rule_t {
 	 * When generating, data are read from this offset in the
 	 * data struct.
 	 */
-	u_int32_t offset;
+	uint32_t offset;
 };
 
 #endif /** ENCODINGS_H_ @}*/

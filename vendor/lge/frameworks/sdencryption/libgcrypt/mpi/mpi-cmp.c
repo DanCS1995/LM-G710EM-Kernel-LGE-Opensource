@@ -43,9 +43,9 @@ gcry_mpi_cmp_ui (gcry_mpi_t u, unsigned long v)
       /* Handle the case that U contains exactly one limb.  */
 
       if (u->d[0] > limb)
-	return 1;
+    return 1;
       if (u->d[0] < limb)
-	return -1;
+    return -1;
       return 0;
     }
   else

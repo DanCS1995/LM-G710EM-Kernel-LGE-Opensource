@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,7 +15,7 @@
 
 /**
  * @defgroup kernel_handler kernel_handler
- * @{ @ingroup ckernel
+ * @{ @ingroup kernel
  */
 
 #ifndef KERNEL_HANDLER_H_
@@ -23,7 +23,7 @@
 
 typedef struct kernel_handler_t kernel_handler_t;
 
-#include <kernel_wrap/kernel_listener.h>
+#include <kernel/kernel_listener.h>
 
 /**
  * Listens to and handles kernel events.

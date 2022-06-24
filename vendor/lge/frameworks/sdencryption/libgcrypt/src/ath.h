@@ -85,7 +85,7 @@ struct ath_ops
   ssize_t (*write) (int fd, const void *buf, size_t nbytes);
 #ifdef _WIN32
   ssize_t (*select) (int nfd, void *rset, void *wset, void *eset,
-		     struct timeval *timeout);
+             struct timeval *timeout);
   ssize_t (*waitpid) (pid_t pid, int *status, int options);
   int (*accept) (int s, void  *addr, int *length_ptr);
   int (*connect) (int s, void *addr, int length);
@@ -93,7 +93,7 @@ struct ath_ops
   int (*recvmsg) (int s, void *msg, int flags);
 #else
   ssize_t (*select) (int nfd, fd_set *rset, fd_set *wset, fd_set *eset,
-		     struct timeval *timeout);
+             struct timeval *timeout);
   ssize_t (*waitpid) (pid_t pid, int *status, int options);
   int (*accept) (int s, struct sockaddr *addr, socklen_t *length_ptr);
   int (*connect) (int s, struct sockaddr *addr, socklen_t length);
@@ -121,7 +121,7 @@ ssize_t ath_read (int fd, void *buf, size_t nbytes);
 ssize_t ath_write (int fd, const void *buf, size_t nbytes);
 #ifdef _WIN32
 ssize_t ath_select (int nfd, void *rset, void *wset, void *eset,
-		    struct timeval *timeout);
+            struct timeval *timeout);
 ssize_t ath_waitpid (pid_t pid, int *status, int options);
 int ath_accept (int s, void *addr, int *length_ptr);
 int ath_connect (int s, void *addr, int length);
@@ -129,7 +129,7 @@ int ath_sendmsg (int s, const void *msg, int flags);
 int ath_recvmsg (int s, void *msg, int flags);
 #else
 ssize_t ath_select (int nfd, fd_set *rset, fd_set *wset, fd_set *eset,
-		    struct timeval *timeout);
+            struct timeval *timeout);
 ssize_t ath_waitpid (pid_t pid, int *status, int options);
 int ath_accept (int s, struct sockaddr *addr, socklen_t *length_ptr);
 int ath_connect (int s, struct sockaddr *addr, socklen_t length);
@@ -137,4 +137,4 @@ int ath_sendmsg (int s, const struct msghdr *msg, int flags);
 int ath_recvmsg (int s, struct msghdr *msg, int flags);
 #endif 
 
-#endif	/* ATH_H */
+#endif    /* ATH_H */

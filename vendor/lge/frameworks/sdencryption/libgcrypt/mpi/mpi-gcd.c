@@ -1,5 +1,5 @@
 /* mpi-gcd.c  -  MPI functions
- *	Copyright (C) 1998, 2001, 2002, 2003 Free Software Foundation, Inc.
+ *    Copyright (C) 1998, 2001, 2002, 2003 Free Software Foundation, Inc.
  *
  * This file is part of Libgcrypt.
  *
@@ -39,9 +39,9 @@ gcry_mpi_gcd( gcry_mpi_t g, gcry_mpi_t xa, gcry_mpi_t xb )
     a->sign = 0;
     b->sign = 0;
     while( gcry_mpi_cmp_ui( b, 0 ) ) {
-	_gcry_mpi_fdiv_r( g, a, b ); /* g used as temorary variable */
-	mpi_set(a,b);
-	mpi_set(b,g);
+    _gcry_mpi_fdiv_r( g, a, b ); /* g used as temorary variable */
+    mpi_set(a,b);
+    mpi_set(b,g);
     }
     mpi_set(g, a);
 

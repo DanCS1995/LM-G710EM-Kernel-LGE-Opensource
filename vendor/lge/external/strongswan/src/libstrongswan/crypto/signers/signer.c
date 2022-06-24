@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2005-2006 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,14 +19,14 @@
 ENUM_BEGIN(integrity_algorithm_names, AUTH_UNDEFINED, AUTH_CAMELLIA_XCBC_96,
 	"UNDEFINED",
 	"HMAC_SHA1_128",
-	"HMAC-SHA-256-96 [draft-ietf-ipsec-ciph-sha-256-00]",
+	"HMAC_SHA2_256_96",
 	"HMAC_SHA2_256_256",
 	"HMAC_SHA2_384_384",
 	"HMAC_SHA2_512_512",
 	"CAMELLIA_XCBC_96");
 ENUM_NEXT(integrity_algorithm_names, AUTH_HMAC_MD5_96, AUTH_HMAC_SHA2_512_256, AUTH_CAMELLIA_XCBC_96,
-	"HMAC-MD5-96 [RFC2403]",
-	"HMAC-SHA-1-96 [RFC2404]",
+	"HMAC_MD5_96",
+	"HMAC_SHA1_96",
 	"DES_MAC",
 	"KPDK_MD5",
 	"AES_XCBC_96",
@@ -36,9 +36,9 @@ ENUM_NEXT(integrity_algorithm_names, AUTH_HMAC_MD5_96, AUTH_HMAC_SHA2_512_256, A
 	"AES_128_GMAC",
 	"AES_192_GMAC",
 	"AES_256_GMAC",
-	"HMAC-SHA-256-128 [RFC4868]",
-	"HMAC_SHA2_384_192 [RFC4868]",
-	"HMAC_SHA2_512_256 [RFC4868]");
+	"HMAC_SHA2_256_128",
+	"HMAC_SHA2_384_192",
+	"HMAC_SHA2_512_256");
 ENUM_END(integrity_algorithm_names, AUTH_HMAC_SHA2_512_256);
 
 

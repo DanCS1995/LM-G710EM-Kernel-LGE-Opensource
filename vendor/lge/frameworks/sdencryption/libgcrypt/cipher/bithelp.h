@@ -1,5 +1,5 @@
 /* bithelp.h  -  Some bit manipulation helpers
- *	Copyright (C) 1999, 2002 Free Software Foundation, Inc.
+ *    Copyright (C) 1999, 2002 Free Software Foundation, Inc.
  *
  * This file is part of Libgcrypt.
  *
@@ -28,10 +28,10 @@
 static inline u32
 rol( u32 x, int n)
 {
-	__asm__("roll %%cl,%0"
-		:"=r" (x)
-		:"0" (x),"c" (n));
-	return x;
+    __asm__("roll %%cl,%0"
+        :"=r" (x)
+        :"0" (x),"c" (n));
+    return x;
 }
 #else
 #define rol(x,n) ( ((x) << (n)) | ((x) >> (32-(n))) )
@@ -41,10 +41,10 @@ rol( u32 x, int n)
 static inline u32
 ror(u32 x, int n)
 {
-	__asm__("rorl %%cl,%0"
-		:"=r" (x)
-		:"0" (x),"c" (n));
-	return x;
+    __asm__("rorl %%cl,%0"
+        :"=r" (x)
+        :"0" (x),"c" (n));
+    return x;
 }
 #else
 #define ror(x,n) ( ((x) >> (n)) | ((x) << (32-(n))) )

@@ -2,7 +2,7 @@
  * Copyright (C) 2013 Tobias Brunner
  * Copyright (C) 2009 Martin Willi
  * Copyright (C) 2001-2008 Andreas Steffen
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -61,7 +61,7 @@ static bool find_boundary(char* tag, chunk_t *line)
 
 	if (!present("-----", line) ||
 		!present(tag, line) ||
-		*line->ptr != ' ')
+		!line->len || *line->ptr != ' ')
 	{
 		return FALSE;
 	}
@@ -93,7 +93,7 @@ static status_t pem_decrypt(chunk_t *blob, encryption_algorithm_t alg,
 	chunk_t hash;
 	chunk_t decrypted;
 	chunk_t key = {alloca(key_size), key_size};
-	u_int8_t padding, *last_padding_pos, *first_padding_pos;
+	uint8_t padding, *last_padding_pos, *first_padding_pos;
 
 	/* build key from passphrase and IV */
 	hasher = lib->crypto->create_hasher(lib->crypto, HASH_MD5);
@@ -250,7 +250,7 @@ static status_t pem_to_bin(chunk_t *blob, bool *pgp)
 				{
 					continue;
 				}
-				if (match("Proc-Type", &name) && *value.ptr == '4')
+				if (match("Proc-Type", &name) && value.len && *value.ptr == '4')
 				{
 					encrypted = TRUE;
 				}
@@ -306,7 +306,7 @@ static status_t pem_to_bin(chunk_t *blob, bool *pgp)
 				}
 
 				/* check for PGP armor checksum */
-				if (*data.ptr == '=')
+				if (data.len && *data.ptr == '=')
 				{
 					*pgp = TRUE;
 					data.ptr++;
@@ -365,6 +365,29 @@ static status_t pem_to_bin(chunk_t *blob, bool *pgp)
 }
 
 /**
+ * Check if a blob looks like an ASN1 SEQUENCE or SET with BER indefinite length
+ */
+static bool is_ber_indefinite_length(chunk_t blob)
+{
+	if (blob.len >= 4)
+	{
+		switch (blob.ptr[0])
+		{
+			case ASN1_SEQUENCE:
+			case ASN1_SET:
+				/* BER indefinite length uses 0x80, and is terminated with
+				 * end-of-content using 0x00,0x00 */
+				return blob.ptr[1] == 0x80 &&
+					   blob.ptr[blob.len - 2] == 0 &&
+					   blob.ptr[blob.len - 1] == 0;
+			default:
+				break;
+		}
+	}
+	return FALSE;
+}
+
+/**
  * load the credential from a blob
  */
 static void *load_from_blob(chunk_t blob, credential_type_t type, int subtype,
@@ -374,7 +397,7 @@ static void *load_from_blob(chunk_t blob, credential_type_t type, int subtype,
 	bool pgp = FALSE;
 
 	blob = chunk_clone(blob);
-	if (!is_asn1(blob))
+	if (!is_ber_indefinite_length(blob) && !is_asn1(blob))
 	{
 		if (pem_to_bin(&blob, &pgp) != SUCCESS)
 		{

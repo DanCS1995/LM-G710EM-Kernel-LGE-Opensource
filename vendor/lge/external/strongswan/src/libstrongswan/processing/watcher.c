@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2016 Tobias Brunner
+ * HSR Hochschule fuer Technik Rapperswil
+ *
  * Copyright (C) 2013 Martin Willi
  * Copyright (C) 2013 revosec AG
  *
@@ -24,10 +27,10 @@
 
 #include <unistd.h>
 #include <errno.h>
-#include <sys/select.h>
 #include <fcntl.h>
 
 typedef struct private_watcher_t private_watcher_t;
+typedef struct entry_t entry_t;
 
 /**
  * Private data of an watcher_t object.
@@ -40,14 +43,29 @@ struct private_watcher_t {
 	watcher_t public;
 
 	/**
-	 * List of registered FDs, as entry_t
+	 * List of registered FDs
 	 */
-	linked_list_t *fds;
+	entry_t *fds;
+
+	/**
+	 * Last registered FD
+	 */
+	entry_t *last;
+
+	/**
+	 * Number of registered FDs
+	 */
+	u_int count;
 
 	/**
 	 * Pending update of FD list?
 	 */
 	bool pending;
+
+	/**
+	 * Running state of watcher
+	 */
+	watcher_state_t state;
 
 	/**
 	 * Lock to access FD list
@@ -73,7 +91,7 @@ struct private_watcher_t {
 /**
  * Entry for a registered file descriptor
  */
-typedef struct {
+struct entry_t {
 	/** file descriptor */
 	int fd;
 	/** events to watch */
@@ -84,7 +102,53 @@ typedef struct {
 	void *data;
 	/** callback(s) currently active? */
 	int in_callback;
-} entry_t;
+	/** next registered fd */
+	entry_t *next;
+};
+
+/**
+ * Adds the given entry at the end of the list
+ */
+static void add_entry(private_watcher_t *this, entry_t *entry)
+{
+	if (this->last)
+	{
+		this->last->next = entry;
+		this->last = entry;
+	}
+	else
+	{
+		this->fds = this->last = entry;
+	}
+	this->count++;
+}
+
+/**
+ * Removes and frees the given entry
+ *
+ * Updates the previous entry and returns the next entry in the list, if any.
+ */
+static entry_t *remove_entry(private_watcher_t *this, entry_t *entry,
+							 entry_t *prev)
+{
+	entry_t *next = entry->next;
+
+	if (prev)
+	{
+		prev->next = next;
+	}
+	else
+	{
+		this->fds = next;
+	}
+	if (this->last == entry)
+	{
+		this->last = prev;
+	}
+	this->count--;
+	free(entry);
+	return next;
+}
 
 /**
  * Data we pass on for an async notification
@@ -114,7 +178,10 @@ static void update(private_watcher_t *this)
 	this->pending = TRUE;
 	if (this->notify[1] != -1)
 	{
-		ignore_result(write(this->notify[1], buf, sizeof(buf)));
+		if (write(this->notify[1], buf, sizeof(buf)) == -1)
+		{
+			DBG1(DBG_JOB, "notifying watcher failed: %s", strerror(errno));
+		}
 	}
 }
 
@@ -146,13 +213,11 @@ static job_requeue_t notify_async(notify_data_t *data)
 static void notify_end(notify_data_t *data)
 {
 	private_watcher_t *this = data->this;
-	enumerator_t *enumerator;
-	entry_t *entry;
+	entry_t *entry, *prev = NULL;
 
 	/* reactivate the disabled entry */
 	this->mutex->lock(this->mutex);
-	enumerator = this->fds->create_enumerator(this->fds);
-	while (enumerator->enumerate(enumerator, &entry))
+	for (entry = this->fds; entry; prev = entry, entry = entry->next)
 	{
 		if (entry->fd == data->fd)
 		{
@@ -161,8 +226,7 @@ static void notify_end(notify_data_t *data)
 				entry->events &= ~data->event;
 				if (!entry->events)
 				{
-					this->fds->remove_at(this->fds, enumerator);
-					free(entry);
+					remove_entry(this, entry, prev);
 					break;
 				}
 			}
@@ -170,8 +234,6 @@ static void notify_end(notify_data_t *data)
 			break;
 		}
 	}
-	enumerator->destroy(enumerator);
-
 	update(this);
 	this->condvar->broadcast(this->condvar);
 	this->mutex->unlock(this->mutex);
@@ -212,21 +274,57 @@ static void notify(private_watcher_t *this, entry_t *entry,
  */
 static void activate_all(private_watcher_t *this)
 {
-	enumerator_t *enumerator;
 	entry_t *entry;
 
 	/* When the watcher thread gets cancelled, we have to reactivate any entry
 	 * and signal threads in remove() to go on. */
 
 	this->mutex->lock(this->mutex);
-	enumerator = this->fds->create_enumerator(this->fds);
-	while (enumerator->enumerate(enumerator, &entry))
+	for (entry = this->fds; entry; entry = entry->next)
 	{
 		entry->in_callback = 0;
 	}
-	enumerator->destroy(enumerator);
+	this->state = WATCHER_STOPPED;
 	this->condvar->broadcast(this->condvar);
 	this->mutex->unlock(this->mutex);
+}
+
+/**
+ * Find flagged revents in a pollfd set by fd
+ */
+static inline int find_revents(struct pollfd *pfd, int count, int fd)
+{
+	int i;
+
+	for (i = 0; i < count; i++)
+	{
+		if (pfd[i].fd == fd)
+		{
+			return pfd[i].revents;
+		}
+	}
+	return 0;
+}
+
+/**
+ * Check if entry is waiting for a specific event, and if it got signaled
+ */
+static inline bool entry_ready(entry_t *entry, watcher_event_t event,
+							   int revents)
+{
+	if (entry->events & event)
+	{
+		switch (event)
+		{
+			case WATCHER_READ:
+				return (revents & (POLLIN | POLLHUP | POLLNVAL)) != 0;
+			case WATCHER_WRITE:
+				return (revents & (POLLOUT | POLLHUP | POLLNVAL)) != 0;
+			case WATCHER_EXCEPT:
+				return (revents & (POLLERR | POLLHUP | POLLNVAL)) != 0;
+		}
+	}
+	return FALSE;
 }
 
 /**
@@ -234,97 +332,129 @@ static void activate_all(private_watcher_t *this)
  */
 static job_requeue_t watch(private_watcher_t *this)
 {
-	enumerator_t *enumerator;
 	entry_t *entry;
-	fd_set rd, wr, ex;
-	int maxfd = 0, res;
-
-	FD_ZERO(&rd);
-	FD_ZERO(&wr);
-	FD_ZERO(&ex);
+	struct pollfd *pfd;
+	int count = 0, res;
+	bool rebuild = FALSE;
 
 	this->mutex->lock(this->mutex);
-	if (this->fds->get_count(this->fds) == 0)
+
+	count = this->count;
+	if (!count)
 	{
+		this->state = WATCHER_STOPPED;
 		this->mutex->unlock(this->mutex);
 		return JOB_REQUEUE_NONE;
 	}
-
-	if (this->notify[0] != -1)
+	if (this->state == WATCHER_QUEUED)
 	{
-		FD_SET(this->notify[0], &rd);
-		maxfd = this->notify[0];
+		this->state = WATCHER_RUNNING;
 	}
 
-	enumerator = this->fds->create_enumerator(this->fds);
-	while (enumerator->enumerate(enumerator, &entry))
+	pfd = alloca(sizeof(*pfd) * (count + 1));
+	pfd[0].fd = this->notify[0];
+	pfd[0].events = POLLIN;
+	count = 1;
+
+	for (entry = this->fds; entry; entry = entry->next)
 	{
 		if (!entry->in_callback)
 		{
+			pfd[count].fd = entry->fd;
+			pfd[count].events = 0;
 			if (entry->events & WATCHER_READ)
 			{
 				DBG3(DBG_JOB, "  watching %d for reading", entry->fd);
-				FD_SET(entry->fd, &rd);
+				pfd[count].events |= POLLIN;
 			}
 			if (entry->events & WATCHER_WRITE)
 			{
 				DBG3(DBG_JOB, "  watching %d for writing", entry->fd);
-				FD_SET(entry->fd, &wr);
+				pfd[count].events |= POLLOUT;
 			}
 			if (entry->events & WATCHER_EXCEPT)
 			{
 				DBG3(DBG_JOB, "  watching %d for exceptions", entry->fd);
-				FD_SET(entry->fd, &ex);
+				pfd[count].events |= POLLERR;
 			}
-			maxfd = max(maxfd, entry->fd);
+			count++;
 		}
 	}
-	enumerator->destroy(enumerator);
 	this->mutex->unlock(this->mutex);
 
-	while (TRUE)
+	while (!rebuild)
 	{
+		int revents;
 		char buf[1];
 		bool old;
+		ssize_t len;
 		job_t *job;
 
-		DBG2(DBG_JOB, "watcher going to select()");
+		DBG2(DBG_JOB, "watcher going to poll() %d fds", count);
 		thread_cleanup_push((void*)activate_all, this);
 		old = thread_cancelability(TRUE);
-		res = select(maxfd + 1, &rd, &wr, &ex, NULL);
+
+		res = poll(pfd, count, -1);
+		if (res == -1 && errno == EINTR)
+		{
+			/* LinuxThreads interrupts poll(), but does not make it a
+			 * cancellation point. Manually test if we got cancelled. */
+			thread_cancellation_point();
+		}
+
 		thread_cancelability(old);
 		thread_cleanup_pop(FALSE);
+
 		if (res > 0)
 		{
-			if (this->notify[0] != -1 && FD_ISSET(this->notify[0], &rd))
+			if (pfd[0].revents & POLLIN)
 			{
-				DBG2(DBG_JOB, "watcher got notification, rebuilding");
-				while (read(this->notify[0], buf, sizeof(buf)) > 0);
+				while (TRUE)
+				{
+					len = read(this->notify[0], buf, sizeof(buf));
+					if (len == -1)
+					{
+						if (errno != EAGAIN && errno != EWOULDBLOCK)
+						{
+							DBG1(DBG_JOB, "reading watcher notify failed: %s",
+								 strerror(errno));
+						}
+						break;
+					}
+				}
 				this->pending = FALSE;
+				DBG2(DBG_JOB, "watcher got notification, rebuilding");
 				return JOB_REQUEUE_DIRECT;
 			}
 
 			this->mutex->lock(this->mutex);
-			enumerator = this->fds->create_enumerator(this->fds);
-			while (enumerator->enumerate(enumerator, &entry))
+			for (entry = this->fds; entry; entry = entry->next)
 			{
-				if (FD_ISSET(entry->fd, &rd) && (entry->events & WATCHER_READ))
+				if (entry->in_callback)
 				{
-					DBG2(DBG_JOB, "watched FD %d ready to read", entry->fd);
-					notify(this, entry, WATCHER_READ);
+					rebuild = TRUE;
+					break;
 				}
-				if (FD_ISSET(entry->fd, &wr) && (entry->events & WATCHER_WRITE))
-				{
-					DBG2(DBG_JOB, "watched FD %d ready to write", entry->fd);
-					notify(this, entry, WATCHER_WRITE);
-				}
-				if (FD_ISSET(entry->fd, &ex) && (entry->events & WATCHER_EXCEPT))
+				revents = find_revents(pfd, count, entry->fd);
+				if (entry_ready(entry, WATCHER_EXCEPT, revents))
 				{
 					DBG2(DBG_JOB, "watched FD %d has exception", entry->fd);
 					notify(this, entry, WATCHER_EXCEPT);
 				}
+				else
+				{
+					if (entry_ready(entry, WATCHER_READ, revents))
+					{
+						DBG2(DBG_JOB, "watched FD %d ready to read", entry->fd);
+						notify(this, entry, WATCHER_READ);
+					}
+					if (entry_ready(entry, WATCHER_WRITE, revents))
+					{
+						DBG2(DBG_JOB, "watched FD %d ready to write", entry->fd);
+						notify(this, entry, WATCHER_WRITE);
+					}
+				}
 			}
-			enumerator->destroy(enumerator);
 			this->mutex->unlock(this->mutex);
 
 			if (this->jobs->get_count(this->jobs))
@@ -342,11 +472,12 @@ static job_requeue_t watch(private_watcher_t *this)
 		{
 			if (!this->pending && errno != EINTR)
 			{	/* complain only if no pending updates */
-				DBG1(DBG_JOB, "watcher select() error: %s", strerror(errno));
+				DBG1(DBG_JOB, "watcher poll() error: %s", strerror(errno));
 			}
 			return JOB_REQUEUE_DIRECT;
 		}
 	}
+	return JOB_REQUEUE_DIRECT;
 }
 
 METHOD(watcher_t, add, void,
@@ -363,9 +494,10 @@ METHOD(watcher_t, add, void,
 	);
 
 	this->mutex->lock(this->mutex);
-	this->fds->insert_last(this->fds, entry);
-	if (this->fds->get_count(this->fds) == 1)
+	add_entry(this, entry);
+	if (this->state == WATCHER_STOPPED)
 	{
+		this->state = WATCHER_QUEUED;
 		lib->processor->queue_job(lib->processor,
 			(job_t*)callback_job_create_with_prio((void*)watch, this,
 				NULL, (callback_job_cancel_t)return_false, JOB_PRIO_CRITICAL));
@@ -380,38 +512,54 @@ METHOD(watcher_t, add, void,
 METHOD(watcher_t, remove_, void,
 	private_watcher_t *this, int fd)
 {
-	enumerator_t *enumerator;
-	entry_t *entry;
+	entry_t *entry, *prev = NULL;
+	bool found = FALSE;
 
 	this->mutex->lock(this->mutex);
 	while (TRUE)
 	{
 		bool is_in_callback = FALSE;
 
-		enumerator = this->fds->create_enumerator(this->fds);
-		while (enumerator->enumerate(enumerator, &entry))
+		entry = this->fds;
+		while (entry)
 		{
 			if (entry->fd == fd)
 			{
-				if (entry->in_callback)
+				if (this->state != WATCHER_STOPPED && entry->in_callback)
 				{
 					is_in_callback = TRUE;
 					break;
 				}
-				this->fds->remove_at(this->fds, enumerator);
-				free(entry);
+				entry = remove_entry(this, entry, prev);
+				found = TRUE;
+				continue;
 			}
+			prev = entry;
+			entry = entry->next;
 		}
-		enumerator->destroy(enumerator);
 		if (!is_in_callback)
 		{
 			break;
 		}
 		this->condvar->wait(this->condvar, this->mutex);
 	}
-
-	update(this);
+	if (found)
+	{
+		update(this);
+	}
 	this->mutex->unlock(this->mutex);
+}
+
+METHOD(watcher_t, get_state, watcher_state_t,
+	private_watcher_t *this)
+{
+	watcher_state_t state;
+
+	this->mutex->lock(this->mutex);
+	state = this->state;
+	this->mutex->unlock(this->mutex);
+
+	return state;
 }
 
 METHOD(watcher_t, destroy, void,
@@ -419,7 +567,6 @@ METHOD(watcher_t, destroy, void,
 {
 	this->mutex->destroy(this->mutex);
 	this->condvar->destroy(this->condvar);
-	this->fds->destroy(this->fds);
 	if (this->notify[0] != -1)
 	{
 		close(this->notify[0]);
@@ -432,39 +579,76 @@ METHOD(watcher_t, destroy, void,
 	free(this);
 }
 
+#ifdef WIN32
+
+/**
+ * Create notify pipe with a TCP socketpair
+ */
+static bool create_notify(private_watcher_t *this)
+{
+	u_long on = 1;
+
+	if (socketpair(AF_INET, SOCK_STREAM, 0, this->notify) == 0)
+	{
+		/* use non-blocking I/O on read-end of notify pipe */
+		if (ioctlsocket(this->notify[0], FIONBIO, &on) == 0)
+		{
+			return TRUE;
+		}
+		DBG1(DBG_LIB, "setting watcher notify pipe read-end non-blocking "
+			 "failed: %s", strerror(errno));
+	}
+	return FALSE;
+}
+
+#else /* !WIN32 */
+
+/**
+ * Create a notify pipe with a one-directional pipe
+ */
+static bool create_notify(private_watcher_t *this)
+{
+	int flags;
+
+	if (pipe(this->notify) == 0)
+	{
+		/* use non-blocking I/O on read-end of notify pipe */
+		flags = fcntl(this->notify[0], F_GETFL);
+		if (flags != -1 &&
+			fcntl(this->notify[0], F_SETFL, flags | O_NONBLOCK) != -1)
+		{
+			return TRUE;
+		}
+		DBG1(DBG_LIB, "setting watcher notify pipe read-end non-blocking "
+			 "failed: %s", strerror(errno));
+	}
+	return FALSE;
+}
+
+#endif /* !WIN32 */
+
 /**
  * See header
  */
 watcher_t *watcher_create()
 {
 	private_watcher_t *this;
-	int flags;
 
 	INIT(this,
 		.public = {
 			.add = _add,
 			.remove = _remove_,
+			.get_state = _get_state,
 			.destroy = _destroy,
 		},
-		.fds = linked_list_create(),
 		.mutex = mutex_create(MUTEX_TYPE_DEFAULT),
 		.condvar = condvar_create(CONDVAR_TYPE_DEFAULT),
 		.jobs = linked_list_create(),
 		.notify = {-1, -1},
+		.state = WATCHER_STOPPED,
 	);
 
-	if (pipe(this->notify) == 0)
-	{
-		/* use non-blocking I/O on read-end of notify pipe */
-		flags = fcntl(this->notify[0], F_GETFL);
-		if (flags == -1 ||
-			fcntl(this->notify[0], F_SETFL, flags | O_NONBLOCK) == -1)
-		{
-			DBG1(DBG_LIB, "setting watcher notify pipe read-end non-blocking "
-				 "failed: %s", strerror(errno));
-		}
-	}
-	else
+	if (!create_notify(this))
 	{
 		DBG1(DBG_LIB, "creating watcher notify pipe failed: %s",
 			 strerror(errno));

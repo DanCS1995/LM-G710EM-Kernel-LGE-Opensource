@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2011 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,10 +21,7 @@
 #ifndef THREADING_SEMAPHORE_H_
 #define THREADING_SEMAPHORE_H_
 
-#ifdef __APPLE__
-/* Mach uses a semaphore_create() call, use a different name for ours */
-#define semaphore_create(x) strongswan_semaphore_create(x)
-#endif /* __APPLE__ */
+#include <utils/utils.h>
 
 typedef struct semaphore_t semaphore_t;
 
@@ -32,7 +29,7 @@ typedef struct semaphore_t semaphore_t;
  * A semaphore is basically an integer whose value is never allowed to be
  * lower than 0.  Two operations can be performed on it: increment the
  * value by one, and decrement the value by one.  If the value is currently
- * zero, then the decrement operation will blcok until the value becomes
+ * zero, then the decrement operation will block until the value becomes
  * greater than zero.
  */
 struct semaphore_t {
@@ -87,4 +84,3 @@ struct semaphore_t {
 semaphore_t *semaphore_create(u_int value);
 
 #endif /** THREADING_SEMAPHORE_H_ @} */
-

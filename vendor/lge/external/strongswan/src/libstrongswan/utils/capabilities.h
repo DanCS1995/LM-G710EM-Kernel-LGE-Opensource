@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  * Copyright (C) 2012 Martin Willi
  * Copyright (C) 2012 revosec AG
  *
@@ -47,8 +47,8 @@ typedef struct capabilities_t capabilities_t;
 #ifndef CAP_DAC_OVERRIDE
 # define CAP_DAC_OVERRIDE 1
 #endif
-#ifndef CAP_SETFCAP
-# define CAP_SETFCAP 31
+#ifndef CAP_SETPCAP
+# define CAP_SETPCAP 8
 #endif
 /* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 #ifndef CAP_BLOCK_SUSPEND

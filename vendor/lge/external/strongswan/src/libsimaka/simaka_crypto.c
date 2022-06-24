@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009-2011 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -130,7 +130,6 @@ METHOD(simaka_crypto_t, derive_keys_full, bool,
 		return FALSE;
 	}
 	DBG3(DBG_LIB, "MK %B", mk);
-//	DBG1(DBG_KEY, "MK %B", mk);
 
 	/* K_encr | K_auth | MSK | EMSK = prf() | prf() | prf() | prf() */
 	if (!this->prf->set_key(this->prf, *mk))
@@ -161,7 +160,6 @@ METHOD(simaka_crypto_t, derive_keys_full, bool,
 
 	*msk = chunk_clone(chunk_create(str.ptr + KENCR_LEN + KAUTH_LEN, MSK_LEN));
 	DBG3(DBG_LIB, "K_encr %B\nK_auth %B\nMSK %B", &k_encr, &k_auth, msk);
-//	DBG1(DBG_KEY, "K_encr %B\nK_auth %B\nMSK %B", &k_encr, &k_auth, msk);
 
 	call_hook(this, k_encr, k_auth);
 

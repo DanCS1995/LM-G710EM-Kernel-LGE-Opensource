@@ -45,7 +45,7 @@ METHOD(listener_t, message, bool,
 		enumerator = message->create_payload_enumerator(message);
 		while (enumerator->enumerate(enumerator, &payload))
 		{
-			if (payload->get_type(payload) == SECURITY_ASSOCIATION)
+			if (payload->get_type(payload) == PLV2_SECURITY_ASSOCIATION)
 			{
 				sa = (sa_payload_t*)payload;
 				list = sa->get_proposals(sa);
@@ -54,7 +54,7 @@ METHOD(listener_t, message, bool,
 				proposals = list->create_enumerator(list);
 				while (proposals->enumerate(proposals, &proposal))
 				{
-					u_int64_t spi = proposal->get_spi(proposal);
+					uint64_t spi = proposal->get_spi(proposal);
 
 					if (proposal->get_protocol(proposal) != PROTO_IKE)
 					{

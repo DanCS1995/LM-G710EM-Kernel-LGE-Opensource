@@ -57,17 +57,17 @@ main (int argc, char **argv)
     {
       sorted = 1;
       for (i = 0; i < sizeof (err_table) / sizeof (err_table[0]) - 1; i++)
-	if (err_table[i].err > err_table[i + 1].err)
-	  {
-	    int err = err_table[i].err;
-	    const char *err_sym = err_table[i].err_sym;
+    if (err_table[i].err > err_table[i + 1].err)
+      {
+        int err = err_table[i].err;
+        const char *err_sym = err_table[i].err_sym;
 
-	    err_table[i].err = err_table[i + 1].err;
-	    err_table[i].err_sym = err_table[i + 1].err_sym;
-	    err_table[i + 1].err = err;
-	    err_table[i + 1].err_sym = err_sym;
-	    sorted = 0;
-	  }
+        err_table[i].err = err_table[i + 1].err;
+        err_table[i].err_sym = err_table[i + 1].err_sym;
+        err_table[i + 1].err = err;
+        err_table[i + 1].err_sym = err_sym;
+        sorted = 0;
+      }
     }
   while (!sorted);
       

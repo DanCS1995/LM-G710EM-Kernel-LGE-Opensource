@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Andreas Steffen
+ * Copyright (C) 2012-2014 Andreas Steffen
  * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -43,7 +43,7 @@ struct ietf_attr_assess_result_t {
 	 *
 	 * @return				Assessment Result
 	 */
-	u_int32_t (*get_result)(ietf_attr_assess_result_t *this);
+	uint32_t (*get_result)(ietf_attr_assess_result_t *this);
 
 };
 
@@ -51,13 +51,15 @@ struct ietf_attr_assess_result_t {
  * Creates an ietf_attr_assess_result_t object
  *
  */
-pa_tnc_attr_t* ietf_attr_assess_result_create(u_int32_t result);
+pa_tnc_attr_t* ietf_attr_assess_result_create(uint32_t result);
 
 /**
  * Creates an ietf_attr_assess_result_t object from received data
  *
- * @param value				unparsed attribute value
+ * @param length			Total length of attribute value
+ * @param value				Unparsed attribute value (might be a segment)
  */
-pa_tnc_attr_t* ietf_attr_assess_result_create_from_data(chunk_t value);
+pa_tnc_attr_t* ietf_attr_assess_result_create_from_data(size_t length,
+														chunk_t value);
 
 #endif /** IETF_ATTR_ASSESS_RESULT_H_ @}*/

@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2008-2009 Martin Willi
  * Copyright (C) 2008 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -82,104 +82,49 @@ static bool fetch_cert(wrapper_enumerator_t *enumerator,
 		return FALSE;
 	}
 
-	if (*rule == AUTH_HELPER_BUNDLE_HASH_URL) {
-		char *bundle_ptr=data.ptr;
-		char *next_ptr = NULL;
-		chunk_t im_data; 
-		int bundle_len = data.len;
-		//	obtain Cert from URL and change the type to Certificate
-		//	in order to support multiple certificates in bundle, we chage add more here
-		//	use enumerator->auth->add(enumerator->auth, AUTH_HELPER_IM_CERT, cert);
-		//		e.g auth->add(auth, AUTH_HELPER_SUBJECT_CERT, cert);
+	cert = lib->creds->create(lib->creds, CRED_CERTIFICATE, CERT_X509,
+							  BUILD_BLOB_ASN1_DER, data, BUILD_END);
+	free(data.ptr);
 
-		DBG1(DBG_LIB, "Go parse ... PEM");
-		do {
-			next_ptr = strstr(bundle_ptr+1, "-----BEGIN CERTIFICATE-----");
-			im_data.ptr = bundle_ptr;
-			if (next_ptr) {
-				im_data.len = (size_t)next_ptr - (size_t)bundle_ptr;
-				bundle_len -= im_data.len;
-			} else {
-				im_data.len = bundle_len;
-			}
-//			DBG1(DBG_LIB, "Go parse one by one ... : %B", &im_data);
-			cert = lib->creds->create(lib->creds, CRED_CERTIFICATE, CERT_X509, BUILD_BLOB_PEM, im_data, BUILD_END);		
-
-			if (!cert) {
-				break;
-			}
-
-			DBG1(DBG_CFG, "  fetched certificate \"%Y\"", cert->get_subject(cert));
-			lib->credmgr->cache_cert(lib->credmgr, cert);
-
-			if (bundle_ptr != data.ptr) {
-				enumerator->auth->add(enumerator->auth, AUTH_HELPER_IM_CERT, cert);
-			} else {
-				enumerator->auth->replace(enumerator->auth, enumerator->inner, AUTH_HELPER_SUBJECT_CERT, cert->get_ref(cert));
-				*value = cert;
-			}
-			bundle_ptr = next_ptr;
-		} while (next_ptr);
-		free(data.ptr);
-		
-		if (!cert)
-		{
-			DBG1(DBG_CFG, "  parsing fetched certificate failed, only PEM format support");
-			/* we set the item to NULL, so we can skip it */
-			enumerator->auth->replace(enumerator->auth, enumerator->inner, *rule, NULL);
-			return FALSE;
-		}
-
-	} else {
-		DBG1(DBG_LIB, "Go parse ... DER");
-		cert = lib->creds->create(lib->creds, CRED_CERTIFICATE, CERT_X509, BUILD_BLOB_ASN1_DER, data, BUILD_END);
-		if (!cert) {
-			DBG1(DBG_LIB, "Go parse ... PEM");
-			cert = lib->creds->create(lib->creds, CRED_CERTIFICATE, CERT_X509, BUILD_BLOB_PEM, data, BUILD_END);
-		}
-		free(data.ptr);
-
-		if (!cert)
-		{
-			DBG1(DBG_CFG, "  parsing fetched certificate failed");
-			/* we set the item to NULL, so we can skip it */
-			enumerator->auth->replace(enumerator->auth, enumerator->inner, *rule, NULL);
-			return FALSE;
-		}
-
-		DBG1(DBG_CFG, "  fetched certificate \"%Y\"", cert->get_subject(cert));
-		lib->credmgr->cache_cert(lib->credmgr, cert);
-
-		if (*rule == AUTH_HELPER_IM_HASH_URL)
-		{
-			*rule = AUTH_HELPER_IM_CERT;
-		}
-		else
-		{
-			*rule = AUTH_HELPER_SUBJECT_CERT;
-		}
-		*value = cert;
+	if (!cert)
+	{
+		DBG1(DBG_CFG, "  parsing fetched certificate failed");
+		/* we set the item to NULL, so we can skip it */
 		enumerator->auth->replace(enumerator->auth, enumerator->inner,
-								  *rule, cert->get_ref(cert));
+								  *rule, NULL);
+		return FALSE;
 	}
 
+	DBG1(DBG_CFG, "  fetched certificate \"%Y\"", cert->get_subject(cert));
+	lib->credmgr->cache_cert(lib->credmgr, cert);
+
+	if (*rule == AUTH_HELPER_IM_HASH_URL)
+	{
+		*rule = AUTH_HELPER_IM_CERT;
+	}
+	else
+	{
+		*rule = AUTH_HELPER_SUBJECT_CERT;
+	}
+	*value = cert;
+	enumerator->auth->replace(enumerator->auth, enumerator->inner,
+							  *rule, cert);
 	return TRUE;
 }
 
-/**
- * enumerate function for wrapper_enumerator_t
- */
-static bool enumerate(wrapper_enumerator_t *this, certificate_t **cert)
+METHOD(enumerator_t, enumerate, bool,
+	wrapper_enumerator_t *this, va_list args)
 {
 	auth_rule_t rule;
-	certificate_t *current;
+	certificate_t *current, **cert;
 	public_key_t *public;
+
+	VA_ARGS_VGET(args, cert);
 
 	while (this->inner->enumerate(this->inner, &rule, &current))
 	{
 		if (rule == AUTH_HELPER_IM_HASH_URL ||
-			rule == AUTH_HELPER_SUBJECT_HASH_URL || 
-			rule == AUTH_HELPER_BUNDLE_HASH_URL )
+			rule == AUTH_HELPER_SUBJECT_HASH_URL)
 		{	/* on-demand fetching of hash and url certificates */
 			if (!fetch_cert(this, &rule, (void**)&current))
 			{
@@ -188,7 +133,8 @@ static bool enumerate(wrapper_enumerator_t *this, certificate_t **cert)
 		}
 		else if (rule != AUTH_HELPER_SUBJECT_CERT &&
 				 rule != AUTH_HELPER_IM_CERT &&
-				 rule != AUTH_HELPER_REVOCATION_CERT)
+				 rule != AUTH_HELPER_REVOCATION_CERT &&
+				 rule != AUTH_HELPER_AC_CERT)
 		{	/* handle only HELPER certificates */
 			continue;
 		}
@@ -218,10 +164,8 @@ static bool enumerate(wrapper_enumerator_t *this, certificate_t **cert)
 	return FALSE;
 }
 
-/**
- * destroy function for wrapper_enumerator_t
- */
-static void wrapper_enumerator_destroy(wrapper_enumerator_t *this)
+METHOD(enumerator_t, wrapper_enumerator_destroy, void,
+	wrapper_enumerator_t *this)
 {
 	this->inner->destroy(this->inner);
 	free(this);
@@ -237,14 +181,18 @@ METHOD(credential_set_t, create_enumerator, enumerator_t*,
 	{
 		return NULL;
 	}
-	enumerator = malloc_thing(wrapper_enumerator_t);
-	enumerator->auth = this->auth;
-	enumerator->cert = cert;
-	enumerator->key = key;
-	enumerator->id = id;
-	enumerator->inner = this->auth->create_enumerator(this->auth);
-	enumerator->public.enumerate = (void*)enumerate;
-	enumerator->public.destroy = (void*)wrapper_enumerator_destroy;
+	INIT(enumerator,
+		.public = {
+			.enumerate = enumerator_enumerate_default,
+			.venumerate = _enumerate,
+			.destroy = _wrapper_enumerator_destroy,
+		},
+		.auth = this->auth,
+		.cert = cert,
+		.key = key,
+		.id = id,
+		.inner = this->auth->create_enumerator(this->auth),
+	);
 	return &enumerator->public;
 }
 

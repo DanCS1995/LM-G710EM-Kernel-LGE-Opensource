@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2008 Thomas Kallenberg
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,7 +15,7 @@
  */
 
 /**
- * @defgroup sha1_hasher sha1_hasher
+ * @defgroup padlock_sha1_hasher padlock_sha1_hasher
  * @{ @ingroup padlock_p
  */
 

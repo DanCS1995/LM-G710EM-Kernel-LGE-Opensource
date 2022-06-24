@@ -2,7 +2,7 @@
  * Copyright (C) 2008-2013 Tobias Brunner
  * Copyright (C) 2005-2006 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,8 +24,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
-#include <pthread.h>
 #include <ctype.h>
+#include <time.h>
 
 #include "chunk.h"
 
@@ -221,7 +221,14 @@ bool chunk_write(chunk_t chunk, char *path, mode_t mask, bool force)
 		return FALSE;
 	}
 	oldmask = umask(mask);
-	fd = fopen(path, "w");
+	fd = fopen(path,
+#ifdef WIN32
+				"wb"
+#else
+				"w"
+#endif
+	);
+
 	if (fd)
 	{
 		if (fwrite(chunk.ptr, sizeof(u_char), chunk.len, fd) == chunk.len)
@@ -269,6 +276,12 @@ bool chunk_from_fd(int fd, chunk_t *out)
 	while (TRUE)
 	{
 		len = read(fd, buf + total, bufsize - total);
+#ifdef WIN32
+		if (len == -1 && errno == EBADF)
+		{	/* operating on a Winsock socket? */
+			len = recv(fd, buf + total, bufsize - total, 0);
+		}
+#endif
 		if (len < 0)
 		{
 			free(buf);
@@ -327,10 +340,15 @@ chunk_t *chunk_map(char *path, bool wr)
 {
 	mmaped_chunk_t *chunk;
 	struct stat sb;
-	int tmp;
+	int tmp, flags;
+
+	flags = wr ? O_RDWR : O_RDONLY;
+#ifdef WIN32
+	flags |= O_BINARY;
+#endif
 
 	INIT(chunk,
-		.fd = open(path, wr ? O_RDWR : O_RDONLY),
+		.fd = open(path, flags),
 		.wr = wr,
 	);
 
@@ -460,7 +478,7 @@ chunk_t chunk_to_hex(chunk_t chunk, char *buf, bool uppercase)
 }
 
 /**
- * convert a signle hex character to its binary value
+ * convert a single hex character to its binary value
  */
 static char hex2bin(char hex)
 {
@@ -486,7 +504,13 @@ chunk_t chunk_from_hex(chunk_t hex, char *buf)
 	u_char *ptr;
 	bool odd = FALSE;
 
-   /* subtract the number of optional ':' separation characters */
+	/* skip an optional 0x prefix */
+	if (hex.len > 1 && hex.ptr[1] == 'x' && hex.ptr[0] == '0')
+	{
+		hex = chunk_skip(hex, 2);
+	}
+
+	/* subtract the number of optional ':' separation characters */
 	len = hex.len;
 	ptr = hex.ptr;
 	for (i = 0; i < hex.len; i++)
@@ -619,7 +643,7 @@ chunk_t chunk_from_base64(chunk_t base64, char *buf)
 		outlen += 3;
 		for (j = 0; j < 4; j++)
 		{
-			if (*pos == '=')
+			if (*pos == '=' && outlen > 0)
 			{
 				outlen--;
 			}
@@ -757,25 +781,25 @@ bool chunk_printable(chunk_t chunk, chunk_t *sane, char replace)
 /**
  * Helper functions for chunk_mac()
  */
-static inline u_int64_t sipget(u_char *in)
+static inline uint64_t sipget(u_char *in)
 {
-	u_int64_t v = 0;
+	uint64_t v = 0;
 	int i;
 
 	for (i = 0; i < 64; i += 8, ++in)
 	{
-		v |= ((u_int64_t)*in) << i;
+		v |= ((uint64_t)*in) << i;
 	}
 	return v;
 }
 
-static inline u_int64_t siprotate(u_int64_t v, int shift)
+static inline uint64_t siprotate(uint64_t v, int shift)
 {
         return (v << shift) | (v >> (64 - shift));
 }
 
-static inline void sipround(u_int64_t *v0, u_int64_t *v1, u_int64_t *v2,
-							u_int64_t *v3)
+static inline void sipround(uint64_t *v0, uint64_t *v1, uint64_t *v2,
+							uint64_t *v3)
 {
 	*v0 += *v1;
 	*v1 = siprotate(*v1, 13);
@@ -796,8 +820,8 @@ static inline void sipround(u_int64_t *v0, u_int64_t *v1, u_int64_t *v2,
 	*v3 ^= *v0;
 }
 
-static inline void sipcompress(u_int64_t *v0, u_int64_t *v1, u_int64_t *v2,
-							   u_int64_t *v3, u_int64_t m)
+static inline void sipcompress(uint64_t *v0, uint64_t *v1, uint64_t *v2,
+							   uint64_t *v3, uint64_t m)
 {
 	*v3 ^= m;
 	sipround(v0, v1, v2, v3);
@@ -805,28 +829,28 @@ static inline void sipcompress(u_int64_t *v0, u_int64_t *v1, u_int64_t *v2,
 	*v0 ^= m;
 }
 
-static inline u_int64_t siplast(size_t len, u_char *pos)
+static inline uint64_t siplast(size_t len, u_char *pos)
 {
-	u_int64_t b;
+	uint64_t b;
 	int rem = len & 7;
 
-	b = ((u_int64_t)len) << 56;
+	b = ((uint64_t)len) << 56;
 	switch (rem)
 	{
 		case 7:
-			b |= ((u_int64_t)pos[6]) << 48;
+			b |= ((uint64_t)pos[6]) << 48;
 		case 6:
-			b |= ((u_int64_t)pos[5]) << 40;
+			b |= ((uint64_t)pos[5]) << 40;
 		case 5:
-			b |= ((u_int64_t)pos[4]) << 32;
+			b |= ((uint64_t)pos[4]) << 32;
 		case 4:
-			b |= ((u_int64_t)pos[3]) << 24;
+			b |= ((uint64_t)pos[3]) << 24;
 		case 3:
-			b |= ((u_int64_t)pos[2]) << 16;
+			b |= ((uint64_t)pos[2]) << 16;
 		case 2:
-			b |= ((u_int64_t)pos[1]) <<  8;
+			b |= ((uint64_t)pos[1]) <<  8;
 		case 1:
-			b |= ((u_int64_t)pos[0]);
+			b |= ((uint64_t)pos[0]);
 			break;
 		case 0:
 			break;
@@ -835,11 +859,11 @@ static inline u_int64_t siplast(size_t len, u_char *pos)
 }
 
 /**
- * Caculate SipHash-2-4 with an optional first block given as argument.
+ * Calculate SipHash-2-4 with an optional first block given as argument.
  */
-static u_int64_t chunk_mac_inc(chunk_t chunk, u_char *key, u_int64_t m)
+static uint64_t chunk_mac_inc(chunk_t chunk, u_char *key, uint64_t m)
 {
-	u_int64_t v0, v1, v2, v3, k0, k1;
+	uint64_t v0, v1, v2, v3, k0, k1;
 	size_t len = chunk.len;
 	u_char *pos = chunk.ptr, *end;
 
@@ -878,15 +902,15 @@ static u_int64_t chunk_mac_inc(chunk_t chunk, u_char *key, u_int64_t m)
 /**
  * Described in header.
  */
-u_int64_t chunk_mac(chunk_t chunk, u_char *key)
+uint64_t chunk_mac(chunk_t chunk, u_char *key)
 {
 	return chunk_mac_inc(chunk, key, 0);
 }
 
 /**
- * Secret key allocated randomly during first use.
+ * Secret key allocated randomly with chunk_hash_seed().
  */
-static u_char key[16];
+static u_char key[16] = {};
 
 /**
  * Static key used in case predictable hash values are required.
@@ -895,19 +919,20 @@ static u_char static_key[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 							  0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
 
 /**
- * Only allocate the key once
+ * See header
  */
-static pthread_once_t key_allocated = PTHREAD_ONCE_INIT;
-
-/**
- * Allocate a key on first use, we do this manually to avoid dependencies on
- * plugins.
- */
-static void allocate_key()
+void chunk_hash_seed()
 {
+	static bool seeded = FALSE;
 	ssize_t len;
 	size_t done = 0;
 	int fd;
+
+	if (seeded)
+	{
+		/* just once to have the same seed during the whole process lifetimes */
+		return;
+	}
 
 	fd = open("/dev/urandom", O_RDONLY);
 	if (fd >= 0)
@@ -932,41 +957,71 @@ static void allocate_key()
 			key[done] = (u_char)random();
 		}
 	}
+	seeded = TRUE;
 }
 
 /**
  * Described in header.
  */
-u_int32_t chunk_hash_inc(chunk_t chunk, u_int32_t hash)
+uint32_t chunk_hash_inc(chunk_t chunk, uint32_t hash)
 {
-	pthread_once(&key_allocated, allocate_key);
 	/* we could use a mac of the previous hash, but this is faster */
-	return chunk_mac_inc(chunk, key, ((u_int64_t)hash) << 32 | hash);
+	return chunk_mac_inc(chunk, key, ((uint64_t)hash) << 32 | hash);
 }
 
 /**
  * Described in header.
  */
-u_int32_t chunk_hash(chunk_t chunk)
+uint32_t chunk_hash(chunk_t chunk)
 {
-	pthread_once(&key_allocated, allocate_key);
 	return chunk_mac(chunk, key);
 }
 
 /**
  * Described in header.
  */
-u_int32_t chunk_hash_static_inc(chunk_t chunk, u_int32_t hash)
+uint32_t chunk_hash_static_inc(chunk_t chunk, uint32_t hash)
 {	/* we could use a mac of the previous hash, but this is faster */
-	return chunk_mac_inc(chunk, static_key, ((u_int64_t)hash) << 32 | hash);
+	return chunk_mac_inc(chunk, static_key, ((uint64_t)hash) << 32 | hash);
 }
 
 /**
  * Described in header.
  */
-u_int32_t chunk_hash_static(chunk_t chunk)
+uint32_t chunk_hash_static(chunk_t chunk)
 {
 	return chunk_mac(chunk, static_key);
+}
+
+/**
+ * Described in header.
+ */
+uint16_t chunk_internet_checksum_inc(chunk_t data, uint16_t checksum)
+{
+	uint32_t sum = ntohs((uint16_t)~checksum);
+
+	while (data.len > 1)
+	{
+		sum += untoh16(data.ptr);
+		data = chunk_skip(data, 2);
+	}
+	if (data.len)
+	{
+		sum += (uint16_t)*data.ptr << 8;
+	}
+	while (sum >> 16)
+	{
+		sum = (sum & 0xffff) + (sum >> 16);
+	}
+	return htons(~sum);
+}
+
+/**
+ * Described in header.
+ */
+uint16_t chunk_internet_checksum(chunk_t data)
+{
+	return chunk_internet_checksum_inc(data, 0xffff);
 }
 
 /**

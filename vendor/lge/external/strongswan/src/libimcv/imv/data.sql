@@ -204,6 +204,376 @@ INSERT INTO products (			/* 34 */
  'Android 4.4.2'
 );
 
+INSERT INTO products (			/* 35 */
+  name
+) VALUES (
+ 'Ubuntu 14.04 i686'
+);
+
+INSERT INTO products (			/* 36 */
+  name
+) VALUES (
+ 'Ubuntu 14.04 x86_64'
+);
+
+INSERT INTO products (			/* 37 */
+  name
+) VALUES (
+ 'Debian 7.3 i686'
+);
+
+INSERT INTO products (			/* 38 */
+  name
+) VALUES (
+ 'Debian 7.3 x86_64'
+);
+
+INSERT INTO products (			/* 39 */
+  name
+) VALUES (
+ 'Debian 7.4 i686'
+);
+
+INSERT INTO products (			/* 40 */
+  name
+) VALUES (
+ 'Debian 7.4 x86_64'
+);
+
+INSERT INTO products (			/* 41 */
+  name
+) VALUES (
+ 'Debian 7.5 i686'
+);
+
+INSERT INTO products (			/* 42 */
+  name
+) VALUES (
+ 'Debian 7.5 x86_64'
+);
+
+INSERT INTO products (			/* 43 */
+  name
+) VALUES (
+ 'Debian 7.0 armv6l'
+);
+
+INSERT INTO products (			/* 44 */
+  name
+) VALUES (
+ 'Debian 7.1 armv6l'
+);
+
+INSERT INTO products (			/* 45 */
+  name
+) VALUES (
+ 'Debian 7.2 armv6l'
+);
+
+INSERT INTO products (			/* 46 */
+  name
+) VALUES (
+ 'Debian 7.3 armv6l'
+);
+
+INSERT INTO products (			/* 47 */
+  name
+) VALUES (
+ 'Debian 7.4 armv6l'
+);
+
+INSERT INTO products (			/* 48 */
+  name
+) VALUES (
+ 'Debian 7.5 armv6l'
+);
+
+INSERT INTO products (			/* 49 */
+  name
+) VALUES (
+ 'Android 4.3'
+);
+
+INSERT INTO products (			/* 50 */
+  name
+) VALUES (
+ 'Android 4.4.3'
+);
+
+INSERT INTO products (			/* 51 */
+  name
+) VALUES (
+ 'Android 4.4.4'
+);
+
+INSERT INTO products (			/* 52 */
+  name
+) VALUES (
+ 'Debian 7.6 i686'
+);
+
+INSERT INTO products (			/* 53 */
+  name
+) VALUES (
+ 'Debian 7.6 x86_64'
+);
+INSERT INTO products (			/* 54 */
+  name
+) VALUES (
+ 'Debian 7.6 armv6l'
+);
+
+INSERT INTO products (			/* 55 */
+  name
+) VALUES (
+ 'Debian 7.7 i686'
+);
+
+INSERT INTO products (			/* 56 */
+  name
+) VALUES (
+ 'Debian 7.7 x86_64'
+);
+INSERT INTO products (			/* 57 */
+  name
+) VALUES (
+ 'Debian 7.7 armv6l'
+);
+
+INSERT INTO products (			/* 58 */
+  name
+) VALUES (
+ 'Debian 7.8 i686'
+);
+
+INSERT INTO products (			/* 59 */
+  name
+) VALUES (
+ 'Debian 7.8 x86_64'
+);
+
+INSERT INTO products (			/* 60 */
+  name
+) VALUES (
+ 'Debian 7.8 armv6l'
+);
+
+INSERT INTO products (			/* 61 */
+  name
+) VALUES (
+ 'Ubuntu 14.10 i686'
+);
+
+INSERT INTO products (			/* 62 */
+  name
+) VALUES (
+ 'Ubuntu 14.10 x86_64'
+);
+
+INSERT INTO products (			/* 63 */
+  name
+) VALUES (
+ 'Android 5.0'
+);
+
+INSERT INTO products (			/* 64 */
+  name
+) VALUES (
+ 'Android 5.0.1'
+);
+
+INSERT INTO products (			/* 65 */
+  name
+) VALUES (
+ 'Debian 7.8 armv7l'
+);
+
+INSERT INTO products (			/* 66 */
+  name
+) VALUES (
+ 'Debian 7.9 i686'
+);
+
+INSERT INTO products (			/* 67 */
+  name
+) VALUES (
+ 'Debian 7.9 x86_64'
+);
+
+INSERT INTO products (			/* 68 */
+  name
+) VALUES (
+ 'Debian 7.9 armv6l'
+);
+
+INSERT INTO products (			/* 69 */
+  name
+) VALUES (
+ 'Debian 7.9 armv7l'
+);
+
+INSERT INTO products (			/* 70 */
+  name
+) VALUES (
+ 'Ubuntu 15.04 i686'
+);
+
+INSERT INTO products (			/* 71 */
+  name
+) VALUES (
+ 'Ubuntu 15.04 x86_64'
+);
+
+INSERT INTO products (			/* 72 */
+  name
+) VALUES (
+ 'Ubuntu 15.10 i686'
+);
+
+INSERT INTO products (			/* 73 */
+  name
+) VALUES (
+ 'Ubuntu 15.10 x86_64'
+);
+
+INSERT INTO products (			/* 74 */
+  name
+) VALUES (
+ 'Ubuntu 16.04 i686'
+);
+
+INSERT INTO products (			/* 75 */
+  name
+) VALUES (
+ 'Ubuntu 16.04 x86_64'
+);
+
+INSERT INTO products (			/* 76 */
+  name
+) VALUES (
+ 'Debian 7.10 i686'
+);
+
+INSERT INTO products (			/* 77 */
+  name
+) VALUES (
+ 'Debian 7.10 x86_64'
+);
+
+INSERT INTO products (			/* 78 */
+  name
+) VALUES (
+ 'Debian 7.10 armv6l'
+);
+
+INSERT INTO products (			/* 79 */
+  name
+) VALUES (
+ 'Debian 7.10 armv7l'
+);
+
+INSERT INTO products (			/* 80 */
+  name
+) VALUES (
+ 'Android 6.0'
+);
+
+INSERT INTO products (			/* 81 */
+  name
+) VALUES (
+ 'Android 6.0.1'
+);
+
+INSERT INTO products (      /* 82 */
+  name
+) VALUES (
+ 'Debian 8.5 i686'
+);
+
+INSERT INTO products (      /* 83 */
+  name
+) VALUES (
+ 'Debian 8.5 x86_64'
+);
+
+INSERT INTO products (      /* 84 */
+  name
+) VALUES (
+ 'Debian 8.6 i686'
+);
+
+INSERT INTO products (      /* 85 */
+  name
+) VALUES (
+ 'Debian 8.6 x86_64'
+);
+
+INSERT INTO products (      /* 86 */
+  name
+) VALUES (
+ 'Debian 8.7 i686'
+);
+
+INSERT INTO products (      /* 87 */
+  name
+) VALUES (
+ 'Debian 8.7 x86_64'
+);
+
+INSERT INTO products (      /* 88 */
+  name
+) VALUES (
+ 'Debian 8.8 i686'
+);
+
+INSERT INTO products (      /* 89 */
+  name
+) VALUES (
+ 'Debian 8.8 x86_64'
+);
+
+INSERT INTO products (      /* 90 */
+  name
+) VALUES (
+ 'Debian 8.9 i686'
+);
+
+INSERT INTO products (      /* 91 */
+  name
+) VALUES (
+ 'Debian 8.9 x86_64'
+);
+
+INSERT INTO products (      /* 92 */
+  name
+) VALUES (
+ 'Debian 8.10 i686'
+);
+
+INSERT INTO products (      /* 93 */
+  name
+) VALUES (
+ 'Debian 8.10 x86_64'
+);
+
+INSERT INTO products (      /* 94 */
+  name
+) VALUES (
+ 'Debian 8.11 i686'
+);
+
+INSERT INTO products (      /* 95 */
+  name
+) VALUES (
+ 'Debian 8.11 x86_64'
+);
+
+INSERT INTO products (      /* 96 */
+  name
+) VALUES (
+ 'Ubuntu 18.04 x86_64'
+);
+
 /* Directories */
 
 INSERT INTO directories (		/*  1 */
@@ -333,135 +703,135 @@ INSERT INTO files (				/*  6 */
 INSERT INTO algorithms (
   id, name
 ) VALUES (
-  65536, 'SHA1-IMA' 
+  32768, 'SHA1'
 );
 
 INSERT INTO algorithms (
   id, name
 ) VALUES (
-  32768, 'SHA1' 
+  16384, 'SHA256'
 );
 
 INSERT INTO algorithms (
   id, name
 ) VALUES (
-  16384, 'SHA256' 
+  8192, 'SHA384'
 );
 
 INSERT INTO algorithms (
   id, name
 ) VALUES (
-  8192, 'SHA384' 
+  4096, 'SHA512'
 );
 
 /* File Hashes */
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  28, 2, 32768, X'6c6f8e12f6cbfba612e780374c4cdcd40f20968a'
+  2, 2, 32768, '6c6f8e12f6cbfba612e780374c4cdcd40f20968a'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  28, 2, 16384, X'dbcecd19d59310183cf5c31ddee29e8d7bec64d3f9583aad074330a1b3024b07'
+  2, 2, 16384, 'dbcecd19d59310183cf5c31ddee29e8d7bec64d3f9583aad074330a1b3024b07'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  28, 2, 8192, X'197c5385e5853003188833d4f991136c1b0875fa416a60b1159f64e57e457b3184762c884a802a2bda194c058e3bd953'
+  2, 2, 8192, '197c5385e5853003188833d4f991136c1b0875fa416a60b1159f64e57e457b3184762c884a802a2bda194c058e3bd953'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  28, 4, 32768, X'3ad204f99eb7262efab79cfca02628870ea76361'
+  2, 4, 32768, '3ad204f99eb7262efab79cfca02628870ea76361'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  28, 4, 16384, X'3a2170aad92fdd58b55e0e199822bc873cf587b2d1eb1ed7ed8dcea97ae86376'
+  2, 4, 16384, '3a2170aad92fdd58b55e0e199822bc873cf587b2d1eb1ed7ed8dcea97ae86376'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+ version, file, algo, hash
 ) VALUES (
-  28, 4, 8192, X'f778076baa876b5e4b502494a3db081fb09dd870dee6991d54104a74b7e009c58fe261db5ffd13c11e08ef0cefcfa59f'
+  2, 4, 8192, 'f778076baa876b5e4b502494a3db081fb09dd870dee6991d54104a74b7e009c58fe261db5ffd13c11e08ef0cefcfa59f'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  28, 5, 32768, X'ecd9c7076cc0572724c7a67db7f19c2831e0445f'
+  4, 5, 32768, 'ecd9c7076cc0572724c7a67db7f19c2831e0445f'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  28, 5, 16384, X'28f3ea5afd34444c8232ea75003131e294a0c9b847de300e4b205d38c1a41305'
+  4, 5, 16384, '28f3ea5afd34444c8232ea75003131e294a0c9b847de300e4b205d38c1a41305'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  28, 5, 8192, X'51921a8b9322f2d3f06d55002ff40a79da67e70cb563b2a50977642d603dfac2ccbb68b3d32a8bb350769b75d6254208'
+  4, 5, 8192, '51921a8b9322f2d3f06d55002ff40a79da67e70cb563b2a50977642d603dfac2ccbb68b3d32a8bb350769b75d6254208'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  18, 1, 32768, X'd9309b9e45928239d7a7b18711e690792632cce4'
+  5, 1, 32768, 'd9309b9e45928239d7a7b18711e690792632cce4'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  18, 1, 16384, X'dbfa1856d278d8707c4989b30dd065b4bcd309908f0f2e6e66ff2aa83ff93f59'
+  5, 1, 16384, 'dbfa1856d278d8707c4989b30dd065b4bcd309908f0f2e6e66ff2aa83ff93f59'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  18, 1, 8192, X'fb8d027f03bb5ebb47741ed247eb9e174127b714d20229885feb37e0979aeb14a1b74020cded891d680441093625729c'
+  5, 1, 8192, 'fb8d027f03bb5ebb47741ed247eb9e174127b714d20229885feb37e0979aeb14a1b74020cded891d680441093625729c'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  18, 3, 32768, X'3715f2f94016a91fab5bbc503f0f1d43c5a9fc2b'
+  5, 3, 32768, '3715f2f94016a91fab5bbc503f0f1d43c5a9fc2b'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  18, 3, 16384, X'c03a5296b5decb87b01517f9927a8b2349dfb29ff9f5ba084f994c155ca5d4be'
+  5, 3, 16384, 'c03a5296b5decb87b01517f9927a8b2349dfb29ff9f5ba084f994c155ca5d4be'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  18, 3, 8192, X'b8bc345f56115235cc6091f61e312ce43ea54a5b99e7295002ae7b415fd35e06ec4c731ab70ad00d784bb53a318a2fa0'
+  5, 3, 8192, 'b8bc345f56115235cc6091f61e312ce43ea54a5b99e7295002ae7b415fd35e06ec4c731ab70ad00d784bb53a318a2fa0'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  18, 5, 32768, X'e59602f4edf24c1b36199588886d06665d4adcd7'
+  6, 5, 32768, 'e59602f4edf24c1b36199588886d06665d4adcd7'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  18, 5, 16384, X'090e1b77bda7fe665e498c6b5e09dbb7ddc5cfe57f213de48f4fb6736484f500'
+  6, 5, 16384, '090e1b77bda7fe665e498c6b5e09dbb7ddc5cfe57f213de48f4fb6736484f500'
 );
 
 INSERT INTO file_hashes (
-  product, file, algo, hash
+  version, file, algo, hash
 ) VALUES (
-  18, 5, 8192, X'7cbdb4612a13443dba910ecdef5161f2213e52c9b4a2eef14bcee5d287e9df931cd022e9e9715518ad9c9b6e3384a668'
+  6, 5, 8192, '7cbdb4612a13443dba910ecdef5161f2213e52c9b4a2eef14bcee5d287e9df931cd022e9e9715518ad9c9b6e3384a668'
 );
 
 /* Packages */
@@ -492,54 +862,66 @@ INSERT INTO packages (			/*  4 */
 
 /* Versions */
 
-INSERT INTO versions (
+INSERT INTO versions (             /*  1 */
   package, product, release, time
 ) VALUES (
   1, 28, '1.0.1e-2', 1366531494
 );
 
-INSERT INTO versions (
+INSERT INTO versions (             /*  2 */
   package, product, release, time
 ) VALUES (
   2, 28, '1.0.1e-2', 1366531494
 );
 
-INSERT INTO versions (
+INSERT INTO versions (             /*  3 */
   package, product, release, time
 ) VALUES (
   3, 28, '1.0.1e-2', 1366531494
 );
 
-INSERT INTO versions (
+INSERT INTO versions (             /*  4 */
   package, product, release, time
 ) VALUES (
   4, 28, '1.0.1e-2', 1366531494
 );
 
+INSERT INTO versions (             /*  5 */
+  package, product, time
+) VALUES (
+  2, 18, 1350544774
+);
+
+INSERT INTO versions (             /*  6 */
+  package, product, time
+) VALUES (
+  4, 18, 1350544774
+);
+
 /* Components */
 
 INSERT INTO components (
-  vendor_id, name, qualifier
+  vendor_id, name, qualifier, label
 ) VALUES (
-  36906, 1, 33  /* ITA TGRUB */
+  36906, 1, 33, 'G'  /* ITA TGRUB */
 );
 
 INSERT INTO components (
-  vendor_id, name, qualifier
+  vendor_id, name, qualifier, label
 ) VALUES (
-  36906, 2, 33  /* ITA TBOOT */
+  36906, 2, 33, 'T'  /* ITA TBOOT */
 );
 
 INSERT INTO components (
-  vendor_id, name, qualifier
+  vendor_id, name, qualifier, label
 ) VALUES (
-  36906, 3, 33  /* ITA IMA - Trusted Platform */
+  36906, 3, 33, 'B' /* ITA IMA - Trusted Platform */
 );
 
 INSERT INTO components (
-  vendor_id, name, qualifier
+  vendor_id, name, qualifier, label
 ) VALUES (
-  36906, 3, 34  /* ITA IMA - Operating System */
+  36906, 3, 34, 'I' /* ITA IMA - Operating System */
 );
 
 /* Groups */
@@ -604,22 +986,40 @@ INSERT INTO groups (			/* 10 */
   'Ref. Linux', 8
 );
 
-INSERT INTO groups (            /* 11 */
+INSERT INTO groups (      /* 11 */
   name
 ) VALUES (
   'TPM BIOS'
 );
 
-INSERT INTO groups (            /* 12 */
+INSERT INTO groups (      /* 12 */
   name
 ) VALUES (
   'TPM IMA'
 );
 
-INSERT INTO groups (            /* 13 */
+INSERT INTO groups (      /* 13 */
   name
 ) VALUES (
   'TPM BIOS/IMA'
+);
+
+INSERT INTO groups (			/* 14 */
+  name, parent
+) VALUES (
+  'Debian armv6l', 2
+);
+
+INSERT INTO groups (			/* 15 */
+  name, parent
+) VALUES (
+  'Debian armv7l', 2
+);
+
+INSERT INTO groups (      /* 16 */
+  name
+) VALUES (
+  'TPM TBOOT'
 );
 
 /* Default Product Groups */
@@ -657,6 +1057,96 @@ INSERT INTO groups_product_defaults (
 INSERT INTO groups_product_defaults (
   group_id, product_id
 ) VALUES (
+  4, 37
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  4, 39
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  4, 41
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  4, 52
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  4, 55
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  4, 58
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  4, 66
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  4, 76
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  4, 82
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  4, 84
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  4, 86
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  4, 88
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  4, 90
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  4, 92
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  4, 94
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
   5, 2
 );
 
@@ -682,6 +1172,96 @@ INSERT INTO groups_product_defaults (
   group_id, product_id
 ) VALUES (
   5, 28
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 38
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 40
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 42
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 53
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 56
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 59
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 67
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 77
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 83
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 85
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 87
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 89
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 91
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 93
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  5, 95
 );
 
 INSERT INTO groups_product_defaults (
@@ -724,6 +1304,36 @@ INSERT INTO groups_product_defaults (
   group_id, product_id
 ) VALUES (
   6, 23
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  6, 35
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  6, 61
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  6, 70
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  6, 72
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  6, 74
 );
 
 INSERT INTO groups_product_defaults (
@@ -777,6 +1387,42 @@ INSERT INTO groups_product_defaults (
 INSERT INTO groups_product_defaults (
   group_id, product_id
 ) VALUES (
+  7, 36
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  7, 62
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  7, 71
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  7, 73
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  7, 75
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  7, 96
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
   3, 21
 );
 
@@ -820,6 +1466,132 @@ INSERT INTO groups_product_defaults (
   group_id, product_id
 ) VALUES (
   3, 34
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  3, 49
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  3, 50
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  3, 51
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  3, 63
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  3, 64
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  3, 80
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  3, 81
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  14, 43
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  14, 44
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  14, 45
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  14, 46
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  14, 47
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  14, 48
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  14, 54
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  14, 57
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  14, 60
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  14, 68
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  14, 78
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  15, 65
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  15, 69
+);
+
+INSERT INTO groups_product_defaults (
+  group_id, product_id
+) VALUES (
+  15, 79
 );
 
 /* Policies */
@@ -950,6 +1722,12 @@ INSERT INTO policies (          /* 21 */
   16, 'TPM BIOS/IMA Measurements', 'BI', 2, 2
 );
 
+INSERT INTO policies (          /* 22 */
+  type, name, argument, rec_fail, rec_noresult
+) VALUES (
+  16, 'TPM TBOOT Measurements', 'T', 2, 2
+);
+
 /* Enforcements */
 
 INSERT INTO enforcements (		/*  1 */
@@ -1054,139 +1832,70 @@ INSERT INTO enforcements (      /* 17 */
   21, 13, 60
 );
 
-/* regids */
-
-INSERT INTO regids (			/*  1 */
-  name
+INSERT INTO enforcements (      /* 18 */
+  policy, group_id, max_age
 ) VALUES (
- 'regid.1986-12.com.adobe'
+  22, 16, 60
 );
 
-INSERT INTO regids (			/*  2 */
-  name
+/* swid_entities */
+
+INSERT INTO "swid_entities" (		/*  1 */
+  "name", "regid"
 ) VALUES (
- 'regid.1991-06.com.microsoft'
+  'strongSwan Project', 'strongswan.org'
 );
 
-INSERT INTO regids (			/*  3 */
-  name
+INSERT INTO swid_entities (			/*  2 */
+  "name", "regid"
 ) VALUES (
- 'regid.2004-05.com.ubuntu'
+  'Adobe Systems Inc.', 'adobe.com'
 );
 
-INSERT INTO regids (			/*  4 */
-  name
+INSERT INTO swid_entities (			/*  3 */
+  "name", "regid"
 ) VALUES (
- 'regid.1995-04.org.apache'
+  'Microsoft Corporation', 'microsoft.com'
 );
 
-INSERT INTO regids (			/*  5 */
-  name
+INSERT INTO swid_entities (			/*  4 */
+  "name", "regid"
 ) VALUES (
- 'regid.1999-03.org.debian'
+  'Ubuntu Project', 'ubuntu.com'
 );
 
-INSERT INTO regids (			/*  6 */
-  name
+INSERT INTO swid_entities (			/*  5 */
+  "name", "regid"
 ) VALUES (
- 'regid.1994-04.org.isc'
+  'Apache Software Foundation', 'apache.org'
 );
 
-INSERT INTO regids (			/*  7 */
-  name
+INSERT INTO swid_entities (			/*  6 */
+  "name", "regid"
 ) VALUES (
- 'regid.1998-12.org.openssl'
+  'Debian Project', 'debian.org'
 );
 
-INSERT INTO regids (			/*  8 */
-  name
+INSERT INTO swid_entities (			/*  7 */
+  "name", "regid"
 ) VALUES (
- 'regid.1998-01.org.samba'
+  'Internet Systems Consortium', 'isc.org'
 );
 
-INSERT INTO regids (			/*  9 */
-  name
+INSERT INTO swid_entities (			/*  8 */
+  "name", "regid"
 ) VALUES (
- 'regid.2002-08.org.sqlite'
+  'OpenSSL Project', 'openssl.org'
 );
 
-INSERT INTO regids (			/* 10 */
-  name
+INSERT INTO swid_entities (			/*  9 */
+  "name", "regid"
 ) VALUES (
- 'regid.2004-03.org.strongswan'
+  'Samba Project', 'samba.org'
 );
 
-/* Tags */
-
-INSERT INTO tags (
-  regid, unique_sw_id
+INSERT INTO swid_entities (			/* 10 */
+  "name", "regid"
 ) VALUES (
-  2, 'Windows-8-Pro'
+  'SQLite Project', 'sqlite.org'
 );
-
-INSERT INTO tags (
-  regid, unique_sw_id
-) VALUES (
-  5, 'apache-2-2-22-13'
-);
-
-INSERT INTO tags (
-  regid, unique_sw_id
-) VALUES (
-  5, 'bind-9-8-4-dfsg'
-);
-
-INSERT INTO tags (
-  regid, unique_sw_id
-) VALUES (
-  5, 'libsqlite-3-7-13-1'
-);
-
-INSERT INTO tags (
-  regid, unique_sw_id
-) VALUES (
-  5, 'libssl-1-0-1e-2'
-);
-
-INSERT INTO tags (
-  regid, unique_sw_id
-) VALUES (
-  5, 'libssl-dev-1-0-1e-2'
-);
-
-INSERT INTO tags (
-  regid, unique_sw_id
-) VALUES (
-  5, 'libssl-doc-1-0-1e-2'
-);
-
-INSERT INTO tags (
-  regid, unique_sw_id
-) VALUES (
-  5, 'openssl-1-0-1e-2'
-);
-
-INSERT INTO tags (
-  regid, unique_sw_id
-) VALUES (
-  5, 'smbclient-3-6-6-6'
-);
-
-INSERT INTO tags (
-  regid, unique_sw_id
-) VALUES (
-  5, 'sqlite-3-7-13-1'
-);
-
-INSERT INTO tags (
-  regid, unique_sw_id
-) VALUES (
-  10, 'strongSwan-5-1-1'
-);
-
-INSERT INTO tags (
-  regid, unique_sw_id
-) VALUES (
-  10, 'strongSwan-5-1-2'
-);
-

@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2005-2006 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -64,7 +64,7 @@ struct nonce_payload_t {
 /**
  * Creates an empty nonce_payload_t object
  *
- * @param type		NONCE or NONCE_V1
+ * @param type		PLV2_NONCE or PLV1_NONCE
  * @return			nonce_payload_t object
  */
 nonce_payload_t *nonce_payload_create(payload_type_t type);

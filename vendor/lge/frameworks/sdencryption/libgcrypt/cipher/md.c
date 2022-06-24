@@ -236,7 +236,7 @@ gcry_md_lookup_name (const char *name)
   gcry_module_t digest;
 
   digest = _gcry_module_lookup (digests_registered, (void *) name,
-				gcry_md_lookup_func_name);
+                gcry_md_lookup_func_name);
 
   return digest;
 }
@@ -248,7 +248,7 @@ gcry_md_lookup_oid (const char *oid)
   gcry_module_t digest;
 
   digest = _gcry_module_lookup (digests_registered, (void *) oid,
-				gcry_md_lookup_func_oid);
+                gcry_md_lookup_func_oid);
 
   return digest;
 }
@@ -271,8 +271,8 @@ _gcry_md_register (gcry_md_spec_t *digest,
 
   ath_mutex_lock (&digests_registered_lock);
   err = _gcry_module_add (&digests_registered, 0,
-			  (void *) digest, 
-			  (void *)(extraspec? extraspec : &dummy_extra_spec), 
+              (void *) digest, 
+              (void *)(extraspec? extraspec : &dummy_extra_spec), 
                           &mod);
   ath_mutex_unlock (&digests_registered_lock);
   
@@ -303,7 +303,7 @@ search_oid (const char *oid, int *algorithm, gcry_md_oid_spec_t *oid_spec)
   int ret = 0;
 
   if (oid && ((! strncmp (oid, "oid.", 4))
-	      || (! strncmp (oid, "OID.", 4))))
+          || (! strncmp (oid, "OID.", 4))))
     oid += 4;
 
   module = gcry_md_lookup_oid (oid);
@@ -313,14 +313,14 @@ search_oid (const char *oid, int *algorithm, gcry_md_oid_spec_t *oid_spec)
       int i;
 
       for (i = 0; digest->oids[i].oidstring && !ret; i++)
-	if (! stricmp (oid, digest->oids[i].oidstring))
-	  {
-	    if (algorithm)
-	      *algorithm = module->mod_id;
-	    if (oid_spec)
-	      *oid_spec = digest->oids[i];
-	    ret = 1;
-	  }
+    if (! stricmp (oid, digest->oids[i].oidstring))
+      {
+        if (algorithm)
+          *algorithm = module->mod_id;
+        if (oid_spec)
+          *oid_spec = digest->oids[i];
+        ret = 1;
+      }
       _gcry_module_release (module);
     }
 
@@ -353,10 +353,10 @@ gcry_md_map_name (const char *string)
       /* Not found, search a matching digest name.  */
       digest = gcry_md_lookup_name (string);
       if (digest)
-	{
-	  algorithm = digest->mod_id;
-	  _gcry_module_release (digest);
-	}
+    {
+      algorithm = digest->mod_id;
+      _gcry_module_release (digest);
+    }
     }
   ath_mutex_unlock (&digests_registered_lock);
 
@@ -390,7 +390,7 @@ digest_algo_to_string (int algorithm)
 /****************
  * This function simply returns the name of the algorithm or some constant
  * string when there is no algo.  It will never return NULL.
- * Use	the macro gcry_md_test_algo() to check whether the algorithm
+ * Use    the macro gcry_md_test_algo() to check whether the algorithm
  * is valid.
  */
 const char *
@@ -442,11 +442,11 @@ md_open (gcry_md_hd_t *h, int algo, int secure, int hmac)
    * We have to use this strange scheme because we want to hide the
    * internal data but have a variable sized buffer.
    *
-   *	+---+------+---........------+-------------+
-   *	!ctx! bctl !  buffer	     ! private	   !
-   *	+---+------+---........------+-------------+
-   *	  !			      ^
-   *	  !---------------------------!
+   *    +---+------+---........------+-------------+
+   *    !ctx! bctl !  buffer         ! private       !
+   *    +---+------+---........------+-------------+
+   *      !                  ^
+   *      !---------------------------!
    *
    * We have to make sure that private is well aligned.
    */
@@ -477,8 +477,8 @@ md_open (gcry_md_hd_t *h, int algo, int secure, int hmac)
       ctx->secure = secure;
 
       if (hmac)
-	{
-	  switch (algo)
+    {
+      switch (algo)
             {
               case GCRY_MD_SHA384:
               case GCRY_MD_SHA512:
@@ -489,12 +489,12 @@ md_open (gcry_md_hd_t *h, int algo, int secure, int hmac)
                 break;
             }
           ctx->macpads = gcry_malloc_secure (2*(ctx->macpads_Bsize));
-	  if (!ctx->macpads)
-	    {
-	      err = gpg_err_code_from_errno (errno);
-	      md_close (hd);
-	    }
-	}
+      if (!ctx->macpads)
+        {
+          err = gpg_err_code_from_errno (errno);
+          md_close (hd);
+        }
+    }
     }
 
   if (! err)
@@ -503,11 +503,11 @@ md_open (gcry_md_hd_t *h, int algo, int secure, int hmac)
       _gcry_fast_random_poll ();
 
       if (algo)
-	{
-	  err = md_enable (hd, algo);
-	  if (err)
-	    md_close (hd);
-	}
+    {
+      err = md_enable (hd, algo);
+      if (err)
+        md_close (hd);
+    }
     }
 
   if (! err)
@@ -532,7 +532,7 @@ gcry_md_open (gcry_md_hd_t *h, int algo, unsigned int flags)
   else
     {
       err = md_open (&hd, algo, (flags & GCRY_MD_FLAG_SECURE),
-		     (flags & GCRY_MD_FLAG_HMAC));
+             (flags & GCRY_MD_FLAG_HMAC));
     }
 
   *h = err? NULL : hd;
@@ -587,33 +587,33 @@ md_enable (gcry_md_hd_t hd, int algorithm)
 
       /* And allocate a new list entry. */
       if (h->secure)
-	entry = gcry_malloc_secure (size);
+    entry = gcry_malloc_secure (size);
       else
-	entry = gcry_malloc (size);
+    entry = gcry_malloc (size);
 
       if (! entry)
-	err = gpg_err_code_from_errno (errno);
+    err = gpg_err_code_from_errno (errno);
       else
-	{
-	  entry->digest = digest;
-	  entry->module = module;
-	  entry->next = h->list;
+    {
+      entry->digest = digest;
+      entry->module = module;
+      entry->next = h->list;
           entry->actual_struct_size = size;
-	  h->list = entry;
+      h->list = entry;
 
-	  /* And init this instance. */
-	  entry->digest->init (&entry->context.c);
-	}
+      /* And init this instance. */
+      entry->digest->init (&entry->context.c);
+    }
     }
 
   if (err)
     {
       if (module)
-	{
-	   ath_mutex_lock (&digests_registered_lock);
-	   _gcry_module_release (module);
-	   ath_mutex_unlock (&digests_registered_lock);
-	}
+    {
+       ath_mutex_lock (&digests_registered_lock);
+       _gcry_module_release (module);
+       ath_mutex_unlock (&digests_registered_lock);
+    }
     }
 
   return err;
@@ -660,16 +660,16 @@ md_copy (gcry_md_hd_t ahd, gcry_md_hd_t *b_hd)
       b->list = NULL;
       b->debug = NULL;
       if (a->macpads)
-	{
-	  b->macpads = gcry_malloc_secure (2*(a->macpads_Bsize));
-	  if (! b->macpads)
-	    {
-	      err = gpg_err_code_from_errno (errno);
-	      md_close (bhd);
-	    }
-	  else
-	    memcpy (b->macpads, a->macpads, (2*(a->macpads_Bsize)));
-	}
+    {
+      b->macpads = gcry_malloc_secure (2*(a->macpads_Bsize));
+      if (! b->macpads)
+        {
+          err = gpg_err_code_from_errno (errno);
+          md_close (bhd);
+        }
+      else
+        memcpy (b->macpads, a->macpads, (2*(a->macpads_Bsize)));
+    }
     }
 
   /* Copy the complete list of algorithms.  The copied list is
@@ -688,7 +688,7 @@ md_copy (gcry_md_hd_t ahd, gcry_md_hd_t *b_hd)
                               - sizeof (ar->context));
           if (!br)
             {
-	      err = gpg_err_code_from_errno (errno);
+          err = gpg_err_code_from_errno (errno);
               md_close (bhd);
               break;
             }
@@ -791,15 +791,15 @@ md_write (gcry_md_hd_t a, const void *inbuf, size_t inlen)
   if (a->ctx->debug)
     {
       if (a->bufpos && fwrite (a->buf, a->bufpos, 1, a->ctx->debug) != 1)
-	BUG();
+    BUG();
       if (inlen && fwrite (inbuf, inlen, 1, a->ctx->debug) != 1)
-	BUG();
+    BUG();
     }
 
   for (r = a->ctx->list; r; r = r->next)
     {
       if (a->bufpos)
-	(*r->digest->write) (&r->context.c, a->buf, a->bufpos);
+    (*r->digest->write) (&r->context.c, a->buf, a->bufpos);
       (*r->digest->write) (&r->context.c, inbuf, inlen);
     }
   a->bufpos = 0;
@@ -837,7 +837,7 @@ md_final (gcry_md_hd_t a)
       gcry_err_code_t err = md_open (&om, algo, a->ctx->secure, 0);
 
       if (err)
-	_gcry_fatal_error (err, NULL);
+    _gcry_fatal_error (err, NULL);
       md_write (om, 
                 (a->ctx->macpads)+(a->ctx->macpads_Bsize), 
                 a->ctx->macpads_Bsize);
@@ -922,7 +922,7 @@ gcry_md_setkey (gcry_md_hd_t hd, const void *key, size_t keylen)
     {
       rc = prepare_macpads (hd, key, keylen);
       if (! rc)
-	gcry_md_reset (hd);
+    gcry_md_reset (hd);
     }
 
   return gcry_error (rc);
@@ -963,8 +963,8 @@ md_read( gcry_md_hd_t a, int algo )
   else
     {
       for (r = a->ctx->list; r; r = r->next)
-	if (r->module->mod_id == algo)
-	  return r->digest->read (&r->context.c);
+    if (r->module->mod_id == algo)
+      return r->digest->read (&r->context.c);
     }
   BUG();
   return NULL;
@@ -1019,7 +1019,7 @@ gcry_md_hash_buffer (int algo, void *digest,
   else
     {
       /* For the others we do not have a fast function, so we use the
-	 normal functions. */
+     normal functions. */
       gcry_md_hd_t h;
       gpg_err_code_t err;
 
@@ -1036,7 +1036,7 @@ gcry_md_hash_buffer (int algo, void *digest,
 
       err = md_open (&h, algo, 0, 0);
       if (err)
-	log_bug ("gcry_md_open failed for algo %d: %s",
+    log_bug ("gcry_md_open failed for algo %d: %s",
                  algo, gpg_strerror (gcry_error(err)));
       md_write (h, (byte *) buffer, length);
       md_final (h);
@@ -1100,7 +1100,7 @@ gcry_md_get_algo_dlen (int algorithm)
 
 
 /* Hmmm: add a mode to enumerate the OIDs
- *	to make g10/sig-check.c more portable */
+ *    to make g10/sig-check.c more portable */
 static const byte *
 md_asn_oid (int algorithm, size_t *asnlen, size_t *mdlen)
 {
@@ -1114,9 +1114,9 @@ md_asn_oid (int algorithm, size_t *asnlen, size_t *mdlen)
   if (digest)
     {
       if (asnlen)
-	*asnlen = ((gcry_md_spec_t *) digest->spec)->asnlen;
+    *asnlen = ((gcry_md_spec_t *) digest->spec)->asnlen;
       if (mdlen)
-	*mdlen = ((gcry_md_spec_t *) digest->spec)->mdlen;
+    *mdlen = ((gcry_md_spec_t *) digest->spec)->mdlen;
       asnoid = ((gcry_md_spec_t *) digest->spec)->asnoid;
       _gcry_module_release (digest);
     }
@@ -1133,11 +1133,11 @@ md_asn_oid (int algorithm, size_t *asnlen, size_t *mdlen)
  * Return information about the given cipher algorithm
  * WHAT select the kind of information returned:
  *  GCRYCTL_TEST_ALGO:
- *	Returns 0 when the specified algorithm is available for use.
- *	buffer and nbytes must be zero.
+ *    Returns 0 when the specified algorithm is available for use.
+ *    buffer and nbytes must be zero.
  *  GCRYCTL_GET_ASNOID:
- *	Return the ASNOID of the algorithm in buffer. if buffer is NULL, only
- *	the required length is returned.
+ *    Return the ASNOID of the algorithm in buffer. if buffer is NULL, only
+ *    the required length is returned.
  *
  * Note:  Because this function is in most cases used to return an
  * integer value, we can make it easier for the caller to just look at
@@ -1154,9 +1154,9 @@ gcry_md_algo_info (int algo, int what, void *buffer, size_t *nbytes)
     {
     case GCRYCTL_TEST_ALGO:
       if (buffer || nbytes)
-	err = GPG_ERR_INV_ARG;
+    err = GPG_ERR_INV_ARG;
       else
-	err = check_digest_algo (algo);
+    err = check_digest_algo (algo);
       break;
 
     case GCRYCTL_GET_ASNOID:
@@ -1170,10 +1170,10 @@ gcry_md_algo_info (int algo, int what, void *buffer, size_t *nbytes)
           
           asn = md_asn_oid (algo, &asnlen, NULL);
           if (buffer && (*nbytes >= asnlen))
-	  {
-	    memcpy (buffer, asn, asnlen);
-	    *nbytes = asnlen;
-	  }
+      {
+        memcpy (buffer, asn, asnlen);
+        *nbytes = asnlen;
+      }
           else if (!buffer && nbytes)
             *nbytes = asnlen;
           else
@@ -1241,8 +1241,8 @@ md_stop_debug( gcry_md_hd_t md )
 /*
  * Return information about the digest handle.
  *  GCRYCTL_IS_SECURE:
- *	Returns 1 when the handle works on secured memory
- *	otherwise 0 is returned.  There is no error return.
+ *    Returns 1 when the handle works on secured memory
+ *    otherwise 0 is returned.  There is no error return.
  *  GCRYCTL_IS_ALGO_ENABLED:
  *     Returns 1 if the algo is enabled for that handle.
  *     The algo must be passed as the address of an int.
@@ -1260,25 +1260,25 @@ gcry_md_info (gcry_md_hd_t h, int cmd, void *buffer, size_t *nbytes)
 
     case GCRYCTL_IS_ALGO_ENABLED:
       {
-	GcryDigestEntry *r;
-	int algo;
+    GcryDigestEntry *r;
+    int algo;
 
-	if ( !buffer || !nbytes || (*nbytes != sizeof (int)))
-	  err = GPG_ERR_INV_ARG;
-	else
-	  {
-	    algo = *(int*)buffer;
-	    
-	    *nbytes = 0;
-	    for(r=h->ctx->list; r; r = r->next ) {
-	      if (r->module->mod_id == algo)
-		{
-		  *nbytes = 1;
-		  break;
-		}
-	    }
-	  }
-	break;
+    if ( !buffer || !nbytes || (*nbytes != sizeof (int)))
+      err = GPG_ERR_INV_ARG;
+    else
+      {
+        algo = *(int*)buffer;
+        
+        *nbytes = 0;
+        for(r=h->ctx->list; r; r = r->next ) {
+          if (r->module->mod_id == algo)
+        {
+          *nbytes = 1;
+          break;
+        }
+        }
+      }
+    break;
       }
 
   default:

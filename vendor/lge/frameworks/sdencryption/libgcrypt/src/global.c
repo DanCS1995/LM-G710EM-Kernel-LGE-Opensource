@@ -1,4 +1,4 @@
-/* global.c  -	global control functions
+/* global.c  -    global control functions
  * Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003
  *               2004, 2005, 2006, 2008  Free Software Foundation, Inc.
  *
@@ -42,7 +42,7 @@
 
 /****************
  * flag bits: 0 : general cipher debug
- *	      1 : general MPI debug
+ *          1 : general MPI debug
  */
 static unsigned int debug_flags;
 
@@ -168,10 +168,10 @@ parse_version_number( const char *s, int *number )
     int val = 0;
 
     if( *s == '0' && isdigit(s[1]) )
-	return NULL; /* leading zeros are not allowed */
+    return NULL; /* leading zeros are not allowed */
     for ( ; isdigit(*s); s++ ) {
-	val *= 10;
-	val += *s - '0';
+    val *= 10;
+    val += *s - '0';
     }
     *number = val;
     return val < 0? NULL : s;
@@ -191,15 +191,15 @@ parse_version_string( const char *s, int *major, int *minor, int *micro )
 {
     s = parse_version_number( s, major );
     if( !s || *s != '.' )
-	return NULL;
+    return NULL;
     s++;
     s = parse_version_number( s, minor );
     if( !s || *s != '.' )
-	return NULL;
+    return NULL;
     s++;
     s = parse_version_number( s, micro );
     if( !s )
-	return NULL;
+    return NULL;
     return s; /* patchlevel */
 }
 
@@ -223,31 +223,31 @@ gcry_check_version( const char *req_version )
 
     if ( !req_version )
         /* Caller wants our version number.  */
-	return ver;
+    return ver;
 
     /* Parse own version number.  */
     my_plvl = parse_version_string( ver, &my_major, &my_minor, &my_micro );
     if ( !my_plvl )
         /* very strange our own version is bogus.  Shouldn't we use
-	   assert() here and bail out in case this happens?  -mo.  */
-	return NULL;
+       assert() here and bail out in case this happens?  -mo.  */
+    return NULL;
 
   /* Parse requested version number.  */
     rq_plvl = parse_version_string( req_version, &rq_major, &rq_minor,
-								&rq_micro );
+                                &rq_micro );
     if ( !rq_plvl )
         /* req version string is invalid, this can happen.  */
-	return NULL;
+    return NULL;
 
     /* Compare version numbers.  */
     if ( my_major > rq_major
-	|| (my_major == rq_major && my_minor > rq_minor)
-	|| (my_major == rq_major && my_minor == rq_minor
-				 && my_micro > rq_micro)
-	|| (my_major == rq_major && my_minor == rq_minor
-				 && my_micro == rq_micro
-				 && strcmp( my_plvl, rq_plvl ) >= 0) ) {
-	return ver;
+    || (my_major == rq_major && my_minor > rq_minor)
+    || (my_major == rq_major && my_minor == rq_minor
+                 && my_micro > rq_micro)
+    || (my_major == rq_major && my_minor == rq_minor
+                 && my_micro == rq_micro
+                 && strcmp( my_plvl, rq_plvl ) >= 0) ) {
+    return ver;
     }
 
     return NULL;
@@ -366,17 +366,17 @@ _gcry_vcontrol (enum gcry_ctl_cmds cmd, va_list arg_ptr)
 
     case GCRYCTL_DISABLE_SECMEM_WARN:
       _gcry_secmem_set_flags ((_gcry_secmem_get_flags ()
-			       | GCRY_SECMEM_FLAG_NO_WARNING));
+                   | GCRY_SECMEM_FLAG_NO_WARNING));
       break;
 
     case GCRYCTL_SUSPEND_SECMEM_WARN:
       _gcry_secmem_set_flags ((_gcry_secmem_get_flags ()
-			       | GCRY_SECMEM_FLAG_SUSPEND_WARNING));
+                   | GCRY_SECMEM_FLAG_SUSPEND_WARNING));
       break;
 
     case GCRYCTL_RESUME_SECMEM_WARN:
       _gcry_secmem_set_flags ((_gcry_secmem_get_flags ()
-			       & ~GCRY_SECMEM_FLAG_SUSPEND_WARNING));
+                   & ~GCRY_SECMEM_FLAG_SUSPEND_WARNING));
       break;
 
     case GCRYCTL_USE_SECURE_RNDPOOL:
@@ -412,20 +412,20 @@ _gcry_vcontrol (enum gcry_ctl_cmds cmd, va_list arg_ptr)
 
     case GCRYCTL_ANY_INITIALIZATION_P:
       if (any_init_done)
-	err = GPG_ERR_GENERAL;
+    err = GPG_ERR_GENERAL;
       break;
 
     case GCRYCTL_INITIALIZATION_FINISHED_P:
       if (init_finished)
-	err = GPG_ERR_GENERAL; /* Yes.  */
+    err = GPG_ERR_GENERAL; /* Yes.  */
       break;
 
     case GCRYCTL_INITIALIZATION_FINISHED:
       /* This is a hook which should be used by an application after
-	 all initialization has been done and right before any threads
-	 are started.  It is not really needed but the only way to be
-	 really sure that all initialization for thread-safety has
-	 been done. */
+     all initialization has been done and right before any threads
+     are started.  It is not really needed but the only way to be
+     really sure that all initialization for thread-safety has
+     been done. */
       if (! init_finished)
         {
           global_init ();
@@ -441,7 +441,7 @@ _gcry_vcontrol (enum gcry_ctl_cmds cmd, va_list arg_ptr)
     case GCRYCTL_SET_THREAD_CBS:
       err = ath_install (va_arg (arg_ptr, void *), any_init_done);
       if (! err)
-	global_init ();
+    global_init ();
       break;
 
     case GCRYCTL_FAST_POLL:
@@ -494,7 +494,7 @@ _gcry_vcontrol (enum gcry_ctl_cmds cmd, va_list arg_ptr)
       if (fips_mode () 
           && !_gcry_is_fips_mode_inactive () 
           && !no_secure_memory)
-	err = GPG_ERR_GENERAL; /* Used as TRUE value */
+    err = GPG_ERR_GENERAL; /* Used as TRUE value */
       break;
 
     case GCRYCTL_FORCE_FIPS_MODE:
@@ -647,10 +647,10 @@ gcry_error_from_errno (int err)
  * NOTE: All 5 functions should be set.  */
 void
 gcry_set_allocation_handler (gcry_handler_alloc_t new_alloc_func,
-			     gcry_handler_alloc_t new_alloc_secure_func,
-			     gcry_handler_secure_check_t new_is_secure_func,
-			     gcry_handler_realloc_t new_realloc_func,
-			     gcry_handler_free_t new_free_func)
+                 gcry_handler_alloc_t new_alloc_secure_func,
+                 gcry_handler_secure_check_t new_is_secure_func,
+                 gcry_handler_realloc_t new_realloc_func,
+                 gcry_handler_free_t new_free_func)
 {
   global_init ();
 
@@ -683,11 +683,11 @@ gcry_set_allocation_handler (gcry_handler_alloc_t new_alloc_func,
  * The handler function is called with 3 arguments:  The opaque value set with
  * this function, the requested memory size, and a flag with these bits
  * currently defined:
- *	bit 0 set = secure memory has been requested.
+ *    bit 0 set = secure memory has been requested.
  */
 void
 gcry_set_outofcore_handler( int (*f)( void*, size_t, unsigned int ),
-							void *value )
+                            void *value )
 {
   global_init ();
 
@@ -725,16 +725,16 @@ do_malloc (size_t n, unsigned int flags, void **mem)
   if ((flags & GCRY_ALLOC_FLAG_SECURE) && !get_no_secure_memory ())
     {
       if (alloc_secure_func)
-	m = (*alloc_secure_func) (n);
+    m = (*alloc_secure_func) (n);
       else
-	m = _gcry_private_malloc_secure (n);
+    m = _gcry_private_malloc_secure (n);
     }
   else
     {
       if (alloc_func)
-	m = (*alloc_func) (n);
+    m = (*alloc_func) (n);
       else
-	m = _gcry_private_malloc (n);
+    m = _gcry_private_malloc (n);
     }
 
   if (!m)
@@ -789,9 +789,9 @@ _gcry_check_heap( const void *a )
     /* FIXME: implement this*/
 #if 0
     if( some_handler )
-	some_handler(a)
+    some_handler(a)
     else
-	_gcry_private_check_heap(a)
+    _gcry_private_check_heap(a)
 #endif
 }
 
@@ -925,7 +925,7 @@ gcry_xrealloc( void *a, size_t n )
                                    gcry_is_secure(a)? 3:2 ) )
         {
           _gcry_fatal_error (gpg_err_code_from_errno (errno), NULL );
-	}
+    }
     }
     return p;
 }
@@ -943,7 +943,7 @@ gcry_xmalloc_secure( size_t n )
         {
           _gcry_fatal_error (gpg_err_code_from_errno (errno),
                              _("out of core in secure memory"));
-	}
+    }
     }
   return p;
 }
@@ -1001,7 +1001,7 @@ gcry_xstrdup (const char *string)
         {
           _gcry_fatal_error (gpg_err_code_from_errno (errno),
                              is_sec? _("out of core in secure memory"):NULL);
-	}
+    }
     }
 
   return p;

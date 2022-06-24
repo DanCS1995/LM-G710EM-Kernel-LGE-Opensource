@@ -93,10 +93,10 @@ struct hmac256_context
 static inline u32
 ror(u32 x, int n)
 {
-	__asm__("rorl %%cl,%0"
-		:"=r" (x)
-		:"0" (x),"c" (n));
-	return x;
+    __asm__("rorl %%cl,%0"
+        :"=r" (x)
+        :"0" (x),"c" (n));
+    return x;
 }
 #else
 #define ror(x,n) ( ((x) >> (n)) | ((x) << (32-(n))) )
@@ -270,8 +270,8 @@ finalize (hmac256_context_t hd)
 
   /* Store the digest into hd->buf.  */
   p = hd->buf;
-#define X(a) do { *p++ = hd->h##a >> 24; *p++ = hd->h##a >> 16;	 \
-		  *p++ = hd->h##a >> 8; *p++ = hd->h##a; } while(0)
+#define X(a) do { *p++ = hd->h##a >> 24; *p++ = hd->h##a >> 16;     \
+          *p++ = hd->h##a >> 8; *p++ = hd->h##a; } while(0)
   X(0);
   X(1);
   X(2);
@@ -528,14 +528,14 @@ selftest (void)
       { "data-28 key-4",
         "what do ya want for nothing?", 
         "Jefe",
-	{ 0x5b, 0xdc, 0xc1, 0x46, 0xbf, 0x60, 0x75, 0x4e,
+    { 0x5b, 0xdc, 0xc1, 0x46, 0xbf, 0x60, 0x75, 0x4e,
           0x6a, 0x04, 0x24, 0x26, 0x08, 0x95, 0x75, 0xc7,
           0x5a, 0x00, 0x3f, 0x08, 0x9d, 0x27, 0x39, 0x83,
           0x9d, 0xec, 0x58, 0xb9, 0x64, 0xec, 0x38, 0x43 } },
 
       { "data-9 key-20",
         "Hi There",
-	"\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b"
+    "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b"
         "\x0b\x0b\x0b\x0b",
         { 0xb0, 0x34, 0x4c, 0x61, 0xd8, 0xdb, 0x38, 0x53,
           0x5c, 0xa8, 0xaf, 0xce, 0xaf, 0x0b, 0xf1, 0x2b,
@@ -547,7 +547,7 @@ selftest (void)
         "\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd"
         "\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd"
         "\xdd\xdd",
-	"\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+    "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
         "\xaa\xaa\xaa\xaa",
         { 0x77, 0x3e, 0xa9, 0x1e, 0x36, 0x80, 0x0e, 0x46,
           0x85, 0x4d, 0xb8, 0xeb, 0xd0, 0x91, 0x81, 0xa7,
@@ -559,16 +559,16 @@ selftest (void)
         "\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd"
         "\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd"
         "\xcd\xcd",
-	"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10"
+    "\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10"
         "\x11\x12\x13\x14\x15\x16\x17\x18\x19",
-	{ 0x82, 0x55, 0x8a, 0x38, 0x9a, 0x44, 0x3c, 0x0e,
+    { 0x82, 0x55, 0x8a, 0x38, 0x9a, 0x44, 0x3c, 0x0e,
           0xa4, 0xcc, 0x81, 0x98, 0x99, 0xf2, 0x08, 0x3a,
           0x85, 0xf0, 0xfa, 0xa3, 0xe5, 0x78, 0xf8, 0x07,
           0x7a, 0x2e, 0x3f, 0xf4, 0x67, 0x29, 0x66, 0x5b } },
 
       { "data-54 key-131",
         "Test Using Larger Than Block-Size Key - Hash Key First",
-	"\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+    "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
         "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
         "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
         "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
@@ -577,7 +577,7 @@ selftest (void)
         "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
         "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
         "\xaa\xaa\xaa",
-	{ 0x60, 0xe4, 0x31, 0x59, 0x1e, 0xe0, 0xb6, 0x7f,
+    { 0x60, 0xe4, 0x31, 0x59, 0x1e, 0xe0, 0xb6, 0x7f,
           0x0d, 0x8a, 0x26, 0xaa, 0xcb, 0xf5, 0xb7, 0x7f,
           0x8e, 0x0b, 0xc6, 0x21, 0x37, 0x28, 0xc5, 0x14,
           0x05, 0x46, 0x04, 0x0f, 0x0e, 0xe3, 0x7f, 0x54 } },
@@ -586,7 +586,7 @@ selftest (void)
         "This is a test using a larger than block-size key and a larger "
         "than block-size data. The key needs to be hashed before being "
         "used by the HMAC algorithm.",
-	"\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+    "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
         "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
         "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
         "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
@@ -595,7 +595,7 @@ selftest (void)
         "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
         "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
         "\xaa\xaa\xaa",
-	{ 0x9b, 0x09, 0xff, 0xa7, 0x1b, 0x94, 0x2f, 0xcb,
+    { 0x9b, 0x09, 0xff, 0xa7, 0x1b, 0x94, 0x2f, 0xcb,
           0x27, 0x63, 0x5f, 0xbc, 0xd5, 0xb0, 0xe9, 0x44,
           0xbf, 0xdc, 0x63, 0x64, 0x4f, 0x07, 0x13, 0x93,
           0x8a, 0x7f, 0x51, 0x53, 0x5c, 0x3a, 0x35, 0xe2 } },

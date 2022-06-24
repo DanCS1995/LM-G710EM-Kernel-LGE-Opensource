@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2012 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -14,8 +14,6 @@
  */
 
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
 
 #include "host_resolver.h"
 
@@ -165,20 +163,25 @@ static void *resolve_hosts(private_host_resolver_t *this)
 	int error;
 	bool old, timed_out;
 
+	/* default resolver threads to non-cancellable */
+	thread_cancelability(FALSE);
+
 	while (TRUE)
 	{
 		this->mutex->lock(this->mutex);
-		thread_cleanup_push((thread_cleanup_t)this->mutex->unlock, this->mutex);
 		while (this->queue->remove_first(this->queue,
 										(void**)&query) != SUCCESS)
 		{
-			old = thread_cancelability(TRUE);
-			timed_out = this->new_query->timed_wait(this->new_query,
-									this->mutex, NEW_QUERY_WAIT_TIMEOUT * 1000);
-			thread_cancelability(old);
 			if (this->disabled)
 			{
-				thread_cleanup_pop(TRUE);
+				this->mutex->unlock(this->mutex);
+				return NULL;
+			}
+			timed_out = this->new_query->timed_wait(this->new_query,
+									this->mutex, NEW_QUERY_WAIT_TIMEOUT * 1000);
+			if (this->disabled)
+			{
+				this->mutex->unlock(this->mutex);
 				return NULL;
 			}
 			else if (timed_out && (this->threads > this->min_threads))
@@ -187,13 +190,13 @@ static void *resolve_hosts(private_host_resolver_t *this)
 
 				this->threads--;
 				this->pool->remove(this->pool, thread, NULL);
-				thread_cleanup_pop(TRUE);
+				this->mutex->unlock(this->mutex);
 				thread->detach(thread);
 				return NULL;
 			}
 		}
 		this->busy_threads++;
-		thread_cleanup_pop(TRUE);
+		this->mutex->unlock(this->mutex);
 
 		memset(&hints, 0, sizeof(hints));
 		hints.ai_family = query->family;

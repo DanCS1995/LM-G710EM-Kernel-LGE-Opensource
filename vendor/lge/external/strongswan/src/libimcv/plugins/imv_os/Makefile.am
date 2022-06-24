@@ -1,10 +1,11 @@
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/libstrongswan \
 	-I$(top_srcdir)/src/libtncif \
-	-I$(top_srcdir)/src/libimcv
+	-I$(top_srcdir)/src/libimcv \
+	-I$(top_srcdir)/src/libtpmtss
 
 AM_CFLAGS = \
-	-rdynamic
+	$(PLUGIN_CFLAGS)
 
 imcv_LTLIBRARIES = imv-os.la
 
@@ -17,10 +18,3 @@ imv_os_la_SOURCES = \
 	imv_os_database.c imv_os_database.h
 
 imv_os_la_LDFLAGS = -module -avoid-version -no-undefined
-
-ipsec_PROGRAMS = pacman
-pacman_SOURCES = pacman.c
-pacman_LDADD = $(top_builddir)/src/libstrongswan/libstrongswan.la
-pacman.o :	$(top_builddir)/config.status
-
-EXTRA_DIST = pacman.sh

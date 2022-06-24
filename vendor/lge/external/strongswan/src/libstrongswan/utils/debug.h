@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2006 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,11 +24,12 @@
 typedef enum debug_t debug_t;
 typedef enum level_t level_t;
 
-#include <stdio.h>
+#include <utils/printf_hook/printf_hook.h>
+//#include <utils/utils.h>
 
+#include <stdio.h>
 #include "utils.h"
 #include "utils/enum.h"
-
 #ifdef ANDROID
 #include <cutils/properties.h>
 #endif

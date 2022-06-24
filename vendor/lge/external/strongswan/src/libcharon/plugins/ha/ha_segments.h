@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -25,7 +25,7 @@
 
 typedef struct ha_segments_t ha_segments_t;
 
-typedef u_int16_t segment_mask_t;
+typedef uint16_t segment_mask_t;
 
 /**
  * maximum number of segments

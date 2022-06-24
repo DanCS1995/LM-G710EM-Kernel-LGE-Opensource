@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2005 Andreas Steffen
- * Hochschule fuer Technik Rapperswil, Switzerland
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,7 +16,10 @@
 #ifndef _KEYWORDS_H_
 #define _KEYWORDS_H_
 
-typedef enum {
+typedef enum kw_token_t kw_token_t;
+typedef struct kw_entry_t kw_entry_t;
+
+enum kw_token_t {
 	/* config setup keywords */
 	KW_CHARONDEBUG,
 	KW_UNIQUEIDS,
@@ -61,6 +64,7 @@ typedef enum {
 	KW_DPDTIMEOUT,
 	KW_DPDACTION,
 	KW_CLOSEACTION,
+	KW_SHA256_96,
 	KW_INACTIVITY,
 	KW_MODECONFIG,
 	KW_XAUTH,
@@ -69,6 +73,7 @@ typedef enum {
 	KW_MEDIATED_BY,
 	KW_ME_PEERID,
 	KW_REQID,
+	KW_REPLAY_WINDOW,
 	KW_MARK,
 	KW_MARK_IN,
 	KW_MARK_OUT,
@@ -202,6 +207,15 @@ typedef enum {
 	KW_ALSO,
 	KW_AUTO,
 
-} kw_token_t;
+};
+
+struct kw_entry_t {
+	char *name;
+	kw_token_t token;
+};
+
+#ifndef IN_GPERF_GENERATED_FILE
+const kw_entry_t *in_word_set(register const char*, register unsigned);
+#endif
 
 #endif /* _KEYWORDS_H_ */

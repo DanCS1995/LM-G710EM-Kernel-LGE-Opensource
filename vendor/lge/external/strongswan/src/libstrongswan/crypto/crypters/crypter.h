@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2005-2006 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -57,6 +57,7 @@ enum encryption_algorithm_t {
 	ENCR_CAMELLIA_CCM_ICV8 =  25,
 	ENCR_CAMELLIA_CCM_ICV12 = 26,
 	ENCR_CAMELLIA_CCM_ICV16 = 27,
+	ENCR_CHACHA20_POLY1305 =  28,
 	ENCR_UNDEFINED =        1024,
 	ENCR_DES_ECB =          1025,
 	ENCR_SERPENT_CBC =      1026,
@@ -85,7 +86,6 @@ enum encryption_algorithm_t {
  * enum name for encryption_algorithm_t.
  */
 extern enum_name_t *encryption_algorithm_names;
-extern enum_name_t *ikev2_encryption_algorithm_names;
 
 /**
  * Generic interface for symmetric encryption algorithms.

@@ -107,6 +107,8 @@ enum tls_purpose_t {
 	TLS_PURPOSE_EAP_PEAP,
 	/** non-EAP TLS */
 	TLS_PURPOSE_GENERIC,
+	/** non-EAP TLS accepting NULL encryption */
+	TLS_PURPOSE_GENERIC_NULLOK,
 	/** EAP binding for TNC */
 	TLS_PURPOSE_EAP_TNC
 };
@@ -167,7 +169,7 @@ struct tls_t {
 	 * Query upper layer for one or more TLS records, build fragments.
 	 *
 	 * The TLS stack automatically fragments the records to the given buffer
-	 * size. Fragmentation is indicated by the reclen ouput parameter and
+	 * size. Fragmentation is indicated by the reclen output parameter and
 	 * the return value. For the first fragment of a TLS record, a non-zero
 	 * record length is returned in reclen. If more fragments follow, NEED_MORE
 	 * is returned. A return value of ALREADY_DONE indicates that the final
@@ -248,6 +250,13 @@ struct tls_t {
 	 * @return			MSK, internal data
 	 */
 	chunk_t (*get_eap_msk)(tls_t *this);
+
+	/**
+	 * Get the authentication details after completing the handshake.
+	 *
+	 * @return			authentication details, internal data
+	 */
+	auth_cfg_t* (*get_auth)(tls_t *this);
 
 	/**
 	 * Destroy a tls_t.

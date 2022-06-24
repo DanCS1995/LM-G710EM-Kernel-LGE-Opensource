@@ -32,6 +32,17 @@
 
 typedef char BOOL;
 
+
+typedef enum
+{
+    R_MODE_NONE     = 0,
+    R_MODE_16       = 1,
+    R_MODE_24       = 2,
+    R_MODE_F        = 3
+}R_MODE;
+
+
+
 /* Description of constants:
  *
  * Npc - is the number of look-up values available for the lowpass filter
@@ -81,6 +92,7 @@ typedef char BOOL;
 
 class ResampleClass: public ResampleInterface{
 private:
+    R_MODE rMode;
 
 //resamplesub.c
     int _firstChunk;
@@ -104,15 +116,44 @@ private:
     short * _X1_Remain;
     short * _X2_Remain;
 
+/*24*/
+    int _firstChunk24;
+    int _Xoff24;
+    int _XoffSizeByte24;
+    int _offsetSizeX2inBytes24;
+    int _Time24;
+    int _writtenSamples24;
+    int _inputSamples24;
+    int _highQuality24;
+    int _nChannel24;
+    float _resampleFactor24;
+
+    int _creepNo24;
+    int _creepNoBytes24;
+
+    int* _X1_24;
+    int* _X2_24;
+    int* _Y1_24;
+    int* _Y2_24;
+    int* _X1_Remain_24;
+    int* _X2_Remain_24;
+/*24 end*/
 
 //resamplesub.c
     HWORD WordToHword(WORD v, int scl);
     int SrcUp(HWORD X[], HWORD Y[], double factor, UWORD *Time,
                      UHWORD Nx, UHWORD Nwing, UHWORD LpScl,
                      HWORD Imp[], HWORD ImpD[], BOOL Interp);
+    int SrcUp(WORD X[], WORD Y[], double factor, UWORD *Time,
+                  UHWORD Nx, UHWORD Nwing, UHWORD LpScl,
+                  HWORD Imp[], HWORD ImpD[], BOOL Interp);
     int SrcUD(HWORD X[], HWORD Y[], double factor, UWORD *Time,
                      UHWORD Nx, UHWORD Nwing, UHWORD LpScl,
                      HWORD Imp[], HWORD ImpD[], BOOL Interp);
+    int SrcUD(WORD X[], WORD Y[], double factor, UWORD *Time,
+                 UHWORD Nx, UHWORD Nwing, UHWORD LpScl,
+                 HWORD Imp[], HWORD ImpD[], BOOL Interp);
+
     int resampleWithFilter_mem(  /* number of output samples returned */
         double factor,              /* factor = outSampleRate/inSampleRate */
         short * inbuffer,                   /* input and output file descriptors */
@@ -149,9 +190,52 @@ private:
     WORD FilterUp(HWORD Imp[], HWORD ImpD[],
                  UHWORD Nwing, BOOL Interp,
                  HWORD *Xp, HWORD Ph, HWORD Inc);
+    WORD FilterUp(HWORD Imp[], HWORD ImpD[],
+             UHWORD Nwing, BOOL Interp,
+             WORD *Xp, HWORD Ph, HWORD Inc);
     WORD FilterUD( HWORD Imp[], HWORD ImpD[],
              UHWORD Nwing, BOOL Interp,
              HWORD *Xp, HWORD Ph, HWORD Inc, UHWORD dhb);
+    int FilterUD( HWORD Imp[], HWORD ImpD[],
+                 UHWORD Nwing, BOOL Interp,
+                 WORD *Xp, HWORD Ph, HWORD Inc, UHWORD dhb);
+    WORD longlongTo24bit(long long v, int scl);
+
+    int resampleWithFilter_mem(
+        double factor,
+        int* inbuffer,
+        int *outputBuffer,
+        int inCount,
+        int outCount,
+        int nChans,
+        BOOL interpFilt,
+        HWORD Imp[], HWORD ImpD[],
+        UHWORD LpScl, UHWORD Nmult, UHWORD Nwing,BOOL lastChunk);
+
+    int resample_mem(
+        double factor,
+        int* inputbuffer,
+        int* outputbuffer,
+        int inCount,
+        int outCount,
+        int nChans,
+        BOOL interpFilt,
+        int fastMode,
+        BOOL largeFilter,
+        char *filterFile,
+        BOOL lastChunk);
+
+    int resampleWithFilter_mem2Ch(
+        double factor,
+        int * inbuffer,
+        int *outputBuffer,
+        int inCount,
+        int outCount,
+        int nChans,
+        BOOL interpFilt,
+        HWORD Imp[], HWORD ImpD[],
+        UHWORD LpScl, UHWORD Nmult, UHWORD Nwing,BOOL lastChunk);
+
 
 public:
 
@@ -163,10 +247,11 @@ public:
     virtual int getMinResampleInputSampleNo();
     virtual int getMaxResampleInputBufferSize();
     virtual int getResampleXoffVal();
+    virtual int initResample24(double factor, int nChans, int qualityHigh);
+    virtual int resample_m(int* inputbuffer,int* outputbuffer,int inCount,BOOL lastChunk);
+    virtual int initResample(double factor, int nChans, int qualityHigh, int bitsPerSample);
 };
 
-//extern "C" ResampleClass * createResampler();
-//extern "C" void  destroyResampler(ResampleClass * rsmpl);
 extern "C" ResampleInterface * createResampler();
 extern "C" void  destroyResampler(ResampleInterface * rsmpl);
 

@@ -135,31 +135,31 @@ _gcry_rndlinux_gather_random (void (*add)(const void*, size_t,
           if( !warn )
             {
               _gcry_random_progress ("need_entropy", 'X', 0, (int)length);
-	      warn = 1;
-	    }
-	  continue;
-	}
-	else if( rc == -1 )
+          warn = 1;
+        }
+      continue;
+    }
+    else if( rc == -1 )
           {
-	    log_error ("select() error: %s\n", strerror(errno));
-	    continue;
+        log_error ("select() error: %s\n", strerror(errno));
+        continue;
           }
 
-	do 
+    do 
           {
-	    int nbytes = length < sizeof(buffer)? length : sizeof(buffer);
-	    n = read(fd, buffer, nbytes );
-	    if( n >= 0 && n > nbytes ) 
+        int nbytes = length < sizeof(buffer)? length : sizeof(buffer);
+        n = read(fd, buffer, nbytes );
+        if( n >= 0 && n > nbytes ) 
               {
-		log_error("bogus read from random device (n=%d)\n", n );
-		n = nbytes;
+        log_error("bogus read from random device (n=%d)\n", n );
+        n = nbytes;
               }
           } 
         while( n == -1 && errno == EINTR );
-	if( n == -1 )
+    if( n == -1 )
           log_fatal("read error on random device: %s\n", strerror(errno));
-	(*add)( buffer, n, origin );
-	length -= n;
+    (*add)( buffer, n, origin );
+    length -= n;
     }
   memset(buffer, 0, sizeof(buffer) );
 

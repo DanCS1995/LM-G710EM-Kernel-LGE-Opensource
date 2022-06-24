@@ -499,7 +499,7 @@ static void frequency_process(struct work_struct *work)
 	if (!platform_data->notify_info.enable)
 		goto exit;
 
-	if (!platform_data->state & RUNNING)
+	if (!(platform_data->state & RUNNING))
 		goto exit;
 
 	get_online_cpus();

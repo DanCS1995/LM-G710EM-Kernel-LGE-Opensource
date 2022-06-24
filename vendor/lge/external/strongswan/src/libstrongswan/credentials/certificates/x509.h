@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007-2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -39,26 +39,35 @@ typedef enum x509_constraint_t x509_constraint_t;
  */
 enum x509_flag_t {
 	/** cert has no constraints */
-	X509_NONE =				0,
+	X509_NONE =	               0,
 	/** cert has CA constraint */
-	X509_CA =				(1<<0),
+	X509_CA =                 (1<<0),
 	/** cert has AA constraint */
-	X509_AA =				(1<<1),
+	X509_AA =                 (1<<1),
 	/** cert has OCSP signer constraint */
-	X509_OCSP_SIGNER =		(1<<2),
+	X509_OCSP_SIGNER =        (1<<2),
+    /** cert has either CA, AA or OCSP constraint */
+	X509_ANY = X509_CA | X509_AA | X509_OCSP_SIGNER,
 	/** cert has serverAuth key usage */
-	X509_SERVER_AUTH =		(1<<3),
+	X509_SERVER_AUTH =        (1<<3),
 	/** cert has clientAuth key usage */
-	X509_CLIENT_AUTH =		(1<<4),
+	X509_CLIENT_AUTH =        (1<<4),
 	/** cert is self-signed */
-	X509_SELF_SIGNED =		(1<<5),
+	X509_SELF_SIGNED =        (1<<5),
 	/** cert has an ipAddrBlocks extension */
-	X509_IP_ADDR_BLOCKS =	(1<<6),
+	X509_IP_ADDR_BLOCKS =     (1<<6),
 	/** cert has CRL sign key usage */
-	X509_CRL_SIGN =			(1<<7),
+	X509_CRL_SIGN =           (1<<7),
 	/** cert has iKEIntermediate key usage */
-	X509_IKE_INTERMEDIATE =	(1<<8),
+	X509_IKE_INTERMEDIATE =   (1<<8),
+	/** cert has Microsoft Smartcard Logon usage */
+	X509_MS_SMARTCARD_LOGON = (1<<9),
+	/** cert either lacks keyUsage bits, or includes either digitalSignature
+	 *  or nonRepudiation as per RFC 4945, section 5.1.3.2. */
+	X509_IKE_COMPLIANT =      (1<<10),
 };
+
+extern enum_name_t *x509_flag_names;
 
 /**
  * Different numerical X.509 constraints.
@@ -204,8 +213,11 @@ struct x509_t {
 	 * @return			enumerator over x509_policy_mapping
 	 */
 	enumerator_t* (*create_policy_mapping_enumerator)(x509_t *this);
-
-
 };
+
+/**
+ * Destroy an x509_cdp_t instance.
+ */
+void x509_cdp_destroy(x509_cdp_t *this);
 
 #endif /** X509_H_ @}*/

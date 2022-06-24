@@ -1,9 +1,9 @@
 /*
- * Copyright (C) 2006-2008 Tobias Brunner
+ * Copyright (C) 2006-2018 Tobias Brunner
  * Copyright (C) 2006 Daniel Roethlisberger
  * Copyright (C) 2005-2006 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -160,6 +160,12 @@ enum notify_type_t {
 	FRAGMENTATION_SUPPORTED = 16430,
 	/* Signature Hash Algorithms, RFC 7427 */
 	SIGNATURE_HASH_ALGORITHMS = 16431,
+	/* Use Postquantum Preshared Key (draft-ietf-ipsecme-qr-ikev2) */
+	USE_PPK = 16435,
+	/* Postquantum Preshared Key Identity (draft-ietf-ipsecme-qr-ikev2) */
+	PPK_IDENTITY = 16436,
+	/* No Postquantum Preshared Key Auth (draft-ietf-ipsecme-qr-ikev2) */
+	NO_PPK_AUTH = 16437,
 	/* IKEv1 initial contact */
 	INITIAL_CONTACT_IKEV1 = 24578,
 	/* IKEv1 DPD */
@@ -183,6 +189,11 @@ enum notify_type_t {
 	/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_SUPPORT_BACKOFF_TIMER [START] */
 #ifdef __ANDROID__
     BACKOFF_TIMER = 41041,
+//LGP_DATA_IWLAN support_5gs [START]  24.302 Table 8.1.2.3-1
+    N1_MODE_CAPABILITY = 51015,
+    N1_MODE_INFORMATION = 51115,
+    N1_MODE_S_NSSAI_PLMN_ID = 52216,
+//LGP_DATA_IWLAN support_5gs [END]
 #endif
 	/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_SUPPORT_BACKOFF_TIMER [END] */
 };
@@ -213,14 +224,14 @@ struct notify_payload_t {
 	 *
 	 * @return			protocol id of this payload
 	 */
-	u_int8_t (*get_protocol_id) (notify_payload_t *this);
+	uint8_t (*get_protocol_id) (notify_payload_t *this);
 
 	/**
 	 * Sets the protocol id of this payload.
 	 *
 	 * @param protocol_id	protocol id to set
 	 */
-	void (*set_protocol_id) (notify_payload_t *this, u_int8_t protocol_id);
+	void (*set_protocol_id) (notify_payload_t *this, uint8_t protocol_id);
 
 	/**
 	 * Gets the notify message type of this payload.
@@ -243,7 +254,7 @@ struct notify_payload_t {
 	 *
 	 * @return		SPI value
 	 */
-	u_int32_t (*get_spi) (notify_payload_t *this);
+	uint32_t (*get_spi) (notify_payload_t *this);
 
 	/**
 	 * Sets the spi of this payload.
@@ -252,7 +263,7 @@ struct notify_payload_t {
 	 *
 	 * @param spi	SPI value
 	 */
-	void (*set_spi) (notify_payload_t *this, u_int32_t spi);
+	void (*set_spi) (notify_payload_t *this, uint32_t spi);
 
 	/**
 	 * Returns the currently set spi of this payload.
@@ -300,7 +311,7 @@ struct notify_payload_t {
 /**
  * Creates an empty notify_payload_t object
  *
- * @param type		payload type, NOTIFY or NOTIFY_V1
+ * @param type		payload type, PLV2_NOTIFY or PLV1_NOTIFY
  * @return			created notify_payload_t object
  */
 notify_payload_t *notify_payload_create(payload_type_t type);
@@ -308,7 +319,7 @@ notify_payload_t *notify_payload_create(payload_type_t type);
 /**
  * Creates an notify_payload_t object of specific type for specific protocol id.
  *
- * @param type					payload type, NOTIFY or NOTIFY_V1
+ * @param type					payload type, PLV2_NOTIFY or PLV1_NOTIFY
  * @param protocol				protocol id (IKE, AH or ESP)
  * @param notify				type of notify
  * @return						notify_payload_t object

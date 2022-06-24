@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2013 Tobias Brunner
+ * Copyright (C) 2013-2018 Tobias Brunner
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,7 +16,6 @@
 
 #include "test_suite.h"
 
-#include <sched.h>
 #include <unistd.h>
 
 #include <threading/thread.h>
@@ -27,6 +26,36 @@
 #include <threading/spinlock.h>
 #include <threading/semaphore.h>
 #include <threading/thread_value.h>
+
+#ifdef WIN32
+/* when running on AppVeyor the wait functions seem to frequently trigger a bit
+ * early, allow this if the difference is within 5ms. */
+static inline void time_is_at_least(timeval_t *expected, timeval_t *actual)
+{
+	if (!timercmp(actual, expected, >))
+	{
+		timeval_t diff;
+
+		timersub(expected, actual, &diff);
+		if (!diff.tv_sec && diff.tv_usec <= 5000)
+		{
+			warn("allow timer event %dus too early on Windows (expected: %u.%u, "
+				 "actual: %u.%u)", diff.tv_usec, expected->tv_sec,
+				 expected->tv_usec, actual->tv_sec, actual->tv_usec);
+			return;
+		}
+		fail("expected: %u.%u, actual: %u.%u", expected->tv_sec,
+			 expected->tv_usec, actual->tv_sec, actual->tv_usec);
+	}
+}
+#else /* WIN32 */
+static inline void time_is_at_least(timeval_t *expected, timeval_t *actual)
+{
+	ck_assert_msg(timercmp(actual, expected, >), "expected: %u.%u, actual: "
+				  "%u.%u", expected->tv_sec, expected->tv_usec, actual->tv_sec,
+				  actual->tv_usec);
+}
+#endif /* WIN32 */
 
 /*******************************************************************************
  * recursive mutex test
@@ -381,8 +410,7 @@ START_TEST(test_condvar_timed)
 	time_monotonic(&end);
 	mutex->unlock(mutex);
 	timersub(&end, &start, &end);
-	ck_assert_msg(timercmp(&end, &diff, >), "end: %u.%u, diff: %u.%u",
-					end.tv_sec, end.tv_usec, diff.tv_sec, diff.tv_usec);
+	time_is_at_least(&diff, &end);
 
 	thread = thread_create(condvar_run, NULL);
 
@@ -420,8 +448,7 @@ START_TEST(test_condvar_timed_abs)
 	}
 	time_monotonic(&end);
 	mutex->unlock(mutex);
-	ck_assert_msg(timercmp(&end, &diff, >), "end: %u.%u, diff: %u.%u",
-					end.tv_sec, end.tv_usec, abso.tv_sec, abso.tv_usec);
+	time_is_at_least(&diff, &end);
 
 	thread = thread_create(condvar_run, NULL);
 
@@ -554,6 +581,49 @@ START_TEST(test_rwlock)
 }
 END_TEST
 
+static void *rwlock_try_run(void *param)
+{
+	if (rwlock->try_write_lock(rwlock))
+	{
+		rwlock->unlock(rwlock);
+		return param;
+	}
+	return NULL;
+}
+
+START_TEST(test_rwlock_try)
+{
+	uintptr_t magic = 0xcafebabe;
+	thread_t *thread;
+
+	rwlock = rwlock_create(RWLOCK_TYPE_DEFAULT);
+
+	thread = thread_create(rwlock_try_run, (void*)magic);
+	ck_assert_int_eq((uintptr_t)thread->join(thread), magic);
+
+	rwlock->read_lock(rwlock);
+	thread = thread_create(rwlock_try_run, (void*)magic);
+	ck_assert(thread->join(thread) == NULL);
+	rwlock->unlock(rwlock);
+
+	rwlock->read_lock(rwlock);
+	rwlock->read_lock(rwlock);
+	rwlock->read_lock(rwlock);
+	thread = thread_create(rwlock_try_run, (void*)magic);
+	ck_assert(thread->join(thread) == NULL);
+	rwlock->unlock(rwlock);
+	rwlock->unlock(rwlock);
+	rwlock->unlock(rwlock);
+
+	rwlock->write_lock(rwlock);
+	thread = thread_create(rwlock_try_run, (void*)magic);
+	ck_assert(thread->join(thread) == NULL);
+	rwlock->unlock(rwlock);
+
+	rwlock->destroy(rwlock);
+}
+END_TEST
+
 /**
  * Rwlock condvar
  */
@@ -662,8 +732,7 @@ START_TEST(test_rwlock_condvar_timed)
 	rwlock->unlock(rwlock);
 	time_monotonic(&end);
 	timersub(&end, &start, &end);
-	ck_assert_msg(timercmp(&end, &diff, >), "end: %u.%u, diff: %u.%u",
-					end.tv_sec, end.tv_usec, diff.tv_sec, diff.tv_usec);
+	time_is_at_least(&diff, &end);
 
 	thread = thread_create(rwlock_condvar_run, NULL);
 
@@ -701,8 +770,7 @@ START_TEST(test_rwlock_condvar_timed_abs)
 	}
 	rwlock->unlock(rwlock);
 	time_monotonic(&end);
-	ck_assert_msg(timercmp(&end, &abso, >), "end: %u.%u, abso: %u.%u",
-					end.tv_sec, end.tv_usec, abso.tv_sec, abso.tv_usec);
+	time_is_at_least(&abso, &end);
 
 	thread = thread_create(rwlock_condvar_run, NULL);
 
@@ -824,8 +892,7 @@ START_TEST(test_semaphore_timed)
 	ck_assert(semaphore->timed_wait(semaphore, diff.tv_usec / 1000));
 	time_monotonic(&end);
 	timersub(&end, &start, &end);
-	ck_assert_msg(timercmp(&end, &diff, >), "end: %u.%u, diff: %u.%u",
-					end.tv_sec, end.tv_usec, diff.tv_sec, diff.tv_usec);
+	time_is_at_least(&diff, &end);
 
 	thread = thread_create(semaphore_run, NULL);
 
@@ -847,8 +914,7 @@ START_TEST(test_semaphore_timed_abs)
 	timeradd(&start, &diff, &abso);
 	ck_assert(semaphore->timed_wait_abs(semaphore, abso));
 	time_monotonic(&end);
-	ck_assert_msg(timercmp(&end, &abso, >), "end: %u.%u, abso: %u.%u",
-					end.tv_sec, end.tv_usec, abso.tv_sec, abso.tv_usec);
+	time_is_at_least(&abso, &end);
 
 	thread = thread_create(semaphore_run, NULL);
 
@@ -981,7 +1047,8 @@ START_TEST(test_detach)
 		sched_yield();
 	}
 	/* no checks done here, but we check that thread state gets cleaned
-	 * up with leak detective. */
+	 * up with leak detective. give the threads time to clean up. */
+	usleep(10000);
 }
 END_TEST
 
@@ -1016,7 +1083,8 @@ START_TEST(test_detach_exit)
 		sched_yield();
 	}
 	/* no checks done here, but we check that thread state gets cleaned
-	 * up with leak detective. */
+	 * up with leak detective. give the threads time to clean up. */
+	usleep(10000);
 }
 END_TEST
 
@@ -1131,6 +1199,191 @@ START_TEST(test_cancel_point)
 }
 END_TEST
 
+static void close_fd_ptr(void *fd)
+{
+	close(*(int*)fd);
+}
+
+static void cancellation_recv()
+{
+	int sv[2];
+	char buf[1];
+
+	ck_assert(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
+
+	thread_cleanup_push(close_fd_ptr, &sv[0]);
+	thread_cleanup_push(close_fd_ptr, &sv[1]);
+
+	thread_cancelability(TRUE);
+	while (TRUE)
+	{
+		ck_assert(recv(sv[0], buf, sizeof(buf), 0) == 1);
+	}
+}
+
+static void cancellation_read()
+{
+	int sv[2];
+	char buf[1];
+
+	ck_assert(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
+
+	thread_cleanup_push(close_fd_ptr, &sv[0]);
+	thread_cleanup_push(close_fd_ptr, &sv[1]);
+
+	thread_cancelability(TRUE);
+	while (TRUE)
+	{
+		ck_assert(read(sv[0], buf, sizeof(buf)) == 1);
+	}
+}
+
+static void cancellation_select()
+{
+	int sv[2];
+	fd_set set;
+
+	ck_assert(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
+
+	thread_cleanup_push(close_fd_ptr, &sv[0]);
+	thread_cleanup_push(close_fd_ptr, &sv[1]);
+
+	FD_ZERO(&set);
+	FD_SET(sv[0], &set);
+	thread_cancelability(TRUE);
+	while (TRUE)
+	{
+		ck_assert(select(sv[0] + 1, &set, NULL, NULL, NULL) == 1);
+	}
+}
+
+static void cancellation_poll()
+{
+	int sv[2];
+	struct pollfd pfd;
+
+	ck_assert(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
+
+	thread_cleanup_push(close_fd_ptr, &sv[0]);
+	thread_cleanup_push(close_fd_ptr, &sv[1]);
+
+	pfd.fd = sv[0];
+	pfd.events = POLLIN;
+	thread_cancelability(TRUE);
+	while (TRUE)
+	{
+		ck_assert(poll(&pfd, 1, -1) == 1);
+	}
+}
+
+static void cancellation_accept()
+{
+	host_t *host;
+	int fd, c;
+
+	fd = socket(AF_INET, SOCK_STREAM, 0);
+	ck_assert(fd >= 0);
+	host = host_create_from_string("127.0.0.1", 0);
+	ck_assert_msg(bind(fd, host->get_sockaddr(host),
+					   *host->get_sockaddr_len(host)) == 0, "%m");
+	host->destroy(host);
+	ck_assert(listen(fd, 5) == 0);
+
+	thread_cleanup_push(close_fd_ptr, &fd);
+
+	thread_cancelability(TRUE);
+	while (TRUE)
+	{
+		c = accept(fd, NULL, NULL);
+		ck_assert(c >= 0);
+		close(c);
+	}
+}
+
+static void cancellation_cond()
+{
+	mutex_t *mutex;
+	condvar_t *cond;
+
+	mutex = mutex_create(MUTEX_TYPE_DEFAULT);
+	cond = condvar_create(CONDVAR_TYPE_DEFAULT);
+	mutex->lock(mutex);
+
+	thread_cleanup_push((void*)mutex->destroy, mutex);
+	thread_cleanup_push((void*)cond->destroy, cond);
+
+	thread_cancelability(TRUE);
+	while (TRUE)
+	{
+		cond->wait(cond, mutex);
+	}
+}
+
+static void cancellation_rwcond()
+{
+	rwlock_t *lock;
+	rwlock_condvar_t *cond;
+
+	lock = rwlock_create(RWLOCK_TYPE_DEFAULT);
+	cond = rwlock_condvar_create();
+	lock->write_lock(lock);
+
+	thread_cleanup_push((void*)lock->destroy, lock);
+	thread_cleanup_push((void*)cond->destroy, cond);
+
+	thread_cancelability(TRUE);
+	while (TRUE)
+	{
+		cond->wait(cond, lock);
+	}
+}
+
+static void (*cancellation_points[])() = {
+	cancellation_read,
+	cancellation_recv,
+	cancellation_select,
+	cancellation_poll,
+	cancellation_accept,
+	cancellation_cond,
+	cancellation_rwcond,
+};
+
+static void* run_cancellation_point(void (*fn)())
+{
+	fn();
+	return NULL;
+}
+
+static void* run_cancellation_point_pre(void (*fn)())
+{
+	usleep(5000);
+	fn();
+	return NULL;
+}
+
+START_TEST(test_cancellation_point)
+{
+	thread_t *thread;
+
+	thread = thread_create((void*)run_cancellation_point,
+						   cancellation_points[_i]);
+	usleep(5000);
+	thread->cancel(thread);
+	thread->join(thread);
+}
+END_TEST
+
+START_TEST(test_cancellation_point_pre)
+{
+	thread_t *thread;
+
+	thread = thread_create((void*)run_cancellation_point_pre,
+						   cancellation_points[_i]);
+	thread->cancel(thread);
+	thread->join(thread);
+}
+END_TEST
+
 static void cleanup1(void *data)
 {
 	uintptr_t *value = (uintptr_t*)data;
@@ -1215,6 +1468,8 @@ static void *cleanup_cancel_run(void *data)
 {
 	thread_cancelability(FALSE);
 
+	barrier_wait(barrier);
+
 	thread_cleanup_push(cleanup3, data);
 	thread_cleanup_push(cleanup2, data);
 	thread_cleanup_push(cleanup1, data);
@@ -1234,11 +1489,13 @@ START_TEST(test_cleanup_cancel)
 	uintptr_t values[THREADS];
 	int i;
 
+	barrier = barrier_create(THREADS+1);
 	for (i = 0; i < THREADS; i++)
 	{
 		values[i] = 1;
 		threads[i] = thread_create(cleanup_cancel_run, &values[i]);
 	}
+	barrier_wait(barrier);
 	for (i = 0; i < THREADS; i++)
 	{
 		threads[i]->cancel(threads[i]);
@@ -1248,6 +1505,7 @@ START_TEST(test_cleanup_cancel)
 		threads[i]->join(threads[i]);
 		ck_assert_int_eq(values[i], 4);
 	}
+	barrier_destroy(barrier);
 }
 END_TEST
 
@@ -1282,6 +1540,36 @@ START_TEST(test_cleanup_pop)
 	}
 }
 END_TEST
+
+static void *cleanup_popall_run(void *data)
+{
+	thread_cleanup_push(cleanup3, data);
+	thread_cleanup_push(cleanup2, data);
+	thread_cleanup_push(cleanup1, data);
+
+	thread_cleanup_popall();
+	return NULL;
+}
+
+START_TEST(test_cleanup_popall)
+{
+	thread_t *threads[THREADS];
+	uintptr_t values[THREADS];
+	int i;
+
+	for (i = 0; i < THREADS; i++)
+	{
+		values[i] = 1;
+		threads[i] = thread_create(cleanup_popall_run, &values[i]);
+	}
+	for (i = 0; i < THREADS; i++)
+	{
+		threads[i]->join(threads[i]);
+		ck_assert_int_eq(values[i], 4);
+	}
+}
+END_TEST
+
 
 static thread_value_t *tls[10];
 
@@ -1417,6 +1705,7 @@ Suite *threading_suite_create()
 
 	tc = tcase_create("rwlock");
 	tcase_add_test(tc, test_rwlock);
+	tcase_add_test(tc, test_rwlock_try);
 	suite_add_tcase(s, tc);
 
 	tc = tcase_create("rwlock condvar");
@@ -1450,11 +1739,19 @@ Suite *threading_suite_create()
 	tcase_add_test(tc, test_cancel_point);
 	suite_add_tcase(s, tc);
 
+	tc = tcase_create("thread cancellation point");
+	tcase_add_loop_test(tc, test_cancellation_point,
+						0, countof(cancellation_points));
+	tcase_add_loop_test(tc, test_cancellation_point_pre,
+						0, countof(cancellation_points));
+	suite_add_tcase(s, tc);
+
 	tc = tcase_create("thread cleanup");
 	tcase_add_test(tc, test_cleanup);
 	tcase_add_test(tc, test_cleanup_exit);
 	tcase_add_test(tc, test_cleanup_cancel);
 	tcase_add_test(tc, test_cleanup_pop);
+	tcase_add_test(tc, test_cleanup_popall);
 	suite_add_tcase(s, tc);
 
 	tc = tcase_create("thread local storage");

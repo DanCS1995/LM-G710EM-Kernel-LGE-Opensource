@@ -2,7 +2,7 @@
  * Copyright (C) 2008-2013 Tobias Brunner
  * Copyright (C) 2005-2008 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -29,6 +29,8 @@
 #ifdef HAVE_ALLOCA_H
 #include <alloca.h>
 #endif
+
+#include <utils/utils.h>
 
 typedef struct chunk_t chunk_t;
 
@@ -278,11 +280,11 @@ static inline chunk_t chunk_skip(chunk_t chunk, size_t bytes)
 }
 
 /**
- * Skip a leading zero-valued byte
+ * Skip any leading zero-valued bytes
  */
 static inline chunk_t chunk_skip_zero(chunk_t chunk)
 {
-	if (chunk.len > 1 && *chunk.ptr == 0x00)
+	while (chunk.len > 1 && *chunk.ptr == 0x00)
 	{
 		chunk.ptr++;
 		chunk.len--;
@@ -305,6 +307,19 @@ static inline bool chunk_equals(chunk_t a, chunk_t b)
 {
 	return a.ptr != NULL  && b.ptr != NULL &&
 			a.len == b.len && memeq(a.ptr, b.ptr, a.len);
+}
+
+/**
+ * Compare two chunks for equality, constant time for cryptographic purposes.
+ *
+ * Note that this function is constant time only for chunks with the same
+ * length, i.e. it does not protect against guessing the length of one of the
+ * chunks.
+ */
+static inline bool chunk_equals_const(chunk_t a, chunk_t b)
+{
+	return a.ptr != NULL  && b.ptr != NULL &&
+			a.len == b.len && memeq_const(a.ptr, b.ptr, a.len);
 }
 
 /**
@@ -338,6 +353,15 @@ bool chunk_increment(chunk_t chunk);
 bool chunk_printable(chunk_t chunk, chunk_t *sane, char replace);
 
 /**
+ * Seed initial key for chunk_hash().
+ *
+ * This call should get invoked once during startup. This is usually done
+ * by calling library_init(). Calling it multiple times is safe, it gets
+ * executed just once.
+ */
+void chunk_hash_seed();
+
+/**
  * Computes a 32 bit hash of the given chunk.
  *
  * @note The output of this function is randomized, that is, it will only
@@ -351,7 +375,7 @@ bool chunk_printable(chunk_t chunk, chunk_t *sane, char replace);
  * @param chunk			data to hash
  * @return				hash value
  */
-u_int32_t chunk_hash(chunk_t chunk);
+uint32_t chunk_hash(chunk_t chunk);
 
 /**
  * Incremental version of chunk_hash. Use this to hash two or more chunks.
@@ -360,7 +384,7 @@ u_int32_t chunk_hash(chunk_t chunk);
  * @param hash			previous hash value
  * @return				hash value
  */
-u_int32_t chunk_hash_inc(chunk_t chunk, u_int32_t hash);
+uint32_t chunk_hash_inc(chunk_t chunk, uint32_t hash);
 
 /**
  * Computes a 32 bit hash of the given chunk.
@@ -374,7 +398,7 @@ u_int32_t chunk_hash_inc(chunk_t chunk, u_int32_t hash);
  * @param chunk			data to hash
  * @return				hash value
  */
-u_int32_t chunk_hash_static(chunk_t chunk);
+uint32_t chunk_hash_static(chunk_t chunk);
 
 /**
  * Incremental version of chunk_hash_static(). Use this to hash two or more
@@ -384,7 +408,7 @@ u_int32_t chunk_hash_static(chunk_t chunk);
  * @param hash			previous hash value
  * @return				hash value
  */
-u_int32_t chunk_hash_static_inc(chunk_t chunk, u_int32_t hash);
+uint32_t chunk_hash_static_inc(chunk_t chunk, uint32_t hash);
 
 /**
  * Computes a quick MAC from the given chunk and key using SipHash.
@@ -398,7 +422,32 @@ u_int32_t chunk_hash_static_inc(chunk_t chunk, u_int32_t hash);
  * @param key			key to use
  * @return				MAC for given input and key
  */
-u_int64_t chunk_mac(chunk_t chunk, u_char *key);
+uint64_t chunk_mac(chunk_t chunk, u_char *key);
+
+/**
+ * Calculate the Internet Checksum according to RFC 1071 for the given chunk.
+ *
+ * If the result is used with chunk_internet_checksum_inc() and the data length
+ * is not a multiple of 16 bit the checksum bytes have to be swapped to
+ * compensate the even/odd alignment.
+ *
+ * @param data			data to process
+ * @return				checksum (one's complement, network order)
+ */
+uint16_t chunk_internet_checksum(chunk_t data);
+
+/**
+ * Extend the given Internet Checksum (one's complement, in network byte order)
+ * with the given data.
+ *
+ * If data is not a multiple of 16 bits the checksum may have to be swapped to
+ * compensate even/odd alignment (see chunk_internet_checksum()).
+ *
+ * @param data			data to process
+ * @param checksum		previous checksum (one's complement, network order)
+ * @return				checksum (one's complement, network order)
+ */
+uint16_t chunk_internet_checksum_inc(chunk_t data, uint16_t checksum);
 
 /**
  * printf hook function for chunk_t.

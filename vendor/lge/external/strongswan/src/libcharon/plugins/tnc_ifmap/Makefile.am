@@ -1,12 +1,11 @@
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/libstrongswan \
 	-I$(top_srcdir)/src/libtls \
-	-I$(top_srcdir)/src/libhydra \
 	-I$(top_srcdir)/src/libcharon
 
 AM_CFLAGS = \
 	${xml_CFLAGS} \
-	-rdynamic
+	$(PLUGIN_CFLAGS)
 
 if MONOLITHIC
 noinst_LTLIBRARIES = libstrongswan-tnc-ifmap.la

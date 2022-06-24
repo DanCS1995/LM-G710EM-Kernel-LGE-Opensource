@@ -15,7 +15,9 @@
 
 #include "tnc_imc.h"
 
+#ifndef WIN32
 #include <dlfcn.h>
+#endif
 
 #include <tncif_pa_subtypes.h>
 
@@ -95,7 +97,7 @@ METHOD(imc_t, add_id, void,
 	void *pointer;
 
 	/* store the scalar value in the pointer */
-	pointer = (void*)id;
+	pointer = (void*)(uintptr_t)id;
 	this->additional_ids->insert_last(this->additional_ids, pointer);
 }
 
@@ -124,7 +126,7 @@ METHOD(imc_t, has_id, bool,
 	while (enumerator->enumerate(enumerator, &pointer))
 	{
 		/* interpret pointer as scalar value */
-		additional_id = (TNC_UInt32)pointer;
+		additional_id = (uintptr_t)pointer;
 
 		if (id == additional_id)
 		{
@@ -347,10 +349,16 @@ static private_tnc_imc_t* tnc_imc_create_empty(char *name)
 imc_t* tnc_imc_create(char *name, char *path)
 {
 	private_tnc_imc_t *this;
+	int flag = RTLD_LAZY;
 
 	this = tnc_imc_create_empty(name);
 
-	this->handle = dlopen(path, RTLD_LAZY);
+	if (lib->settings->get_bool(lib->settings, "%s.dlopen_use_rtld_now",
+								FALSE, lib->ns))
+	{
+		flag = RTLD_NOW;
+	}
+	this->handle = dlopen(path, flag);
 	if (!this->handle)
 	{
 		DBG1(DBG_TNC, "IMC \"%s\" failed to load: %s", name, dlerror());

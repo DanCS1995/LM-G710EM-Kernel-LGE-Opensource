@@ -1,5 +1,5 @@
-/* rndegd.c  -	interface to the EGD
- *	Copyright (C) 1999, 2000, 2002, 2003 Free Software Foundation, Inc.
+/* rndegd.c  -    interface to the EGD
+ *    Copyright (C) 1999, 2000, 2002, 2003 Free Software Foundation, Inc.
  *
  * This file is part of Libgcrypt.
  *
@@ -88,7 +88,7 @@ do_write( int fd, void *buf, size_t nbytes )
           if( errno == EINTR )
             continue;
           return -1;
-	}
+    }
       nleft -= nwritten;
       buf = (char*)buf + nwritten;
     }
@@ -180,7 +180,7 @@ _gcry_rndegd_connect_socket (int nofail)
   
   memset( &addr, 0, sizeof addr );
   addr.sun_family = AF_UNIX;
-  strcpy( addr.sun_path, name );	  
+  strcpy( addr.sun_path, name );      
   addr_len = (offsetof( struct sockaddr_un, sun_path )
               + strlen( addr.sun_path ));
   
@@ -191,7 +191,7 @@ _gcry_rndegd_connect_socket (int nofail)
     {
       if (!nofail)
         log_fatal("can't connect to EGD socket `%s': %s\n",
-		  name, strerror(errno) );
+          name, strerror(errno) );
       close (fd);
       fd = -1;
     }
@@ -254,7 +254,7 @@ _gcry_rndegd_gather_random (void (*add)(const void*, size_t,
           log_error("read error on EGD: %s\n", strerror(errno));
           do_restart = 1;
           goto restart;
-	}
+    }
       (*add)( buffer, n, origin );
       length -= n;
     }
@@ -280,7 +280,7 @@ _gcry_rndegd_gather_random (void (*add)(const void*, size_t,
           log_error("read error on EGD: %s\n", strerror(errno));
           do_restart = 1;
           goto restart;
-	}
+    }
       (*add)( buffer, n, origin );
       length -= n;
     }

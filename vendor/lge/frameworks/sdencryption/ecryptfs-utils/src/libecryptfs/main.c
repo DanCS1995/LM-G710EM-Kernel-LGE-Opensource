@@ -306,31 +306,31 @@ int
 generate_payload(struct ecryptfs_auth_tok *auth_tok, char *passphrase_sig,
          char *salt, char *session_key_encryption_key)
 {
-	int rc = 0;
-	int major, minor;
+    int rc = 0;
+    int major, minor;
 
-	memset(auth_tok, 0, sizeof(struct ecryptfs_auth_tok));
-	ecryptfs_get_versions(&major, &minor, NULL);
-	auth_tok->version = (((uint16_t)(major << 8) & 0xFF00)
-			     | ((uint16_t)minor & 0x00FF));
-	auth_tok->token_type = ECRYPTFS_PASSWORD;
-	strncpy((char *)auth_tok->token.password.signature, passphrase_sig,
-		ECRYPTFS_PASSWORD_SIG_SIZE);
-	memcpy(auth_tok->token.password.salt, salt, ECRYPTFS_SALT_SIZE);
-	memcpy(auth_tok->token.password.session_key_encryption_key,
-	       session_key_encryption_key, ECRYPTFS_MAX_KEY_BYTES);
-	/* TODO: Make the hash parameterizable via policy */
-	auth_tok->token.password.session_key_encryption_key_bytes =
+    memset(auth_tok, 0, sizeof(struct ecryptfs_auth_tok));
+    ecryptfs_get_versions(&major, &minor, NULL);
+    auth_tok->version = (((uint16_t)(major << 8) & 0xFF00)
+                 | ((uint16_t)minor & 0x00FF));
+    auth_tok->token_type = ECRYPTFS_PASSWORD;
+    strncpy((char *)auth_tok->token.password.signature, passphrase_sig,
+        ECRYPTFS_PASSWORD_SIG_SIZE);
+    memcpy(auth_tok->token.password.salt, salt, ECRYPTFS_SALT_SIZE);
+    memcpy(auth_tok->token.password.session_key_encryption_key,
+           session_key_encryption_key, ECRYPTFS_MAX_KEY_BYTES);
+    /* TODO: Make the hash parameterizable via policy */
+    auth_tok->token.password.session_key_encryption_key_bytes =
         LGE_MODIFY_SESSION_KEY_ENCRYPTION_KEY_BYTES;
-	auth_tok->token.password.flags |=
-		ECRYPTFS_SESSION_KEY_ENCRYPTION_KEY_SET;
-	/* The kernel code will encrypt the session key. */
-	auth_tok->session_key.encrypted_key[0] = 0;
-	auth_tok->session_key.encrypted_key_size = 0;
-	/* Default; subject to change by kernel eCryptfs */
-	auth_tok->token.password.hash_algo = PGP_DIGEST_ALGO_SHA512;
-	auth_tok->token.password.flags &= ~(ECRYPTFS_PERSISTENT_PASSWORD);
-	return rc;
+    auth_tok->token.password.flags |=
+        ECRYPTFS_SESSION_KEY_ENCRYPTION_KEY_SET;
+    /* The kernel code will encrypt the session key. */
+    auth_tok->session_key.encrypted_key[0] = 0;
+    auth_tok->session_key.encrypted_key_size = 0;
+    /* Default; subject to change by kernel eCryptfs */
+    auth_tok->token.password.hash_algo = PGP_DIGEST_ALGO_SHA512;
+    auth_tok->token.password.flags &= ~(ECRYPTFS_PERSISTENT_PASSWORD);
+    return rc;
 }
 
 /**

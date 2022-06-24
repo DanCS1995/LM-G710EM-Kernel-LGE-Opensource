@@ -34,17 +34,17 @@ struct private_hash_payload_t {
 	/**
 	 * Next payload type.
 	 */
-	u_int8_t next_payload;
+	uint8_t next_payload;
 
 	/**
 	 * Reserved byte
 	 */
-	u_int8_t reserved;
+	uint8_t reserved;
 
 	/**
 	 * Length of this payload.
 	 */
-	u_int16_t payload_length;
+	uint16_t payload_length;
 
 	/**
 	 * The contained hash value.
@@ -52,7 +52,7 @@ struct private_hash_payload_t {
 	chunk_t hash;
 
 	/**
-	 * either HASH_V1 or NAT_D_V1
+	 * either PLV1_HASH or PLV1_NAT_D
 	 */
 	payload_type_t type;
 };
@@ -169,7 +169,7 @@ hash_payload_t *hash_payload_create(payload_type_t type)
 			.get_hash = _get_hash,
 			.destroy = _destroy,
 		},
-		.next_payload = NO_PAYLOAD,
+		.next_payload = PL_NONE,
 		.payload_length = get_header_length(this),
 		.type = type,
 	);

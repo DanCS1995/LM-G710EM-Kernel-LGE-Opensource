@@ -30,9 +30,9 @@ error "gperf generated tables don't work with this execution character set. Plea
 #endif
 
 
-/* stroke keywords
+/*
  * Copyright (C) 2006 Andreas Steffen
- * Hochschule fuer Technik Rapperswil, Switzerland
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -54,12 +54,12 @@ struct stroke_token {
     stroke_keyword_t kw;
 };
 
-#define TOTAL_KEYWORDS 49
+#define TOTAL_KEYWORDS 48
 #define MIN_WORD_LENGTH 2
 #define MAX_WORD_LENGTH 15
-#define MIN_HASH_VALUE 2
-#define MAX_HASH_VALUE 63
-/* maximum key range = 62, duplicates = 0 */
+#define MIN_HASH_VALUE 3
+#define MAX_HASH_VALUE 59
+/* maximum key range = 57, duplicates = 0 */
 
 #ifdef __GNUC__
 __inline
@@ -75,32 +75,32 @@ hash (str, len)
 {
   static const unsigned char asso_values[] =
     {
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64,  2, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64,  0, 35,  1,
-       2,  1, 64, 19, 64,  5, 64, 20, 30, 64,
-      14, 19,  0, 64, 21, 13, 14,  8, 64, 64,
-      12,  0, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-      64, 64, 64, 64, 64, 64
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 25, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60,  0, 18,  1,
+       1, 15, 60, 23, 60, 23, 60, 11,  0,  7,
+      60, 24, 14, 60,  6,  9, 16,  9, 60, 60,
+       2,  3, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60, 60, 60, 60, 60,
+      60, 60, 60, 60, 60, 60
     };
   register int hval = len;
 
@@ -116,72 +116,86 @@ hash (str, len)
       case 4:
       case 3:
       case 2:
-        hval += asso_values[(unsigned char)str[1]];
+      case 1:
+        hval += asso_values[(unsigned char)str[0]];
         break;
     }
+
+  /* 2016-07-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_DPD_NOW [START] */
+  if (hval == 4 && str[1] == 'p' && str[2] == 'd') {
+      hval = 1;
+  }
+  /* 2016-07-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_DPD_NOW [END] */
+
   return hval;
 }
 
 static const struct stroke_token wordlist[] =
   {
-    {"up",              STROKE_UP},
-    {"dpd",             STROKE_DPD},
-    {"del",             STROKE_DEL},
     {"add",             STROKE_ADD},
+    {"del",             STROKE_DEL},
+    {"down",            STROKE_DOWN},
+    {"listall",         STROKE_LIST_ALL},
+    {"listcrls",        STROKE_LIST_CRLS},
+    {"up",              STROKE_UP},
+    {"listaacerts",     STROKE_LIST_AACERTS},
+    {"listcacerts",     STROKE_LIST_CACERTS},
     {"rekey",           STROKE_REKEY},
-    {"leases",          STROKE_LEASES},
     {"rereadall",       STROKE_REREAD_ALL},
+    {"listcerts",       STROKE_LIST_CERTS},
     {"rereadcrls",      STROKE_REREAD_CRLS},
     {"rereadacerts",    STROKE_REREAD_ACERTS},
     {"rereadaacerts",   STROKE_REREAD_AACERTS},
     {"rereadcacerts",   STROKE_REREAD_CACERTS},
-    {"listacerts",      STROKE_LIST_ACERTS},
-    {"listaacerts",     STROKE_LIST_AACERTS},
-    {"listcacerts",     STROKE_LIST_CACERTS},
-    {"purgeocsp",       STROKE_PURGE_OCSP},
-    {"purgecerts",      STROKE_PURGE_CERTS},
-    {"delete",          STROKE_DELETE},
-    {"listcainfos",     STROKE_LIST_CAINFOS},
-    {"down",            STROKE_DOWN},
-    {"listplugins",     STROKE_LIST_PLUGINS},
-    {"route",           STROKE_ROUTE},
+    {"leases",          STROKE_LEASES},
     {"listcounters",    STROKE_COUNTERS},
-    {"rereadsecrets",   STROKE_REREAD_SECRETS},
+    {"delete",          STROKE_DELETE},
     {"status",          STROKE_STATUS},
-    {"loglevel",        STROKE_LOGLEVEL},
-    {"unroute",         STROKE_UNROUTE},
+    {"listacerts",      STROKE_LIST_ACERTS},
+    {"route",           STROKE_ROUTE},
     {"statusall",       STROKE_STATUSALL},
-    {"listalgs",        STROKE_LIST_ALGS},
+    {"rereadsecrets",   STROKE_REREAD_SECRETS},
     {"statusallnb",     STROKE_STATUSALL_NOBLK},
     {"statusall-nb",    STROKE_STATUSALL_NOBLK},
-    {"rereadocspcerts", STROKE_REREAD_OCSPCERTS},
-    {"listcerts",       STROKE_LIST_CERTS},
-    {"purgeike",        STROKE_PURGE_IKE},
-    {"purgecrls",       STROKE_PURGE_CRLS},
+    {"listalgs",        STROKE_LIST_ALGS},
     {"up-nb",           STROKE_UP_NOBLK},
-    {"memusage",        STROKE_MEMUSAGE},
-    {"listall",         STROKE_LIST_ALL},
-    {"listcrls",        STROKE_LIST_CRLS},
-    {"listocsp",        STROKE_LIST_OCSP},
-    {"user-creds",      STROKE_USER_CREDS},
-    {"resetcounters",   STROKE_COUNTERS_RESET},
+    {"exportx509",      STROKE_EXPORT_X509},
+    {"listplugins",     STROKE_LIST_PLUGINS},
+    {"listcainfos",     STROKE_LIST_CAINFOS},
     {"exportconncert",  STROKE_EXPORT_CONN_CERT},
     {"exportconnchain", STROKE_EXPORT_CONN_CHAIN},
-    {"listocspcerts",   STROKE_LIST_OCSPCERTS},
-    {"listpubkeys",     STROKE_LIST_PUBKEYS},
+    {"loglevel",        STROKE_LOGLEVEL},
+    {"purgeocsp",       STROKE_PURGE_OCSP},
+    {"unroute",         STROKE_UNROUTE},
+    {"listocsp",        STROKE_LIST_OCSP},
     {"down-srcip",      STROKE_DOWN_SRCIP},
+    {"listpubkeys",     STROKE_LIST_PUBKEYS},
+    {"purgecrls",       STROKE_PURGE_CRLS},
+    {"rereadocspcerts", STROKE_REREAD_OCSPCERTS},
+    {"listocspcerts",   STROKE_LIST_OCSPCERTS},
+    {"memusage",        STROKE_MEMUSAGE},
+    {"purgeike",        STROKE_PURGE_IKE},
+    {"user-creds",      STROKE_USER_CREDS},
+    {"down-nb",         STROKE_DOWN_NOBLK},
+    {"purgecerts",      STROKE_PURGE_CERTS},
     {"listgroups",      STROKE_LIST_GROUPS},
-    {"exportx509",      STROKE_EXPORT_X509},
-    {"down-nb",         STROKE_DOWN_NOBLK}
+    {"resetcounters",   STROKE_COUNTERS_RESET}
+    /* 2016-07-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_DPD_NOW [START] */
+    ,{"dpd",             STROKE_DPD}
+    /* 2016-07-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_DPD_NOW [START] */
   };
 
 static const short lookup[] =
   {
-    -1, -1,  0,  1,  2,  3,  4, -1,  5, -1,  6, -1,  7,  8,
-     9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-    23, 24, 25, 26, 27, 28, 29, 30, 31, 32, -1, 33, 34, 35,
-    36, -1, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, -1, 47,
-    -1, -1, -1, -1, -1, -1, -1, 48
+    /* 2016-07-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_DPD_NOW [START] */
+    //original
+    //-1, -1, -1,  0,  1,  2, -1,  3, -1,  4, -1,  5,  6,  7,
+    -1, 48, -1,  0,  1,  2, -1,  3, -1,  4, -1,  5,  6,  7,
+    /* 2016-07-02 protocol-iwlan@lge.com LGP_DATA_IWLAN_DPD_NOW [END] */
+     8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+    22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+    36, 37, 38, 39, 40, 41, 42, -1, 43, 44, -1, -1, 45, -1,
+    -1, 46, -1, 47
   };
 
 #ifdef __GNUC__

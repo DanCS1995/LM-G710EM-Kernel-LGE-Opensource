@@ -1,4 +1,4 @@
-/* camellia.h	ver 1.2.0
+/* camellia.h    ver 1.2.0
  *
  * Copyright (C) 2006,2007
  * NTT (Nippon Telegraph and Telephone Corporation).
@@ -60,18 +60,18 @@ typedef unsigned int KEY_TABLE_TYPE[CAMELLIA_TABLE_WORD_LEN];
 
 
 void Camellia_Ekeygen(const int keyBitLength,
-		      const unsigned char *rawKey, 
-		      KEY_TABLE_TYPE keyTable);
+              const unsigned char *rawKey, 
+              KEY_TABLE_TYPE keyTable);
 
 void Camellia_EncryptBlock(const int keyBitLength,
-			   const unsigned char *plaintext, 
-			   const KEY_TABLE_TYPE keyTable, 
-			   unsigned char *cipherText);
+               const unsigned char *plaintext, 
+               const KEY_TABLE_TYPE keyTable, 
+               unsigned char *cipherText);
 
 void Camellia_DecryptBlock(const int keyBitLength, 
-			   const unsigned char *cipherText, 
-			   const KEY_TABLE_TYPE keyTable, 
-			   unsigned char *plaintext);
+               const unsigned char *cipherText, 
+               const KEY_TABLE_TYPE keyTable, 
+               unsigned char *plaintext);
 
 
 #ifdef  __cplusplus

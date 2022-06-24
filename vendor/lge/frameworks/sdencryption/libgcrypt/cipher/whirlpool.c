@@ -1212,73 +1212,73 @@ whirlpool_transform (whirlpool_context_t *context, const unsigned char *data)
       /* Compute round key K^r.  */
 
       block[0] = (C0[(key[0] >> 56) & 0xFF] ^ C1[(key[7] >> 48) & 0xFF] ^
-		  C2[(key[6] >> 40) & 0xFF] ^ C3[(key[5] >> 32) & 0xFF] ^
-		  C4[(key[4] >> 24) & 0xFF] ^ C5[(key[3] >> 16) & 0xFF] ^
-		  C6[(key[2] >>  8) & 0xFF] ^ C7[(key[1] >>  0) & 0xFF] ^ rc[r]);
+          C2[(key[6] >> 40) & 0xFF] ^ C3[(key[5] >> 32) & 0xFF] ^
+          C4[(key[4] >> 24) & 0xFF] ^ C5[(key[3] >> 16) & 0xFF] ^
+          C6[(key[2] >>  8) & 0xFF] ^ C7[(key[1] >>  0) & 0xFF] ^ rc[r]);
       block[1] = (C0[(key[1] >> 56) & 0xFF] ^ C1[(key[0] >> 48) & 0xFF] ^
-		  C2[(key[7] >> 40) & 0xFF] ^ C3[(key[6] >> 32) & 0xFF] ^
-		  C4[(key[5] >> 24) & 0xFF] ^ C5[(key[4] >> 16) & 0xFF] ^
-		  C6[(key[3] >>  8) & 0xFF] ^ C7[(key[2] >>  0) & 0xFF]);
+          C2[(key[7] >> 40) & 0xFF] ^ C3[(key[6] >> 32) & 0xFF] ^
+          C4[(key[5] >> 24) & 0xFF] ^ C5[(key[4] >> 16) & 0xFF] ^
+          C6[(key[3] >>  8) & 0xFF] ^ C7[(key[2] >>  0) & 0xFF]);
       block[2] = (C0[(key[2] >> 56) & 0xFF] ^ C1[(key[1] >> 48) & 0xFF] ^
-		  C2[(key[0] >> 40) & 0xFF] ^ C3[(key[7] >> 32) & 0xFF] ^
-		  C4[(key[6] >> 24) & 0xFF] ^ C5[(key[5] >> 16) & 0xFF] ^
-		  C6[(key[4] >>  8) & 0xFF] ^ C7[(key[3] >>  0) & 0xFF]);
+          C2[(key[0] >> 40) & 0xFF] ^ C3[(key[7] >> 32) & 0xFF] ^
+          C4[(key[6] >> 24) & 0xFF] ^ C5[(key[5] >> 16) & 0xFF] ^
+          C6[(key[4] >>  8) & 0xFF] ^ C7[(key[3] >>  0) & 0xFF]);
       block[3] = (C0[(key[3] >> 56) & 0xFF] ^ C1[(key[2] >> 48) & 0xFF] ^
-		  C2[(key[1] >> 40) & 0xFF] ^ C3[(key[0] >> 32) & 0xFF] ^
-		  C4[(key[7] >> 24) & 0xFF] ^ C5[(key[6] >> 16) & 0xFF] ^
-		  C6[(key[5] >>  8) & 0xFF] ^ C7[(key[4] >>  0) & 0xFF]);
+          C2[(key[1] >> 40) & 0xFF] ^ C3[(key[0] >> 32) & 0xFF] ^
+          C4[(key[7] >> 24) & 0xFF] ^ C5[(key[6] >> 16) & 0xFF] ^
+          C6[(key[5] >>  8) & 0xFF] ^ C7[(key[4] >>  0) & 0xFF]);
       block[4] = (C0[(key[4] >> 56) & 0xFF] ^ C1[(key[3] >> 48) & 0xFF] ^
-		  C2[(key[2] >> 40) & 0xFF] ^ C3[(key[1] >> 32) & 0xFF] ^
-		  C4[(key[0] >> 24) & 0xFF] ^ C5[(key[7] >> 16) & 0xFF] ^
-		  C6[(key[6] >>  8) & 0xFF] ^ C7[(key[5] >>  0) & 0xFF]);
+          C2[(key[2] >> 40) & 0xFF] ^ C3[(key[1] >> 32) & 0xFF] ^
+          C4[(key[0] >> 24) & 0xFF] ^ C5[(key[7] >> 16) & 0xFF] ^
+          C6[(key[6] >>  8) & 0xFF] ^ C7[(key[5] >>  0) & 0xFF]);
       block[5] = (C0[(key[5] >> 56) & 0xFF] ^ C1[(key[4] >> 48) & 0xFF] ^
-		  C2[(key[3] >> 40) & 0xFF] ^ C3[(key[2] >> 32) & 0xFF] ^
-		  C4[(key[1] >> 24) & 0xFF] ^ C5[(key[0] >> 16) & 0xFF] ^
-		  C6[(key[7] >>  8) & 0xFF] ^ C7[(key[6] >>  0) & 0xFF]);
+          C2[(key[3] >> 40) & 0xFF] ^ C3[(key[2] >> 32) & 0xFF] ^
+          C4[(key[1] >> 24) & 0xFF] ^ C5[(key[0] >> 16) & 0xFF] ^
+          C6[(key[7] >>  8) & 0xFF] ^ C7[(key[6] >>  0) & 0xFF]);
       block[6] = (C0[(key[6] >> 56) & 0xFF] ^ C1[(key[5] >> 48) & 0xFF] ^
-		  C2[(key[4] >> 40) & 0xFF] ^ C3[(key[3] >> 32) & 0xFF] ^
-		  C4[(key[2] >> 24) & 0xFF] ^ C5[(key[1] >> 16) & 0xFF] ^
-		  C6[(key[0] >>  8) & 0xFF] ^ C7[(key[7] >>  0) & 0xFF]);
+          C2[(key[4] >> 40) & 0xFF] ^ C3[(key[3] >> 32) & 0xFF] ^
+          C4[(key[2] >> 24) & 0xFF] ^ C5[(key[1] >> 16) & 0xFF] ^
+          C6[(key[0] >>  8) & 0xFF] ^ C7[(key[7] >>  0) & 0xFF]);
       block[7] = (C0[(key[7] >> 56) & 0xFF] ^ C1[(key[6] >> 48) & 0xFF] ^
-		  C2[(key[5] >> 40) & 0xFF] ^ C3[(key[4] >> 32) & 0xFF] ^
-		  C4[(key[3] >> 24) & 0xFF] ^ C5[(key[2] >> 16) & 0xFF] ^
-		  C6[(key[1] >>  8) & 0xFF] ^ C7[(key[0] >>  0) & 0xFF]);
+          C2[(key[5] >> 40) & 0xFF] ^ C3[(key[4] >> 32) & 0xFF] ^
+          C4[(key[3] >> 24) & 0xFF] ^ C5[(key[2] >> 16) & 0xFF] ^
+          C6[(key[1] >>  8) & 0xFF] ^ C7[(key[0] >>  0) & 0xFF]);
       block_copy (key, block, i);
 
       /* Apply r-th round transformation.  */
 
       block[0] = (C0[(state[0] >> 56) & 0xFF] ^ C1[(state[7] >> 48) & 0xFF] ^
-		  C2[(state[6] >> 40) & 0xFF] ^ C3[(state[5] >> 32) & 0xFF] ^
-		  C4[(state[4] >> 24) & 0xFF] ^ C5[(state[3] >> 16) & 0xFF] ^
-		  C6[(state[2] >>  8) & 0xFF] ^ C7[(state[1] >>  0) & 0xFF] ^ key[0]);
+          C2[(state[6] >> 40) & 0xFF] ^ C3[(state[5] >> 32) & 0xFF] ^
+          C4[(state[4] >> 24) & 0xFF] ^ C5[(state[3] >> 16) & 0xFF] ^
+          C6[(state[2] >>  8) & 0xFF] ^ C7[(state[1] >>  0) & 0xFF] ^ key[0]);
       block[1] = (C0[(state[1] >> 56) & 0xFF] ^ C1[(state[0] >> 48) & 0xFF] ^
-		  C2[(state[7] >> 40) & 0xFF] ^ C3[(state[6] >> 32) & 0xFF] ^
-		  C4[(state[5] >> 24) & 0xFF] ^ C5[(state[4] >> 16) & 0xFF] ^
-		  C6[(state[3] >>  8) & 0xFF] ^ C7[(state[2] >>  0) & 0xFF] ^ key[1]);
+          C2[(state[7] >> 40) & 0xFF] ^ C3[(state[6] >> 32) & 0xFF] ^
+          C4[(state[5] >> 24) & 0xFF] ^ C5[(state[4] >> 16) & 0xFF] ^
+          C6[(state[3] >>  8) & 0xFF] ^ C7[(state[2] >>  0) & 0xFF] ^ key[1]);
       block[2] = (C0[(state[2] >> 56) & 0xFF] ^ C1[(state[1] >> 48) & 0xFF] ^
-		  C2[(state[0] >> 40) & 0xFF] ^ C3[(state[7] >> 32) & 0xFF] ^
-		  C4[(state[6] >> 24) & 0xFF] ^ C5[(state[5] >> 16) & 0xFF] ^
-		  C6[(state[4] >>  8) & 0xFF] ^ C7[(state[3] >>  0) & 0xFF] ^ key[2]);
+          C2[(state[0] >> 40) & 0xFF] ^ C3[(state[7] >> 32) & 0xFF] ^
+          C4[(state[6] >> 24) & 0xFF] ^ C5[(state[5] >> 16) & 0xFF] ^
+          C6[(state[4] >>  8) & 0xFF] ^ C7[(state[3] >>  0) & 0xFF] ^ key[2]);
       block[3] = (C0[(state[3] >> 56) & 0xFF] ^ C1[(state[2] >> 48) & 0xFF] ^
-		  C2[(state[1] >> 40) & 0xFF] ^ C3[(state[0] >> 32) & 0xFF] ^
-		  C4[(state[7] >> 24) & 0xFF] ^ C5[(state[6] >> 16) & 0xFF] ^
-		  C6[(state[5] >>  8) & 0xFF] ^ C7[(state[4] >>  0) & 0xFF] ^ key[3]);
+          C2[(state[1] >> 40) & 0xFF] ^ C3[(state[0] >> 32) & 0xFF] ^
+          C4[(state[7] >> 24) & 0xFF] ^ C5[(state[6] >> 16) & 0xFF] ^
+          C6[(state[5] >>  8) & 0xFF] ^ C7[(state[4] >>  0) & 0xFF] ^ key[3]);
       block[4] = (C0[(state[4] >> 56) & 0xFF] ^ C1[(state[3] >> 48) & 0xFF] ^
-		  C2[(state[2] >> 40) & 0xFF] ^ C3[(state[1] >> 32) & 0xFF] ^
-		  C4[(state[0] >> 24) & 0xFF] ^ C5[(state[7] >> 16) & 0xFF] ^
-		  C6[(state[6] >>  8) & 0xFF] ^ C7[(state[5] >>  0) & 0xFF] ^ key[4]);
+          C2[(state[2] >> 40) & 0xFF] ^ C3[(state[1] >> 32) & 0xFF] ^
+          C4[(state[0] >> 24) & 0xFF] ^ C5[(state[7] >> 16) & 0xFF] ^
+          C6[(state[6] >>  8) & 0xFF] ^ C7[(state[5] >>  0) & 0xFF] ^ key[4]);
       block[5] = (C0[(state[5] >> 56) & 0xFF] ^ C1[(state[4] >> 48) & 0xFF] ^
-		  C2[(state[3] >> 40) & 0xFF] ^ C3[(state[2] >> 32) & 0xFF] ^
-		  C4[(state[1] >> 24) & 0xFF] ^ C5[(state[0] >> 16) & 0xFF] ^
-		  C6[(state[7] >>  8) & 0xFF] ^ C7[(state[6] >>  0) & 0xFF] ^ key[5]);
+          C2[(state[3] >> 40) & 0xFF] ^ C3[(state[2] >> 32) & 0xFF] ^
+          C4[(state[1] >> 24) & 0xFF] ^ C5[(state[0] >> 16) & 0xFF] ^
+          C6[(state[7] >>  8) & 0xFF] ^ C7[(state[6] >>  0) & 0xFF] ^ key[5]);
       block[6] = (C0[(state[6] >> 56) & 0xFF] ^ C1[(state[5] >> 48) & 0xFF] ^
-		  C2[(state[4] >> 40) & 0xFF] ^ C3[(state[3] >> 32) & 0xFF] ^
-		  C4[(state[2] >> 24) & 0xFF] ^ C5[(state[1] >> 16) & 0xFF] ^
-		  C6[(state[0] >>  8) & 0xFF] ^ C7[(state[7] >>  0) & 0xFF] ^ key[6]);
+          C2[(state[4] >> 40) & 0xFF] ^ C3[(state[3] >> 32) & 0xFF] ^
+          C4[(state[2] >> 24) & 0xFF] ^ C5[(state[1] >> 16) & 0xFF] ^
+          C6[(state[0] >>  8) & 0xFF] ^ C7[(state[7] >>  0) & 0xFF] ^ key[6]);
       block[7] = (C0[(state[7] >> 56) & 0xFF] ^ C1[(state[6] >> 48) & 0xFF] ^
-		  C2[(state[5] >> 40) & 0xFF] ^ C3[(state[4] >> 32) & 0xFF] ^
-		  C4[(state[3] >> 24) & 0xFF] ^ C5[(state[2] >> 16) & 0xFF] ^
-		  C6[(state[1] >>  8) & 0xFF] ^ C7[(state[0] >>  0) & 0xFF] ^ key[7]);
+          C2[(state[5] >> 40) & 0xFF] ^ C3[(state[4] >> 32) & 0xFF] ^
+          C4[(state[3] >> 24) & 0xFF] ^ C5[(state[2] >> 16) & 0xFF] ^
+          C6[(state[1] >>  8) & 0xFF] ^ C7[(state[0] >>  0) & 0xFF] ^ key[7]);
       block_copy (state, block, i);
     }
 
@@ -1290,7 +1290,7 @@ whirlpool_transform (whirlpool_context_t *context, const unsigned char *data)
 
 static void
 whirlpool_add (whirlpool_context_t *context,
-	       const void *buffer_arg, size_t buffer_n)
+           const void *buffer_arg, size_t buffer_n)
 {
   const unsigned char *buffer = buffer_arg;
   u64 buffer_size;
@@ -1312,13 +1312,13 @@ whirlpool_add (whirlpool_context_t *context,
   if (context->count)
     {
       while (buffer_n && (context->count < BLOCK_SIZE))
-	{
-	  context->buffer[context->count++] = *buffer++;
-	  buffer_n--;
-	}
+    {
+      context->buffer[context->count++] = *buffer++;
+      buffer_n--;
+    }
       whirlpool_add (context, NULL, 0);
       if (!buffer_n)
-	/* Done.  */
+    /* Done.  */
         return;
     }
   /*_gcry_burn_stack (80+6*sizeof(void*));*/ /* FIXME */
@@ -1342,7 +1342,7 @@ whirlpool_add (whirlpool_context_t *context,
   for (i = 1; i <= 32; i++)
     {
       if (! (buffer_size || carry))
-	break;
+    break;
 
       carry += context->length[32 - i] + (buffer_size & 0xFF);
       context->length[32 - i] = carry;
@@ -1376,7 +1376,7 @@ whirlpool_final (void *ctx)
     {
       /* An extra block is necessary.  */
       while (context->count < 64)
-	context->buffer[context->count++] = 0;
+    context->buffer[context->count++] = 0;
       whirlpool_add (context, NULL, 0);
     }
   while (context->count < 32)

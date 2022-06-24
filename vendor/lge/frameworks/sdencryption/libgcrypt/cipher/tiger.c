@@ -52,20 +52,20 @@ typedef struct {
  * "abc"                F258C1E88414AB2A 527AB541FFC5B8BF 935F7B951C132951
  * "Tiger"              9F00F599072300DD 276ABB38C8EB6DEC 37790C116F9D2BDF
  * "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-"
- *			87FB2A9083851CF7 470D2CF810E6DF9E B586445034A5A386
+ *            87FB2A9083851CF7 470D2CF810E6DF9E B586445034A5A386
  * "ABCDEFGHIJKLMNOPQRSTUVWXYZ=abcdefghijklmnopqrstuvwxyz+0123456789"
- *			467DB80863EBCE48 8DF1CD1261655DE9 57896565975F9197
+ *            467DB80863EBCE48 8DF1CD1261655DE9 57896565975F9197
  * "Tiger - A Fast New Hash Function, by Ross Anderson and Eli Biham"
- *			0C410A042968868A 1671DA5A3FD29A72 5EC1E457D3CDB303
+ *            0C410A042968868A 1671DA5A3FD29A72 5EC1E457D3CDB303
  * "Tiger - A Fast New Hash Function, by Ross Anderson and Eli Biham, proc"
  * "eedings of Fast Software Encryption 3, Cambridge."
- *			EBF591D5AFA655CE 7F22894FF87F54AC 89C811B6B0DA3193
+ *            EBF591D5AFA655CE 7F22894FF87F54AC 89C811B6B0DA3193
  * "Tiger - A Fast New Hash Function, by Ross Anderson and Eli Biham, proc"
  * "eedings of Fast Software Encryption 3, Cambridge, 1996."
- *			3D9AEB03D1BD1A63 57B2774DFD6D5B24 DD68151D503974FC
+ *            3D9AEB03D1BD1A63 57B2774DFD6D5B24 DD68151D503974FC
  * "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-ABCDEF"
  * "GHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-"
- *			00B83EB4E53440C5 76AC6AAEE0A74858 25FD15E70A59FFE4
+ *            00B83EB4E53440C5 76AC6AAEE0A74858 25FD15E70A59FFE4
  */
 
 static u64 sbox1[256] = {
@@ -694,10 +694,10 @@ transform ( TIGER_CONTEXT *hd, const unsigned char *data )
   u64 x[8];
 #ifdef WORDS_BIGENDIAN
 #define MKWORD(d,n) \
-		(  ((u64)(d)[8*(n)+7]) << 56 | ((u64)(d)[8*(n)+6]) << 48  \
-		 | ((u64)(d)[8*(n)+5]) << 40 | ((u64)(d)[8*(n)+4]) << 32  \
-		 | ((u64)(d)[8*(n)+3]) << 24 | ((u64)(d)[8*(n)+2]) << 16  \
-		 | ((u64)(d)[8*(n)+1]) << 8  | ((u64)(d)[8*(n)	])	 )
+        (  ((u64)(d)[8*(n)+7]) << 56 | ((u64)(d)[8*(n)+6]) << 48  \
+         | ((u64)(d)[8*(n)+5]) << 40 | ((u64)(d)[8*(n)+4]) << 32  \
+         | ((u64)(d)[8*(n)+3]) << 24 | ((u64)(d)[8*(n)+2]) << 16  \
+         | ((u64)(d)[8*(n)+1]) << 8  | ((u64)(d)[8*(n)    ])     )
   x[0] = MKWORD(data, 0);
   x[1] = MKWORD(data, 1);
   x[2] = MKWORD(data, 2);
@@ -817,11 +817,11 @@ tiger_final( void *context )
       memset(hd->buf, 0, 56 ); /* fill next block with zeroes */
     }
   /* append the 64 bit count */
-  hd->buf[56] = lsb	   ;
+  hd->buf[56] = lsb       ;
   hd->buf[57] = lsb >>  8;
   hd->buf[58] = lsb >> 16;
   hd->buf[59] = lsb >> 24;
-  hd->buf[60] = msb	   ;
+  hd->buf[60] = msb       ;
   hd->buf[61] = msb >>  8;
   hd->buf[62] = msb >> 16;
   hd->buf[63] = msb >> 24;
@@ -833,14 +833,14 @@ tiger_final( void *context )
 #define X(a) do { *(u64*)p = hd->a ; p += 8; } while(0)
 #else /* little endian */
 #define X(a) do { *p++ = hd->a >> 56; *p++ = hd->a >> 48; \
-	          *p++ = hd->a >> 40; *p++ = hd->a >> 32; \
-	          *p++ = hd->a >> 24; *p++ = hd->a >> 16; \
-	          *p++ = hd->a >>  8; *p++ = hd->a;       } while(0)
+              *p++ = hd->a >> 40; *p++ = hd->a >> 32; \
+              *p++ = hd->a >> 24; *p++ = hd->a >> 16; \
+              *p++ = hd->a >>  8; *p++ = hd->a;       } while(0)
 #endif
 #define Y(a) do { *p++ = hd->a      ; *p++ = hd->a >> 8;  \
-	          *p++ = hd->a >> 16; *p++ = hd->a >> 24; \
-	          *p++ = hd->a >> 32; *p++ = hd->a >> 40; \
-	          *p++ = hd->a >> 48; *p++ = hd->a >> 56; } while(0)
+              *p++ = hd->a >> 16; *p++ = hd->a >> 24; \
+              *p++ = hd->a >> 32; *p++ = hd->a >> 40; \
+              *p++ = hd->a >> 48; *p++ = hd->a >> 56; } while(0)
   if (hd->variant == 0)
     {
       X(a);

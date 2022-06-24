@@ -94,17 +94,17 @@ detect_ia32_gnuc (void)
   if (!strcmp (vendor_id, "CentaurHauls"))
     {
       asm volatile 
-        ("pushl %%ebx\n\t"	        /* Save GOT register.  */
+        ("pushl %%ebx\n\t"            /* Save GOT register.  */
          "movl $0xC0000000, %%eax\n\t"  /* Check for extended centaur  */
          "cpuid\n\t"                    /* feature flags.              */
-         "popl %%ebx\n\t"	        /* Restore GOT register. */
+         "popl %%ebx\n\t"            /* Restore GOT register. */
          "cmpl $0xC0000001, %%eax\n\t"
          "jb .Lready%=\n\t"             /* EAX < 0xC0000000 => no padlock.  */
 
-         "pushl %%ebx\n\t"	        /* Save GOT register. */
+         "pushl %%ebx\n\t"            /* Save GOT register. */
          "movl $0xC0000001, %%eax\n\t"  /* Ask for the extended */
          "cpuid\n\t"                    /* feature flags.       */
-         "popl %%ebx\n\t"	        /* Restore GOT register. */
+         "popl %%ebx\n\t"            /* Restore GOT register. */
 
          "movl %%edx, %%eax\n\t"        /* Take copy of feature flags.  */
          "andl $0x0C, %%eax\n\t"        /* Test bits 2 and 3 to see whether */

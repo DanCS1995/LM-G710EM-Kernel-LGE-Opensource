@@ -1719,12 +1719,12 @@ int do_command4(int argc, char *argv[], char **table,
 
 /* 2014-12-18 kyungsu.mok@lge.com LGP_DATA_TOOLS_IPTABLES_FORCE_WAIT_OPTION [START] */
 #ifdef LGP_DATA_TOOLS_IPTABLES_FORCE_WAIT_OPTION
-    if (!restore && wait == 0) {
-        patch_code_id("LPCP-704@n@c@iptables@iptables.c@1");
-        wait_interval_set = true;
-        wait = 3;
-        wait_interval.tv_usec = 200;
-    }
+	if (!restore && wait == 0) {
+		patch_code_id("LPCP-704@n@c@iptables@iptables.c@1");
+		wait_interval_set = true;
+		wait = 3;
+		wait_interval.tv_usec = 200;
+	}
 #endif
 /* 2014-12-18 kyungsu.mok@lge.com LGP_DATA_TOOLS_IPTABLES_FORCE_WAIT_OPTION [END] */
 

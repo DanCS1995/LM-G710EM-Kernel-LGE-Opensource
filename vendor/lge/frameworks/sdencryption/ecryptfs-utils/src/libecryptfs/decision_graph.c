@@ -250,7 +250,7 @@ int do_transition(struct ecryptfs_ctx *ctx, struct param_node **next,
                 if ((*next = tn->next_token))
                     return 0;
                 else
-				{
+                {
                     syslog(LOG_INFO, "%s, %d :: Error\n", __FUNCTION__, __LINE__); //sw.yoo_20120112 - print debug    
                     return -EINVAL;
                 }

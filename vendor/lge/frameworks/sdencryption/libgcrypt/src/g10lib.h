@@ -46,10 +46,10 @@
 
 #if __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 5 )
 #define JNLIB_GCC_M_FUNCTION 1
-#define JNLIB_GCC_A_NR 	     __attribute__ ((noreturn))
+#define JNLIB_GCC_A_NR          __attribute__ ((noreturn))
 #define JNLIB_GCC_A_PRINTF( f, a )  __attribute__ ((format (printf,f,a)))
 #define JNLIB_GCC_A_NR_PRINTF( f, a ) \
-			    __attribute__ ((noreturn, format (printf,f,a)))
+                __attribute__ ((noreturn, format (printf,f,a)))
 #define GCC_ATTR_NORETURN  __attribute__ ((__noreturn__))
 #else
 #define JNLIB_GCC_A_NR
@@ -195,11 +195,7 @@ gpg_err_code_t _gcry_generate_fips186_3_prime
 
 /* Replacements of missing functions (missing-string.c).  */
 #ifndef HAVE_STPCPY
-char *stpcpy (char *a, const char *b)
-#if defined(__BIONIC_FORTIFY)
-	__overloadable __RENAME_CLANG(stpcpy)
-#endif
-	;
+char *stpcpy (char *a, const char *b);
 #endif
 #ifndef HAVE_STRCASECMP
 int strcasecmp (const char *a, const char *b) _GCRY_GCC_ATTR_PURE;
@@ -213,7 +209,7 @@ int strcasecmp (const char *a, const char *b) _GCRY_GCC_ATTR_PURE;
 #define memmove(d, s, n) bcopy((s), (d), (n))
 #endif
 #ifndef HAVE_STRICMP
-#define stricmp(a,b)	 strcasecmp( (a), (b) )
+#define stricmp(a,b)     strcasecmp( (a), (b) )
 #endif
 #ifndef HAVE_ATEXIT
 #define atexit(a)    (on_exit((a),0))
@@ -256,13 +252,13 @@ struct gcry_module
 {
   struct gcry_module *next;     /* List pointers.      */
   struct gcry_module **prevp;
-  void *spec;			/* Pointer to the subsystem-specific
-				   specification structure.  */
-  void *extraspec;		/* Pointer to the subsystem-specific
-				   extra specification structure.  */
-  int flags;			/* Associated flags.   */
-  int counter;			/* Use counter.        */
-  unsigned int mod_id;		/* ID of this module.  */
+  void *spec;            /* Pointer to the subsystem-specific
+                   specification structure.  */
+  void *extraspec;        /* Pointer to the subsystem-specific
+                   extra specification structure.  */
+  int flags;            /* Associated flags.   */
+  int counter;            /* Use counter.        */
+  unsigned int mod_id;        /* ID of this module.  */
 };
 
 /* Flags for the `flags' member of gcry_module_t.  */
@@ -279,11 +275,11 @@ typedef int (*gcry_module_lookup_t) (void *spec, void *data);
 /* Lookup a module specification by it's ID.  After a successfull
    lookup, the module has it's resource counter incremented.  */
 gcry_module_t _gcry_module_lookup_id (gcry_module_t entries,
-				       unsigned int id);
+                       unsigned int id);
 
 /* Internal function.  Lookup a module specification.  */
 gcry_module_t _gcry_module_lookup (gcry_module_t entries, void *data,
-				    gcry_module_lookup_t func);
+                    gcry_module_lookup_t func);
 
 /* Release a module.  In case the use-counter reaches zero, destroy
    the module.  */
@@ -294,7 +290,7 @@ void _gcry_module_use (gcry_module_t module);
 
 /* Return a list of module IDs.  */
 gcry_err_code_t _gcry_module_list (gcry_module_t modules,
-				  int *list, int *list_length);
+                  int *list, int *list_length);
 
 gcry_err_code_t _gcry_cipher_init (void);
 gcry_err_code_t _gcry_md_init (void);

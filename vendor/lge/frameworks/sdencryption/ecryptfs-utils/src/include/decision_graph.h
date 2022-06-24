@@ -66,12 +66,12 @@ struct ecryptfs_ctx;
  */
 struct transition_node {
 #define ECRYPTFS_TN_FLAG_REQ_FREE 0x00000001
-	uint32_t flags;
+    uint32_t flags;
         char *val;
         char *pretty_val;
         struct param_node *next_token;
         int (*trans_func)(struct ecryptfs_ctx *, struct param_node *,
-			  struct val_node **, void **);
+              struct val_node **, void **);
 };
 
 struct param_node {
@@ -90,14 +90,14 @@ struct param_node {
         char *default_val;
         char *suggested_val;
         void (*display_opts)(struct param_node *);
-#define ECRYPTFS_PARAM_FLAG_ECHO_INPUT	   0x00000001
+#define ECRYPTFS_PARAM_FLAG_ECHO_INPUT       0x00000001
 #define ECRYPTFS_PARAM_FLAG_MASK_OUTPUT    0x00000002
 #define ECRYPTFS_ALLOW_IMPLICIT_TRANSITION 0x00000004
 #define ECRYPTFS_PARAM_FLAG_NO_VALUE       0x00000008
 #define DISPLAY_TRANSITION_NODE_VALS       0x00000010
-#define VERIFY_VALUE			   0x00000020
-#define STDIN_REQUIRED			   0x00000040
-#define PARAMETER_SET			   0x00000080
+#define VERIFY_VALUE               0x00000020
+#define STDIN_REQUIRED               0x00000040
+#define PARAMETER_SET               0x00000080
 #define ECRYPTFS_PARAM_FLAG_LOCK_MEM       0x00000100
 #define ECRYPTFS_PARAM_FORCE_DISPLAY_NODES 0x00000200
 #define ECRYPTFS_DISPLAY_PRETTY_VALS       0x00000400
@@ -113,29 +113,29 @@ struct param_node {
 struct prompt_elem;
 
 struct prompt_elem {
-	char *str;
-	struct prompt_elem *next;
+    char *str;
+    struct prompt_elem *next;
 };
 
 int add_transition_node_to_param_node(struct param_node *param_node,
-				      struct transition_node *trans_node);
+                      struct transition_node *trans_node);
 void ecryptfs_dump_param_node(FILE *file_stream,
-			      struct param_node *param_node, int depth,
-			      int recursive);
+                  struct param_node *param_node, int depth,
+                  int recursive);
 void ecryptfs_dump_transition_node(FILE *file_stream,
-				   struct transition_node *trans_node,
-				   int depth, int recursive);
+                   struct transition_node *trans_node,
+                   int depth, int recursive);
 void ecryptfs_dump_decision_graph(FILE *file_stream,
-				  struct param_node *param_node, int depth);
+                  struct param_node *param_node, int depth);
 int ecryptfs_set_exit_param_on_graph(struct param_node *param_node,
-				     struct param_node *exit_param_node);
+                     struct param_node *exit_param_node);
 
 struct ecryptfs_name_val_pair;
 
 int ecryptfs_insert_params_in_subgraph(struct ecryptfs_name_val_pair *nvp,
-				       struct transition_node *trans_node);
+                       struct transition_node *trans_node);
 int eval_param_tree(struct ecryptfs_ctx *ctx, struct param_node *node,
-		    struct ecryptfs_name_val_pair *nvp_head,
-		    struct val_node **val_stack_head);
+            struct ecryptfs_name_val_pair *nvp_head,
+            struct val_node **val_stack_head);
 
 #endif

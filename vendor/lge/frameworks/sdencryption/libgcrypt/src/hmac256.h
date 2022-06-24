@@ -1,5 +1,5 @@
 /* hmac256.h - Declarations for _gcry_hmac256
- *	Copyright (C) 2008 Free Software Foundation, Inc.
+ *    Copyright (C) 2008 Free Software Foundation, Inc.
  *
  * This file is part of Libgcrypt.
  *

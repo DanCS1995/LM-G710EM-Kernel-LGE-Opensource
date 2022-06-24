@@ -2,7 +2,7 @@
  * Copyright (C) 2005-2010 Martin Willi
  * Copyright (C) 2010 revosec AG
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -38,7 +38,7 @@ struct private_certreq_payload_t {
 	/**
 	 * Next payload type.
 	 */
-	u_int8_t  next_payload;
+	uint8_t  next_payload;
 
 	/**
 	 * Critical flag.
@@ -53,12 +53,12 @@ struct private_certreq_payload_t {
 	/**
 	 * Length of this payload.
 	 */
-	u_int16_t payload_length;
+	uint16_t payload_length;
 
 	/**
 	 * Encoding of the CERT Data.
 	 */
-	u_int8_t encoding;
+	uint8_t encoding;
 
 	/**
 	 * The contained certreq data value.
@@ -66,7 +66,7 @@ struct private_certreq_payload_t {
 	chunk_t data;
 
 	/**
-	 * Payload type CERTIFICATE_REQUEST or CERTIFICATE_REQUEST_V1
+	 * Payload type PLV2_CERTREQ or PLV1_CERTREQ
 	 */
 	payload_type_t type;
 };
@@ -111,7 +111,7 @@ static encoding_rule_t encodings[] = {
 METHOD(payload_t, verify, status_t,
 	private_certreq_payload_t *this)
 {
-	if (this->type == CERTIFICATE_REQUEST &&
+	if (this->type == PLV2_CERTREQ &&
 		this->encoding == ENC_X509_SIGNATURE)
 	{
 		if (this->data.len % HASH_SIZE_SHA1)
@@ -190,8 +190,12 @@ struct keyid_enumerator_t  {
 };
 
 METHOD(enumerator_t, keyid_enumerate, bool,
-	keyid_enumerator_t *this, chunk_t *chunk)
+	keyid_enumerator_t *this, va_list args)
 {
+	chunk_t *chunk;
+
+	VA_ARGS_VGET(args, chunk);
+
 	if (this->pos == NULL)
 	{
 		this->pos = this->full.ptr;
@@ -218,13 +222,14 @@ METHOD(certreq_payload_t, create_keyid_enumerator, enumerator_t*,
 {
 	keyid_enumerator_t *enumerator;
 
-	if (this->type == CERTIFICATE_REQUEST_V1)
+	if (this->type == PLV1_CERTREQ)
 	{
 		return enumerator_create_empty();
 	}
 	INIT(enumerator,
 		.public = {
-			.enumerate = (void*)_keyid_enumerate,
+			.enumerate = enumerator_enumerate_default,
+			.venumerate = _keyid_enumerate,
 			.destroy = (void*)free,
 		},
 		.full = this->data,
@@ -276,7 +281,7 @@ certreq_payload_t *certreq_payload_create(payload_type_t type)
 			.destroy = _destroy,
 			.get_dn = _get_dn,
 		},
-		.next_payload = NO_PAYLOAD,
+		.next_payload = PL_NONE,
 		.payload_length = get_header_length(this),
 		.type = type,
 	);
@@ -291,7 +296,7 @@ certreq_payload_t *certreq_payload_create_type(certificate_type_t type)
 	private_certreq_payload_t *this;
 
 	this = (private_certreq_payload_t*)
-					certreq_payload_create(CERTIFICATE_REQUEST);
+					certreq_payload_create(PLV2_CERTREQ);
 	switch (type)
 	{
 		case CERT_X509:
@@ -314,7 +319,7 @@ certreq_payload_t *certreq_payload_create_dn(identification_t *id)
 	private_certreq_payload_t *this;
 
 	this = (private_certreq_payload_t*)
-					certreq_payload_create(CERTIFICATE_REQUEST_V1);
+					certreq_payload_create(PLV1_CERTREQ);
 
 	this->encoding = ENC_X509_SIGNATURE;
 	this->data = chunk_clone(id->get_encoding(id));

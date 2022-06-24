@@ -145,7 +145,11 @@ int set_cust_setting(cust_setting_type_t type, char* value)
 #ifdef __ANDROID__
 	if (key)
 	{
-		ret = __system_property_set(key, value);
+		char persist_property_name[PROP_NAME_MAX];
+		snprintf(persist_property_name, PROP_NAME_MAX, "%s%s",
+									PERSIST_PROPERTY_PREFIX, key);
+
+		ret = __system_property_set(persist_property_name, value);
 	}
 #endif
 
@@ -160,13 +164,18 @@ int set_cust_setting_bool(cust_setting_type_t type, bool value)
 #ifdef __ANDROID__
 	if (key)
 	{
+		char persist_property_name[PROP_NAME_MAX];
+
+		snprintf(persist_property_name, PROP_NAME_MAX, "%s%s",
+									PERSIST_PROPERTY_PREFIX, key);
+
 		if (value)
 		{
-			ret = __system_property_set(key, "1");
+			ret = __system_property_set(persist_property_name, "1");
 		}
 		else
 		{
-			ret = __system_property_set(key, "0");
+			ret = __system_property_set(persist_property_name, "0");
 		}
 	}
 #endif
@@ -200,6 +209,7 @@ static cust_setting_type_t convert_cust_setting_to_slot1(cust_setting_type_t typ
 		case CUST_PCSCF_IP6_VALUE: return SLOT1_CUST_PCSCF_IP6_VALUE;
 		case FORCE_TSI_64: return SLOT1_FORCE_TSI_64;
 		case FORCE_TSI_FULL: return SLOT1_FORCE_TSI_FULL;
+		case FORCE_TSR_64: return SLOT1_FORCE_TSR_64;
 		case FORCE_TSR_FULL: return SLOT1_FORCE_TSR_FULL;
 		case REKEY_FULL: return SLOT1_REKEY_FULL;
 		case REKEY_TSI_FULL: return SLOT1_REKEY_TSI_FULL;
@@ -214,8 +224,8 @@ static cust_setting_type_t convert_cust_setting_to_slot1(cust_setting_type_t typ
 		case IKE_IDI_FORMAT: return SLOT1_IKE_IDI_FORMAT;
 		case IKE_HASHANDURL: return SLOT1_IKE_HASHANDURL;
 		case IKE_KEEP_ALIVE_TIMER: return SLOT1_IKE_KEEP_ALIVE_TIMER;
-		case WIFI_DRIVER_KEEP_ALIVE: return SLOT1_WIFI_DRIVER_KEEP_ALIVE;
-		case WIFI_DRIVER_KEEP_ALIVE_TIMER: return SLOT1_WIFI_DRIVER_KEEP_ALIVE_TIMER;
+		case HW_KEEP_ALIVE_STATE: return SLOT1_HW_KEEP_ALIVE_STATE;
+		case SW_KEEP_ALIVE_STATE: return SLOT1_SW_KEEP_ALIVE_STATE;
 		case ADDR_CHANGE_N_REAUTH: return SLOT1_ADDR_CHANGE_N_REAUTH;
 		case REMOVE_EAPAUTH: return SLOT1_REMOVE_EAPAUTH;
 		case STATUS_CODE: return SLOT1_STATUS_CODE;
@@ -225,6 +235,15 @@ static cust_setting_type_t convert_cust_setting_to_slot1(cust_setting_type_t typ
 		case REAUTH_DELETE_ONLY: return SLOT1_REAUTH_DELETE_ONLY;
 		case REKEY_DELAY: return SLOT1_REKEY_DELAY;
 		case DSCP: return SLOT1_DSCP;
+		/* 2019-03-15 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [START] */
+		case PEER_MOBIKE: return SLOT1_PEER_MOBIKE;
+		case MOBIKE_IFACE: return SLOT1_MOBIKE_IFACE;
+                case IWLAN_HO_SRCIFACES : return SLOT1_IWLAN_HO_SRCIFACES;
+		/* 2019-03-15 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [END] */
+		/* LGP_DATA_IWLAN support_5gs [START] */
+		case EPDG_SUPPORT_5GS: return SLOT1_EPDG_SUPPORT_5GS;
+		/* LGP_DATA_IWLAN support_5gs [END] */
+
 	}
 	return SETTING_END;
 }

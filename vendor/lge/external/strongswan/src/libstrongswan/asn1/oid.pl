@@ -2,7 +2,7 @@
 # Generates oid.h and oid.c out of oid.txt
 #
 # Copyright (C) 2003-2008 Andreas Steffen
-# Hochschule fuer Technik Rapperswil
+# HSR Hochschule fuer Technik Rapperswil
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
@@ -30,7 +30,7 @@ print OID_H "/* Object identifiers (OIDs) used by strongSwan\n",
 	    " * ", $automatic, "\n",
 	    " * ", $warning, "\n",
 	    " */\n\n",
-	    "#include <sys/types.h>\n\n",
+	    "#include <utils/utils.h>\n\n",
 	    "#ifndef OID_H_\n",
 	    "#define OID_H_\n\n",
 	    "typedef struct {\n",

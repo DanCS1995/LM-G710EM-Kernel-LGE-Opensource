@@ -16,14 +16,7 @@
 #ifndef _IPSEC_CONFREAD_H_
 #define _IPSEC_CONFREAD_H_
 
-#include <kernel_wrap/kernel_ipsec.h>
-
-#include "ipsec-parser.h"
-
-/** to mark seen keywords */
-typedef u_int64_t seen_t;
-#define SEEN_NONE 0;
-#define SEEN_KW(kw, base) ((seen_t)1 << ((kw) - (base)))
+#include <kernel/kernel_ipsec.h>
 
 typedef enum {
 		STARTUP_NO,
@@ -72,6 +65,7 @@ typedef enum {
 typedef enum {
 		/* same as in ike_cfg.h */
 		FRAGMENTATION_NO,
+		FRAGMENTATION_ACCEPT,
 		FRAGMENTATION_YES,
 		FRAGMENTATION_FORCE,
 } fragmentation_t;
@@ -92,7 +86,6 @@ typedef enum {
 typedef struct starter_end starter_end_t;
 
 struct starter_end {
-		seen_t          seen;
 		char            *auth;
 		char            *auth2;
 		char            *id;
@@ -115,9 +108,9 @@ struct starter_end {
 		bool            hostaccess;
 		bool            allow_any;
 		char            *updown;
-		u_int16_t       from_port;
-		u_int16_t       to_port;
-		u_int8_t        protocol;
+		uint16_t       from_port;
+		uint16_t       to_port;
+		uint8_t        protocol;
 		char            *sourceip;
 		char            *pcscf;
 		char            *imei;
@@ -127,22 +120,10 @@ struct starter_end {
 		char            *dns;
 };
 
-typedef struct also also_t;
-
-struct also {
-		char            *name;
-		bool            included;
-		also_t          *next;
-};
-
 typedef struct starter_conn starter_conn_t;
 
 struct starter_conn {
-		seen_t          seen;
 		char            *name;
-		also_t          *also;
-		kw_list_t       *kw;
-		u_int           visit;
 		startup_t       startup;
 		starter_state_t state;
 
@@ -159,16 +140,17 @@ struct starter_conn {
 		time_t          sa_ike_life_seconds;
 		time_t          sa_ipsec_life_seconds;
 		time_t          sa_rekey_margin;
-		u_int64_t       sa_ipsec_life_bytes;
-		u_int64_t       sa_ipsec_margin_bytes;
-		u_int64_t       sa_ipsec_life_packets;
-		u_int64_t       sa_ipsec_margin_packets;
+		uint64_t       sa_ipsec_life_bytes;
+		uint64_t       sa_ipsec_margin_bytes;
+		uint64_t       sa_ipsec_life_packets;
+		uint64_t       sa_ipsec_margin_packets;
 		unsigned long   sa_keying_tries;
 		unsigned long   sa_rekey_fuzz;
-		u_int32_t       reqid;
+		uint32_t       reqid;
 		mark_t          mark_in;
 		mark_t          mark_out;
-		u_int32_t       tfc;
+		uint32_t       replay_window;
+		uint32_t       tfc;
 		bool            install_policy;
 		bool            aggressive;
 		starter_end_t   left, right;
@@ -186,6 +168,8 @@ struct starter_conn {
 
 		dpd_action_t    close_action;
 
+		bool            sha256_96;
+
 		time_t          inactivity;
 
 		bool            me_mediation;
@@ -198,11 +182,7 @@ struct starter_conn {
 typedef struct starter_ca starter_ca_t;
 
 struct starter_ca {
-		seen_t          seen;
 		char            *name;
-		also_t          *also;
-		kw_list_t       *kw;
-		u_int           visit;
 		startup_t       startup;
 		starter_state_t state;
 
@@ -222,8 +202,6 @@ typedef struct starter_config starter_config_t;
 
 struct starter_config {
 		struct {
-				seen_t  seen;
-				bool     charonstart;
 				char     *charondebug;
 				bool     uniqueids;
 				bool     cachecrls;
@@ -234,23 +212,14 @@ struct starter_config {
 		u_int err;
 		u_int non_fatal_err;
 
-		/* do we parse also statements */
-		bool parse_also;
-
-		/* ca %default */
-		starter_ca_t ca_default;
-
-		/* connections list (without %default) */
+		/* connections list */
 		starter_ca_t *ca_first, *ca_last;
 
-		/* conn %default */
-		starter_conn_t conn_default;
-
-		/* connections list (without %default) */
+		/* connections list */
 		starter_conn_t *conn_first, *conn_last;
 };
 
-extern starter_config_t *confread_load(const char *file);
-extern void confread_free(starter_config_t *cfg);
+starter_config_t *confread_load(const char *file);
+void confread_free(starter_config_t *cfg);
 
 #endif /* _IPSEC_CONFREAD_H_ */

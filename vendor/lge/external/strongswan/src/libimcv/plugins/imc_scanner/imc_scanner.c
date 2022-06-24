@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Andreas Steffen
+ * Copyright (C) 2011-2015 Andreas Steffen
  * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -34,7 +34,7 @@
 static const char imc_name[] = "Scanner";
 
 static pen_type_t msg_types[] = {
-	{ PEN_IETF, PA_SUBTYPE_IETF_VPN }
+	{ PEN_IETF, PA_SUBTYPE_IETF_FIREWALL }
 };
 
 static imc_agent_t *imc_scanner;
@@ -85,15 +85,6 @@ TNC_Result TNC_IMC_NotifyConnectionChange(TNC_IMCID imc_id,
 		case TNC_CONNECTION_STATE_CREATE:
 			state = imc_scanner_state_create(connection_id);
 			return imc_scanner->create_state(imc_scanner, state);
-		case TNC_CONNECTION_STATE_HANDSHAKE:
-			if (imc_scanner->change_state(imc_scanner, connection_id, new_state,
-				&state) != TNC_RESULT_SUCCESS)
-			{
-				return TNC_RESULT_FATAL;
-			}
-			state->set_result(state, imc_id,
-							  TNC_IMV_EVALUATION_RESULT_DONT_KNOW);
-			return TNC_RESULT_SUCCESS;
 		case TNC_CONNECTION_STATE_DELETE:
 			return imc_scanner->delete_state(imc_scanner, connection_id);
 		default:
@@ -116,7 +107,7 @@ static bool do_netstat(ietf_attr_port_filter_t *attr)
 	const char loopback_v4[] = "127.0.0.1";
 	const char loopback_v6[] = "::1";
 
-	/* Open a pipe stream for reading the output of the netstat commmand */
+	/* Open a pipe stream for reading the output of the netstat command */
 	file = popen("/bin/netstat -n -l -p -4 -6 --inet", "r");
 	if (!file)
 	{
@@ -128,8 +119,8 @@ static bool do_netstat(ietf_attr_port_filter_t *attr)
 	while (fgets(buf, sizeof(buf), file))
 	{
 		u_char *pos;
-		u_int8_t new_protocol, protocol;
-		u_int16_t new_port, port;
+		uint8_t new_protocol, protocol;
+		uint16_t new_port, port;
 		int i;
 		enumerator_t *enumerator;
 		bool allowed, found = FALSE;
@@ -241,7 +232,8 @@ static TNC_Result add_port_filter(imc_msg_t *msg)
 	pa_tnc_attr_t *attr;
 	ietf_attr_port_filter_t *attr_port_filter;
 
-	attr = ietf_attr_port_filter_create();
+	attr = ietf_attr_port_filter_create(pen_type_create(PEN_IETF,
+										IETF_ATTR_PORT_FILTER));
 	attr->set_noskip_flag(attr, TRUE);
 	attr_port_filter = (ietf_attr_port_filter_t*)attr;
 	if (!do_netstat(attr_port_filter))
@@ -299,13 +291,16 @@ static TNC_Result receive_message(imc_msg_t *in_msg)
 	TNC_Result result = TNC_RESULT_SUCCESS;
 	bool fatal_error = FALSE;
 
+	/* generate an outgoing PA-TNC message - we might need it */
+	out_msg = imc_msg_create_as_reply(in_msg);
+
 	/* parse received PA-TNC message and handle local and remote errors */
-	result = in_msg->receive(in_msg, &fatal_error);
+	result = in_msg->receive(in_msg, out_msg, &fatal_error);
 	if (result != TNC_RESULT_SUCCESS)
 	{
+		out_msg->destroy(out_msg);
 		return result;
 	}
-	out_msg = imc_msg_create_as_reply(in_msg);
 
 	/* analyze PA-TNC attributes */
 	enumerator = in_msg->create_attribute_enumerator(in_msg);
@@ -352,6 +347,7 @@ static TNC_Result receive_message(imc_msg_t *in_msg)
 	}
 	else if (result == TNC_RESULT_SUCCESS)
 	{
+		/* send PA-TNC message with the EXCL flag set */
 		result = out_msg->send(out_msg, TRUE);
 	}
 	out_msg->destroy(out_msg);

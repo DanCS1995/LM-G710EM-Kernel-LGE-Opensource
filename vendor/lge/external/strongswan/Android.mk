@@ -1,10 +1,4 @@
 ifeq ($(USE_LGE_DATA_IWLAN), true)
-#ifeq ($(call is-vendor-board-platform,QCOM),true)
-#ifeq ($(call is-board-platform-in-list,sm8150),true)
-ifeq ($(TARGET_DEVICE), $(filter $(TARGET_DEVICE), alpha alphaplus beta flash))
-CUR_PATH := $(call my-dir)
-include $(CUR_PATH)/ver5.7.1/Android.mk
-else
 LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
@@ -23,11 +17,12 @@ strongswan_BUILD_STARTER := true
 
 # this is the list of plugins that are built into libstrongswan and charon
 # also these plugins are loaded by default (if not changed in strongswan.conf)
-strongswan_CHARON_PLUGINS := openssl ctr fips-prf random nonce pubkey \
+# 2019-03-20 LGSI-ePDG-Data@lge.com LGP_DATA_IWLAN Reorder/move x509 plugin before openssl plugin for Certificate Loading while using BoringSSL [START]
+strongswan_CHARON_PLUGINS := x509 openssl ctr fips-prf random nonce pubkey \
     pkcs1 pkcs8 pem xcbc hmac kernel-netlink socket-default \
     stroke updown eap-identity eap-sim eap-aka eap-simaka-reauth eap-mschapv2 eap-md5 eap-gtc xauth-generic attr resolve android-log \
-    x509 revocation curl
-
+    revocation curl android-log
+# 2019-03-20 LGSI-ePDG-Data@lge.com LGP_DATA_IWLAN Reorder/move x509 plugin before openssl plugin for Certificate Loading while using BoringSSL [END]
 #android-dns android-log
 
 ### from Makefile
@@ -45,108 +40,109 @@ strongswan_STARTER_PLUGINS := kernel-netlink
 
 # list of all plugins - used to enable them with the function below
 strongswan_PLUGINS := $(sort $(strongswan_CHARON_PLUGINS) \
-                 $(strongswan_STARTER_PLUGINS) \
-                 $(strongswan_SCEPCLIENT_PLUGINS))
+			     $(strongswan_STARTER_PLUGINS) \
+			     $(strongswan_SCEPCLIENT_PLUGINS))
 
 include $(LOCAL_PATH)/Android.common.mk
 
 # includes
 strongswan_PATH := $(LOCAL_PATH)
-#libcurl_PATH := vendor/trustonic/platform/$(shell echo $(MTK_PLATFORM) | tr '[A-Z]' '[a-z]')/external/mobicore/common/curl/include
+libcurl_PATH := external/curl/include
 #libgmp_PATH := external/strongswan-support/gmp
-openssl_PATH := $(strongswan_PATH)/src/openssl/include
+openssl_PATH := external/boringssl/include
 
 # some definitions
 strongswan_DIR := "/system/bin"
 strongswan_SBINDIR := "/system/bin"
 strongswan_PIDDIR := "/data/misc/vpn"
 strongswan_PLUGINDIR := "$(strongswan_IPSEC_DIR)/ipsec"
-strongswan_CONFDIR := "/system/etc/ipsec"
+# 2015-10-12 protocol-iwlan@lge.com LGP_DATA_IWLAN [START]
+#strongswan_CONFDIR := "/system/etc/ipsec" // original
+strongswan_CONFDIR := "/product/etc/ipsec"
+# 2015-10-12 protocol-iwlan@lge.com LGP_DATA_IWLAN [END]
 strongswan_STRONGSWAN_CONF := "$(strongswan_CONFDIR)/strongswan.conf"
 strongswan_SCRIPT := "/system/etc/ipsec_script"
 
 # CFLAGS (partially from a configure run using droid-gcc)
 strongswan_CFLAGS := \
-    -Wno-format \
-    -Wno-pointer-sign \
-    -Wno-pointer-arith \
-    -Wno-sign-compare \
-    -Wno-strict-aliasing \
-    -DHAVE___BOOL \
-    -DHAVE_STDBOOL_H \
-    -DHAVE_ALLOCA_H \
-    -DHAVE_ALLOCA \
-    -DHAVE_CLOCK_GETTIME \
-    -DHAVE_PRCTL \
-    -DHAVE_LINUX_UDP_H \
-    -DHAVE_STRUCT_SADB_X_POLICY_SADB_X_POLICY_PRIORITY \
-    -DHAVE_IPSEC_MODE_BEET \
-    -DHAVE_IPSEC_DIR_FWD \
-    -DHAVE_IN6_PKTINFO \
-    -DOPENSSL_NO_EC \
-    -DOPENSSL_NO_ECDSA \
-    -DOPENSSL_NO_ECDH \
-    -DOPENSSL_NO_ENGINE \
-    -DCONFIG_H_INCLUDED \
-    -DCAPABILITIES \
-    -DCAPABILITIES_NATIVE \
-    -DMONOLITHIC \
-    -DUSE_IKEV1 \
-    -DUSE_IKEV2 \
-    -DUSE_BUILTIN_PRINTF \
-    -DDEBUG \
-    -DROUTING_TABLE=0 \
-    -DROUTING_TABLE_PRIO=220 \
-    -DVERSION=\"$(strongswan_VERSION)\" \
-    -DPLUGINDIR=\"$(strongswan_PLUGINDIR)\" \
-    -DIPSEC_DIR=\"$(strongswan_DIR)\" \
-    -DIPSEC_PIDDIR=\"$(strongswan_PIDDIR)\" \
-    -DIPSEC_CONFDIR=\"$(strongswan_CONFDIR)\" \
-    -DSTRONGSWAN_CONF=\"$(strongswan_STRONGSWAN_CONF)\" \
-    -DDEV_RANDOM=\"/dev/random\" \
-    -DDEV_URANDOM=\"/dev/urandom\" \
-    -DIPSEC_SCRIPT=\"$(strongswan_SCRIPT)\" \
-    -DRESOLV_CONF=\"${strongswan_CONFDIR}/resolv.conf\"
+	-Wno-format \
+	-Wno-pointer-sign \
+	-Wno-pointer-arith \
+	-Wno-sign-compare \
+	-Wno-strict-aliasing \
+	-DHAVE___BOOL \
+	-DHAVE_STDBOOL_H \
+	-DHAVE_ALLOCA_H \
+	-DHAVE_ALLOCA \
+	-DHAVE_CLOCK_GETTIME \
+	-DHAVE_DLADDR \
+	-DHAVE_PRCTL \
+	-DHAVE_LINUX_UDP_H \
+	-DHAVE_STRUCT_SADB_X_POLICY_SADB_X_POLICY_PRIORITY \
+	-DHAVE_IPSEC_MODE_BEET \
+	-DHAVE_IPSEC_DIR_FWD \
+	-DHAVE_IN6_PKTINFO \
+	-DOPENSSL_NO_EC \
+	-DOPENSSL_NO_ECDSA \
+	-DOPENSSL_NO_ECDH \
+	-DOPENSSL_NO_ENGINE \
+	-DCONFIG_H_INCLUDED \
+	-DCAPABILITIES \
+	-DCAPABILITIES_NATIVE \
+	-DMONOLITHIC \
+	-DUSE_IKEV1 \
+	-DUSE_IKEV2 \
+	-DUSE_BUILTIN_PRINTF \
+	-DDEBUG \
+	-DROUTING_TABLE=0 \
+	-DROUTING_TABLE_PRIO=220 \
+	-DVERSION=\"$(strongswan_VERSION)\" \
+	-DPLUGINDIR=\"$(strongswan_PLUGINDIR)\" \
+	-DIPSEC_DIR=\"$(strongswan_DIR)\" \
+	-DIPSEC_PIDDIR=\"$(strongswan_PIDDIR)\" \
+	-DIPSEC_CONFDIR=\"$(strongswan_CONFDIR)\" \
+	-DSTRONGSWAN_CONF=\"$(strongswan_STRONGSWAN_CONF)\" \
+	-DDEV_RANDOM=\"/dev/random\" \
+	-DDEV_URANDOM=\"/dev/urandom\" \
+	-DIPSEC_SCRIPT=\"$(strongswan_SCRIPT)\" \
+	-DRESOLV_CONF=\"${strongswan_CONFDIR}/resolv.conf\"
 
-#    -DHAVE_PTHREAD_COND_TIMEDWAIT_MONOTONIC \
 # only for Android 2.0+
 strongswan_CFLAGS += \
-    -DHAVE_IN6ADDR_ANY
+	-DHAVE_IN6ADDR_ANY
 
 # Disable Debug Log only for LG Device with user build
 ifeq ($(TARGET_BUILD_VARIANT), user)
 strongswan_CFLAGS += \
     -DDEBUG_LOG_DISABLE
 endif
-
 strongswan_BUILD := \
-    charon \
-    libcharon \
-    libhydra \
-    libstrongswan \
-    libsimaka \
-    openssl \
-    curl
-
+	charon \
+	libcharon \
+	libstrongswan \
+	libsimaka
+#	 \
+#	openssl \
+#	curl
 #    \
 #    libtncif \
 #    libtnccs \
-#    libimcv
+#    libimcv  \
+#	libtpmtss
 
 ifneq ($(strongswan_BUILD_STARTER),)
 strongswan_BUILD += \
-    starter \
-    stroke \
-    ipsec
+	starter \
+	stroke \
+	ipsec
 endif
 
 ifneq ($(strongswan_BUILD_SCEPCLIENT),)
 strongswan_BUILD += \
-    scepclient
+	scepclient
 endif
+
 include $(addprefix $(LOCAL_PATH)/src/,$(addsuffix /Android.mk, \
          $(strongswan_BUILD)))
         #$(sort $(strongswan_BUILD))))
-endif
-#endif
 endif

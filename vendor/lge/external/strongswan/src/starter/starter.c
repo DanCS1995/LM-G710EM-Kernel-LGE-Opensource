@@ -33,7 +33,6 @@
 #include <pthread.h>
 
 #include <library.h>
-#include <hydra.h>
 #include <utils/backtrace.h>
 #include <threading/thread.h>
 #include <utils/debug.h>
@@ -261,64 +260,6 @@ static void fatal_signal_handler(int signal)
 	abort();
 }
 
-#ifdef GENERATE_SELFCERT
-static void generate_selfcert()
-{
-	struct stat stb;
-
-	/* if ipsec.secrets file is missing then generate RSA default key pair */
-	if (stat(SECRETS_FILE, &stb) != 0)
-	{
-		mode_t oldmask;
-		FILE *f;
-		uid_t uid = 0;
-		gid_t gid = 0;
-
-#ifdef IPSEC_GROUP
-		{
-			char buf[1024];
-			struct group group, *grp;
-
-			if (getgrnam_r(IPSEC_GROUP, &group, buf, sizeof(buf), &grp) == 0 &&	grp)
-			{
-				gid = grp->gr_gid;
-			}
-		}
-#endif
-#ifdef IPSEC_USER
-		{
-			char buf[1024];
-			struct passwd passwd, *pwp;
-
-			if (getpwnam_r(IPSEC_USER, &passwd, buf, sizeof(buf), &pwp) == 0 &&	pwp)
-			{
-				uid = pwp->pw_uid;
-			}
-		}
-#endif
-		ignore_result(setegid(gid));
-		ignore_result(seteuid(uid));
-		ignore_result(system(IPSEC_SCRIPT " scepclient --out pkcs1 --out cert-self --quiet"));
-		ignore_result(seteuid(0));
-		ignore_result(setegid(0));
-
-		/* ipsec.secrets is root readable only */
-		oldmask = umask(0066);
-
-		f = fopen(SECRETS_FILE, "w");
-		if (f)
-		{
-			fprintf(f, "# /etc/ipsec.secrets - strongSwan IPsec secrets file\n");
-			fprintf(f, "\n");
-			fprintf(f, ": RSA myKey.der\n");
-			fclose(f);
-		}
-		ignore_result(chown(SECRETS_FILE, uid, gid));
-		umask(oldmask);
-	}
-}
-#endif /* GENERATE_SELFCERT */
-
 static bool check_pid(char *pid_file)
 {
 	struct stat stb;
@@ -338,7 +279,7 @@ static bool check_pid(char *pid_file)
 				pid = atoi(buf);
 			}
 			fclose(pidfile);
-			if (pid && kill(pid, 0) == 0)
+			if (pid && pid != getpid() && kill(pid, 0) == 0)
 			{	/* such a process is running */
 				return TRUE;
 			}
@@ -421,15 +362,13 @@ int main (int argc, char **argv)
 	bool no_fork = FALSE;
 	bool attach_gdb = FALSE;
 	bool load_warning = FALSE;
+	bool conftest = FALSE;
 	/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 	char args[PROPERTY_VALUE_MAX];
 	/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [END] */
 
 	library_init(NULL, "starter");
 	atexit(library_deinit);
-
-	libhydra_init();
-	atexit(libhydra_deinit);
 
 	/* parse command line */
 	for (i = 1; i < argc; i++)
@@ -473,12 +412,15 @@ int main (int argc, char **argv)
 		{
 			config_file = argv[++i];
 		}
+		else if (streq(argv[i], "--conftest"))
+		{
+			conftest = TRUE;
+		}
 		else
 		{
 			usage(argv[0]);
 		}
 	}
-
 	/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
 	property_get("persist.product.lge.data.swandbglv",args, "10");
 	if(!streq(args, "10")){
@@ -486,7 +428,6 @@ int main (int argc, char **argv)
 		current_loglevel = atoi(args);
 	}
 	/* 2016-03-02 protocol-iwlan@lge.com LGP_DATA_IWLAN [START] */
-
 	if (!set_daemon_name())
 	{
 		DBG1(DBG_APP, "unable to set daemon name");
@@ -494,10 +435,40 @@ int main (int argc, char **argv)
 	}
 	if (!config_file)
 	{
-		config_file = CONFIG_FILE;
+		config_file = lib->settings->get_str(lib->settings,
+											 "starter.config_file", CONFIG_FILE);
 	}
 
 	init_log("ipsec_starter");
+
+	if (conftest)
+	{
+		int status = LSB_RC_SUCCESS;
+
+		cfg = confread_load(config_file);
+		if (cfg == NULL || cfg->err > 0)
+		{
+			DBG1(DBG_APP, "config invalid!");
+			status = LSB_RC_INVALID_ARGUMENT;
+		}
+		else
+		{
+			DBG1(DBG_APP, "config OK");
+		}
+		if (cfg)
+		{
+			confread_free(cfg);
+		}
+		cleanup();
+		exit(status);
+	}
+
+	if (stat(cmd, &stb) != 0)
+	{
+		DBG1(DBG_APP, "IKE daemon '%s' not found", cmd);
+		cleanup();
+		exit(LSB_RC_FAILURE);
+	}
 
 	DBG1(DBG_APP, "Starting %sSwan "VERSION" IPsec [starter]...",
 		lib->settings->get_bool(lib->settings,
@@ -518,6 +489,7 @@ int main (int argc, char **argv)
 		}
 	}
 
+#ifndef STARTER_ALLOW_NON_ROOT
 	/* verify that we can start */
 	if (getuid() != 0)
 	{
@@ -525,6 +497,7 @@ int main (int argc, char **argv)
 		cleanup();
 		exit(LSB_RC_NOT_ALLOWED);
 	}
+#endif
 
 	if (check_pid(pid_file))
 	{
@@ -561,6 +534,7 @@ int main (int argc, char **argv)
 		exit(LSB_RC_INVALID_ARGUMENT);
 	}
 
+#if 0 //#ifndef SKIP_KERNEL_IPSEC_MODPROBES
 	/* determine if we have a native netkey IPsec stack */
 	if (!starter_netkey_init())
 	{
@@ -571,6 +545,7 @@ int main (int argc, char **argv)
 			DBG1(DBG_APP, "no known IPsec stack detected, ignoring!");
 		}
 	}
+#endif
 
 	last_reload = time_monotonic(NULL);
 
@@ -582,10 +557,6 @@ int main (int argc, char **argv)
 		cleanup();
 		exit(LSB_RC_SUCCESS);
 	}
-
-#ifdef GENERATE_SELFCERT
-	generate_selfcert();
-#endif
 
 	/* fork if we're not debugging stuff */
 	if (!no_fork)
@@ -599,7 +570,6 @@ int main (int argc, char **argv)
 				int fnull;
 
 				close_log();
-				closefrom(3);
 
 				fnull = open("/dev/null", O_RDWR);
 				if (fnull >= 0)
@@ -679,7 +649,6 @@ int main (int argc, char **argv)
 			{
 				starter_stop_charon();
 			}
-			starter_netkey_cleanup();
 			confread_free(cfg);
 
 			/* save pid file in /var/run/starter[.daemon_name].pid */
@@ -706,6 +675,7 @@ int main (int argc, char **argv)
 		 */
 		if (_action_ & FLAG_ACTION_RELOAD)
 		{
+			_action_ &= ~FLAG_ACTION_RELOAD;
 			if (starter_charon_pid())
 			{
 				for (conn = cfg->conn_first; conn; conn = conn->next)
@@ -735,7 +705,6 @@ int main (int argc, char **argv)
 					}
 				}
 			}
-			_action_ &= ~FLAG_ACTION_RELOAD;
 		}
 
 		/*
@@ -743,6 +712,7 @@ int main (int argc, char **argv)
 		 */
 		if (_action_ & FLAG_ACTION_UPDATE)
 		{
+			_action_ &= ~FLAG_ACTION_UPDATE;
 			DBG2(DBG_APP, "Reloading config...");
 			new_cfg = confread_load(config_file);
 
@@ -823,7 +793,6 @@ int main (int argc, char **argv)
 					confread_free(new_cfg);
 				}
 			}
-			_action_ &= ~FLAG_ACTION_UPDATE;
 			last_reload = time_monotonic(NULL);
 		}
 
@@ -832,7 +801,8 @@ int main (int argc, char **argv)
 		 */
 		if (_action_ & FLAG_ACTION_START_CHARON)
 		{
-			if (cfg->setup.charonstart && !starter_charon_pid())
+			_action_ &= ~FLAG_ACTION_START_CHARON;
+			if (!starter_charon_pid())
 			{
 				DBG2(DBG_APP, "Attempting to start %s...", daemon_name);
 				if (starter_start_charon(cfg, no_fork, attach_gdb))
@@ -842,7 +812,6 @@ int main (int argc, char **argv)
 				}
 				starter_stroke_configure(cfg);
 			}
-			_action_ &= ~FLAG_ACTION_START_CHARON;
 
 			for (ca = cfg->ca_first; ca; ca = ca->next)
 			{

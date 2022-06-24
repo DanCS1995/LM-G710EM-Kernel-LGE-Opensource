@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2010 Tobias Brunner
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -94,7 +94,7 @@ static mem_pool_t *find_pool(private_stroke_attribute_t *this, char *name)
  */
 static host_t *find_addr(private_stroke_attribute_t *this, linked_list_t *pools,
 						 identification_t *id, host_t *requested,
-						 mem_pool_op_t operation)
+						 mem_pool_op_t operation, host_t *peer)
 {
 	host_t *addr = NULL;
 	enumerator_t *enumerator;
@@ -107,7 +107,7 @@ static host_t *find_addr(private_stroke_attribute_t *this, linked_list_t *pools,
 		pool = find_pool(this, name);
 		if (pool)
 		{
-			addr = pool->acquire_address(pool, id, requested, operation);
+			addr = pool->acquire_address(pool, id, requested, operation, peer);
 			if (addr)
 			{
 				break;
@@ -120,20 +120,24 @@ static host_t *find_addr(private_stroke_attribute_t *this, linked_list_t *pools,
 }
 
 METHOD(attribute_provider_t, acquire_address, host_t*,
-	private_stroke_attribute_t *this, linked_list_t *pools, identification_t *id,
+	private_stroke_attribute_t *this, linked_list_t *pools, ike_sa_t *ike_sa,
 	host_t *requested)
 {
-	host_t *addr;
+	identification_t *id;
+	host_t *addr, *peer;
+
+	id = ike_sa->get_other_eap_id(ike_sa);
+	peer = ike_sa->get_other_host(ike_sa);
 
 	this->lock->read_lock(this->lock);
 
-	addr = find_addr(this, pools, id, requested, MEM_POOL_EXISTING);
+	addr = find_addr(this, pools, id, requested, MEM_POOL_EXISTING, peer);
 	if (!addr)
 	{
-		addr = find_addr(this, pools, id, requested, MEM_POOL_NEW);
+		addr = find_addr(this, pools, id, requested, MEM_POOL_NEW, peer);
 		if (!addr)
 		{
-			addr = find_addr(this, pools, id, requested, MEM_POOL_REASSIGN);
+			addr = find_addr(this, pools, id, requested, MEM_POOL_REASSIGN, peer);
 		}
 	}
 
@@ -144,12 +148,15 @@ METHOD(attribute_provider_t, acquire_address, host_t*,
 
 METHOD(attribute_provider_t, release_address, bool,
 	private_stroke_attribute_t *this, linked_list_t *pools, host_t *address,
-	identification_t *id)
+	ike_sa_t *ike_sa)
 {
 	enumerator_t *enumerator;
+	identification_t *id;
 	mem_pool_t *pool;
 	bool found = FALSE;
 	char *name;
+
+	id = ike_sa->get_other_eap_id(ike_sa);
 
 	enumerator = pools->create_enumerator(pools);
 	this->lock->read_lock(this->lock);
@@ -171,35 +178,38 @@ METHOD(attribute_provider_t, release_address, bool,
 	return found;
 }
 
-/**
- * Filter function to convert host to DNS configuration attributes
- */
-static bool attr_filter(void *lock, host_t **in,
-						configuration_attribute_type_t *type,
-						void *dummy, chunk_t *data)
+CALLBACK(attr_filter, bool,
+	void *lock, enumerator_t *orig, va_list args)
 {
-	host_t *host = *in;
+	configuration_attribute_type_t *type;
+	chunk_t *data;
+	host_t *host;
 
-	switch (host->get_family(host))
+	VA_ARGS_VGET(args, type, data);
+
+	while (orig->enumerate(orig, &host))
 	{
-		case AF_INET:
-			*type = INTERNAL_IP4_DNS;
-			break;
-		case AF_INET6:
-			*type = INTERNAL_IP6_DNS;
-			break;
-		default:
-			return FALSE;
+		switch (host->get_family(host))
+		{
+			case AF_INET:
+				*type = INTERNAL_IP4_DNS;
+				break;
+			case AF_INET6:
+				*type = INTERNAL_IP6_DNS;
+				break;
+			default:
+				continue;
+		}
+		*data = host->get_address(host);
+		return TRUE;
 	}
-	*data = host->get_address(host);
-	return TRUE;
+	return FALSE;
 }
 
 METHOD(attribute_provider_t, create_attribute_enumerator, enumerator_t*,
 	private_stroke_attribute_t *this, linked_list_t *pools,
-	identification_t *id, linked_list_t *vips)
+	ike_sa_t *ike_sa, linked_list_t *vips)
 {
-	ike_sa_t *ike_sa;
 	peer_cfg_t *peer_cfg;
 	enumerator_t *enumerator;
 	attributes_t *attr;
@@ -217,7 +227,7 @@ METHOD(attribute_provider_t, create_attribute_enumerator, enumerator_t*,
 				enumerator->destroy(enumerator);
 				return enumerator_create_filter(
 									attr->dns->create_enumerator(attr->dns),
-									(void*)attr_filter, this->lock,
+									attr_filter, this->lock,
 									(void*)this->lock->unlock);
 			}
 		}
@@ -332,24 +342,28 @@ METHOD(stroke_attribute_t, del_dns, void,
 	this->lock->unlock(this->lock);
 }
 
-/**
- * Pool enumerator filter function, converts pool_t to name, size, ...
- */
-static bool pool_filter(void *lock, mem_pool_t **poolp, const char **name,
-						void *d1, u_int *size, void *d2, u_int *online,
-						void *d3, u_int *offline)
+CALLBACK(pool_filter, bool,
+	void *lock, enumerator_t *orig, va_list args)
 {
-	mem_pool_t *pool = *poolp;
+	mem_pool_t *pool;
+	const char **name;
+	u_int *size, *online, *offline;
 
-	if (pool->get_size(pool) == 0)
+	VA_ARGS_VGET(args, name, size, online, offline);
+
+	while (orig->enumerate(orig, &pool))
 	{
-		return FALSE;
+		if (pool->get_size(pool) == 0)
+		{
+			continue;
+		}
+		*name = pool->get_name(pool);
+		*size = pool->get_size(pool);
+		*online = pool->get_online(pool);
+		*offline = pool->get_offline(pool);
+		return TRUE;
 	}
-	*name = pool->get_name(pool);
-	*size = pool->get_size(pool);
-	*online = pool->get_online(pool);
-	*offline = pool->get_offline(pool);
-	return TRUE;
+	return FALSE;
 }
 
 METHOD(stroke_attribute_t, create_pool_enumerator, enumerator_t*,
@@ -357,7 +371,7 @@ METHOD(stroke_attribute_t, create_pool_enumerator, enumerator_t*,
 {
 	this->lock->read_lock(this->lock);
 	return enumerator_create_filter(this->pools->create_enumerator(this->pools),
-									(void*)pool_filter,
+									pool_filter,
 									this->lock, (void*)this->lock->unlock);
 }
 
@@ -413,4 +427,3 @@ stroke_attribute_t *stroke_attribute_create()
 
 	return &this->public;
 }
-

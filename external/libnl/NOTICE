@@ -1,3 +1,5 @@
+Copyright (c) 2003-2008 Thomas Graf <tgraf@suug.ch>
+		  
 		  GNU LESSER GENERAL PUBLIC LICENSE
 		       Version 2.1, February 1999
 
@@ -500,7 +502,8 @@ necessary.  Here is a sample; alter the names:
   Ty Coon, President of Vice
 
 That's all there is to it!
-
-
+================================================================================
+Notices for file(s):
+                  libf2fs_fmt.a 
 
 

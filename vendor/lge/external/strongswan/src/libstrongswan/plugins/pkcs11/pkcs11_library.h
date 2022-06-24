@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2011 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * Copyright (C) 2010 Martin Willi
  * Copyright (C) 2010 revosec AG
@@ -29,7 +29,7 @@ typedef struct pkcs11_library_t pkcs11_library_t;
 
 #include "pkcs11.h"
 
-#include <utils/enum.h>
+#include <utils/utils.h>
 #include <utils/chunk.h>
 #include <collections/enumerator.h>
 

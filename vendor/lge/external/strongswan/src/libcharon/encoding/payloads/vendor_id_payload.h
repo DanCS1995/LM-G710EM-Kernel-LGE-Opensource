@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2005-2009 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -55,7 +55,7 @@ struct vendor_id_payload_t {
 /**
  * Creates an empty Vendor ID payload for IKEv1 or IKEv2.
  *
- * @@param type		VENDOR_ID or VENDOR_ID_V1
+ * @@param type		PLV2_VENDOR_ID or PLV1_VENDOR_ID
  * @return			vendor ID payload
  */
 vendor_id_payload_t *vendor_id_payload_create(payload_type_t type);
@@ -63,7 +63,7 @@ vendor_id_payload_t *vendor_id_payload_create(payload_type_t type);
 /**
  * Creates a vendor ID payload using a chunk of data
  *
- * @param type		VENDOR_ID or VENDOR_ID_V1
+ * @param type		PLV2_VENDOR_ID or PLV1_VENDOR_ID
  * @param data		data to use in vendor ID payload, gets owned by payload
  * @return			vendor ID payload
  */

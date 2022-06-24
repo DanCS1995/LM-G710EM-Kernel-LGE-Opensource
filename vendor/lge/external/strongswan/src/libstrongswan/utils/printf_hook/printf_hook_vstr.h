@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2009 Tobias Brunner
  * Copyright (C) 2006-2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,7 +16,7 @@
 
 /**
  * @defgroup printf_hook_vstr printf_hook_vstr
- * @{ @ingroup utils
+ * @{ @ingroup printf_hook
  */
 
 #ifndef PRINTF_HOOK_VSTR_H_

@@ -1,5 +1,5 @@
 /* arcfour.c  -  The arcfour stream cipher
- *	Copyright (C) 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+ *    Copyright (C) 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
  *
  * This file is part of Libgcrypt.
  *
@@ -40,7 +40,7 @@ typedef struct {
 
 static void
 do_encrypt_stream( ARCFOUR_context *ctx,
-		   byte *outbuf, const byte *inbuf, unsigned int length )
+           byte *outbuf, const byte *inbuf, unsigned int length )
 {
   register int i = ctx->idx_i;
   register int j = ctx->idx_j;
@@ -125,7 +125,7 @@ static const char*
 selftest(void)
 {
   ARCFOUR_context ctx;
-  byte scratch[16];	   
+  byte scratch[16];       
     
   /* Test vector from Cryptlib labeled there: "from the
      State/Commerce Department". */

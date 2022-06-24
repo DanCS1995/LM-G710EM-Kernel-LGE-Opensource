@@ -1,6 +1,7 @@
 /*
- * Copyright (C) 2010-2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * Copyright (C) 2010-2016 Tobias Brunner
+ * HSR Hochschule fuer Technik Rapperswil
+ *
  * Copyright (C) 2010 Martin Willi
  * Copyright (C) 2010 revosec AG
  *
@@ -59,6 +60,18 @@ struct mem_cred_t {
 								   certificate_t *cert);
 
 	/**
+	 * Get an existing reference to the same certificate.
+	 *
+	 * Searches for the same certificate in the set, and returns a reference
+	 * to it, destroying the passed certificate. If the passed certificate
+	 * is not found, it is just returned.
+	 *
+	 * @param cert			certificate to look up
+	 * @return				the same certificate, potentially different instance
+	 */
+	certificate_t* (*get_cert_ref)(mem_cred_t *this, certificate_t *cert);
+
+	/**
 	 * Add an X.509 CRL to the credential set.
 	 *
 	 * @param crl			CRL, gets owned by set
@@ -73,6 +86,14 @@ struct mem_cred_t {
 	 * @param key			key, reference gets owned by set
 	 */
 	void (*add_key)(mem_cred_t *this, private_key_t *key);
+
+	/**
+	 * Remove a private key from the credential set.
+	 *
+	 * @param fp			fingerprint of the key to remove
+	 * @return				TRUE if the key was found and removed
+	 */
+	bool (*remove_key)(mem_cred_t *this, chunk_t fp);
 
 	/**
 	 * Add a shared key to the credential set.
@@ -90,6 +111,34 @@ struct mem_cred_t {
 	 */
 	void (*add_shared_list)(mem_cred_t *this, shared_key_t *shared,
 							linked_list_t *owners);
+
+	/**
+	 * Add a shared key to the credential set, associated with the given unique
+	 * identifier.
+	 *
+	 * If a shared key with the same id already exists it is replaced.
+	 *
+	 * @param id			unique identifier of this key (cloned)
+	 * @param shared		shared key to add, gets owned by set
+	 * @param ...			NULL terminated list of owners (identification_t*)
+	 */
+	void (*add_shared_unique)(mem_cred_t *this, char *id, shared_key_t *shared,
+							  linked_list_t *owners);
+
+	/**
+	 * Remove a shared key by its unique identifier.
+	 *
+	 * @param id			unique identifier of this key
+	 */
+	void (*remove_shared_unique)(mem_cred_t *this, char *id);
+
+	/**
+	 * Create an enumerator over the unique identifiers of shared keys.
+	 *
+	 * @return			enumerator over char*
+	 */
+	enumerator_t *(*create_unique_shared_enumerator)(mem_cred_t *this);
+
 	/**
 	 * Add a certificate distribution point to the set.
 	 *
@@ -99,6 +148,15 @@ struct mem_cred_t {
 	 */
 	void (*add_cdp)(mem_cred_t *this, certificate_type_t type,
 					identification_t *id, char *uri);
+
+	/**
+	 * Replace all certificates in this credential set with those of another.
+	 *
+	 * @param other			credential set to get certificates from
+	 * @param clone			TRUE to clone certs, FALSE to adopt them (they
+	 *						get removed from the other set)
+	 */
+	void (*replace_certs)(mem_cred_t *this, mem_cred_t *other, bool clone);
 
 	/**
 	 * Replace all secrets (private and shared keys) in this credential set

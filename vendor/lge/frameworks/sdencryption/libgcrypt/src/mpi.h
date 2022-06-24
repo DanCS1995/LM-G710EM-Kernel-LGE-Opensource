@@ -19,10 +19,10 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  *
  * Note: This code is heavily based on the GNU MP Library.
- *	 Actually it's the same code with only minor changes in the
- *	 way the data is stored; this is to support the abstraction
- *	 of an optional secure memory allocation which may be used
- *	 to avoid revealing of sensitive data due to paging etc.
+ *     Actually it's the same code with only minor changes in the
+ *     way the data is stored; this is to support the abstraction
+ *     of an optional secure memory allocation which may be used
+ *     to avoid revealing of sensitive data due to paging etc.
  */
 
 #ifndef G10_MPI_H
@@ -65,8 +65,8 @@ struct gcry_mpi
 {
   int alloced;         /* Array size (# of allocated limbs). */
   int nlimbs;          /* Number of valid limbs. */
-  int sign;	       /* Indicates a negative number and is also used
-		          for opaque MPIs to store the length.  */
+  int sign;           /* Indicates a negative number and is also used
+                  for opaque MPIs to store the length.  */
   unsigned int flags; /* Bit 0: Array to be allocated in secure memory space.*/
                       /* Bit 2: the limb is a pointer to some m_alloced data.*/
   mpi_limb_t *d;      /* Array with the limbs */
@@ -75,27 +75,27 @@ struct gcry_mpi
 #define MPI_NULL NULL
 
 #define mpi_get_nlimbs(a)     ((a)->nlimbs)
-#define mpi_is_neg(a)	      ((a)->sign)
+#define mpi_is_neg(a)          ((a)->sign)
 
 /*-- mpiutil.c --*/
 
 #ifdef M_DEBUG
-# define mpi_alloc(n)	_gcry_mpi_debug_alloc((n), M_DBGINFO( __LINE__ ) )
+# define mpi_alloc(n)    _gcry_mpi_debug_alloc((n), M_DBGINFO( __LINE__ ) )
 # define mpi_alloc_secure(n)  _gcry_mpi_debug_alloc_secure((n), M_DBGINFO( __LINE__ ) )
-# define mpi_free(a)	_gcry_mpi_debug_free((a), M_DBGINFO(__LINE__) )
+# define mpi_free(a)    _gcry_mpi_debug_free((a), M_DBGINFO(__LINE__) )
 # define mpi_resize(a,b) _gcry_mpi_debug_resize((a),(b), M_DBGINFO(__LINE__) )
-# define mpi_copy(a)	  _gcry_mpi_debug_copy((a), M_DBGINFO(__LINE__) )
+# define mpi_copy(a)      _gcry_mpi_debug_copy((a), M_DBGINFO(__LINE__) )
   gcry_mpi_t _gcry_mpi_debug_alloc( unsigned nlimbs, const char *info );
   gcry_mpi_t _gcry_mpi_debug_alloc_secure( unsigned nlimbs, const char *info );
   void _gcry_mpi_debug_free( gcry_mpi_t a, const char *info );
   void _gcry_mpi_debug_resize( gcry_mpi_t a, unsigned nlimbs, const char *info );
-  gcry_mpi_t  _gcry_mpi_debug_copy( gcry_mpi_t a, const char *info	);
+  gcry_mpi_t  _gcry_mpi_debug_copy( gcry_mpi_t a, const char *info    );
 #else
-# define mpi_alloc(n)	       _gcry_mpi_alloc((n) )
+# define mpi_alloc(n)           _gcry_mpi_alloc((n) )
 # define mpi_alloc_secure(n)  _gcry_mpi_alloc_secure((n) )
-# define mpi_free(a)	       _gcry_mpi_free((a) )
+# define mpi_free(a)           _gcry_mpi_free((a) )
 # define mpi_resize(a,b)      _gcry_mpi_resize((a),(b))
-# define mpi_copy(a)	       _gcry_mpi_copy((a))
+# define mpi_copy(a)           _gcry_mpi_copy((a))
   gcry_mpi_t  _gcry_mpi_alloc( unsigned nlimbs );
   gcry_mpi_t  _gcry_mpi_alloc_secure( unsigned nlimbs );
   void _gcry_mpi_free( gcry_mpi_t a );

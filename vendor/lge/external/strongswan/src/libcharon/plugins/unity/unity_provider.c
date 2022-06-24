@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * Copyright (C) 2012 Martin Willi
  * Copyright (C) 2012 revosec AG
@@ -53,7 +53,7 @@ static void append_ts(bio_writer_t *writer, traffic_selector_t *ts)
 {
 	host_t *net, *mask;
 	chunk_t padding;
-	u_int8_t bits;
+	uint8_t bits;
 
 	if (!ts->to_subnet(ts, &net, &bits))
 	{
@@ -77,11 +77,14 @@ static void append_ts(bio_writer_t *writer, traffic_selector_t *ts)
 }
 
 METHOD(enumerator_t, attribute_enumerate, bool,
-	attribute_enumerator_t *this, configuration_attribute_type_t *type,
-	chunk_t *attr)
+	attribute_enumerator_t *this, va_list args)
 {
+	configuration_attribute_type_t *type;
+	chunk_t *attr;
 	traffic_selector_t *ts;
 	bio_writer_t *writer;
+
+	VA_ARGS_VGET(args, type, attr);
 
 	if (this->list->get_count(this->list) == 0)
 	{
@@ -115,7 +118,7 @@ METHOD(enumerator_t, attribute_destroy, void,
  */
 static bool use_ts(traffic_selector_t *ts)
 {
-	u_int8_t mask;
+	uint8_t mask;
 	host_t *net;
 
 	if (ts->get_type(ts) != TS_IPV4_ADDR_RANGE)
@@ -135,19 +138,17 @@ static bool use_ts(traffic_selector_t *ts)
 }
 
 METHOD(attribute_provider_t, create_attribute_enumerator, enumerator_t*,
-	private_unity_provider_t *this, linked_list_t *pools, identification_t *id,
+	private_unity_provider_t *this, linked_list_t *pools, ike_sa_t *ike_sa,
 	linked_list_t *vips)
 {
 	attribute_enumerator_t *attr_enum;
 	enumerator_t *enumerator;
 	linked_list_t *list, *current;
 	traffic_selector_t *ts;
-	ike_sa_t *ike_sa;
 	peer_cfg_t *peer_cfg;
 	child_cfg_t *child_cfg;
 
-	ike_sa = charon->bus->get_sa(charon->bus);
-	if (!ike_sa || ike_sa->get_version(ike_sa) != IKEV1 ||
+	if (ike_sa->get_version(ike_sa) != IKEV1 ||
 		!ike_sa->supports_extension(ike_sa, EXT_CISCO_UNITY) ||
 		!vips->get_count(vips))
 	{
@@ -159,7 +160,8 @@ METHOD(attribute_provider_t, create_attribute_enumerator, enumerator_t*,
 	enumerator = peer_cfg->create_child_cfg_enumerator(peer_cfg);
 	while (enumerator->enumerate(enumerator, &child_cfg))
 	{
-		current = child_cfg->get_traffic_selectors(child_cfg, TRUE, NULL, NULL);
+		current = child_cfg->get_traffic_selectors(child_cfg, TRUE, NULL, NULL,
+												   FALSE);
 		while (current->remove_first(current, (void**)&ts) == SUCCESS)
 		{
 			if (use_ts(ts))
@@ -185,7 +187,8 @@ METHOD(attribute_provider_t, create_attribute_enumerator, enumerator_t*,
 
 	INIT(attr_enum,
 		.public = {
-			.enumerate = (void*)_attribute_enumerate,
+			.enumerate = enumerator_enumerate_default,
+			.venumerate = _attribute_enumerate,
 			.destroy = _attribute_destroy,
 		},
 		.list = list,

@@ -42,11 +42,6 @@ static errcode_t ext2fs_inline_data_ea_set(struct ext2_inline_data *data)
 
 	retval = ext2fs_xattr_set(handle, "system.data",
 				  data->ea_data, data->ea_size);
-	if (retval)
-		goto err;
-
-	retval = ext2fs_xattrs_write(handle);
-
 err:
 	(void) ext2fs_xattrs_close(&handle);
 	return retval;
@@ -270,11 +265,6 @@ errcode_t ext2fs_inline_data_ea_remove(ext2_filsys fs, ext2_ino_t ino)
 		goto err;
 
 	retval = ext2fs_xattr_remove(handle, "system.data");
-	if (retval)
-		goto err;
-
-	retval = ext2fs_xattrs_write(handle);
-
 err:
 	(void) ext2fs_xattrs_close(&handle);
 	return retval;
@@ -321,7 +311,7 @@ static errcode_t ext2fs_inline_data_convert_dir(ext2_filsys fs, ext2_ino_t ino,
 	dir->name[1] = '.';
 
 	/*
-	 * Ajust the last rec_len
+	 * Adjust the last rec_len
 	 */
 	offset = EXT2_DIR_REC_LEN(1) + EXT2_DIR_REC_LEN(2);
 	dir = (struct ext2_dir_entry *) (bbuf + offset);
@@ -613,7 +603,7 @@ static errcode_t file_test(ext2_filsys fs)
 	/* create a new file */
 	retval = ext2fs_new_inode(fs, 2, 010755, 0, &newfile);
 	if (retval) {
-		com_err("file_test", retval, "while allocaing a new inode");
+		com_err("file_test", retval, "while allocating a new inode");
 		return 1;
 	}
 
@@ -623,7 +613,7 @@ static errcode_t file_test(ext2_filsys fs)
 	inode.i_mode = LINUX_S_IFREG;
 	retval = ext2fs_write_new_inode(fs, newfile, &inode);
 	if (retval) {
-		com_err("file_test", retval, "while writting a new inode");
+		com_err("file_test", retval, "while writing a new inode");
 		return 1;
 	}
 
@@ -703,7 +693,7 @@ static errcode_t dir_test(ext2_filsys fs)
 	const char *parent_name = "test";
 	ext2_ino_t parent, dir, tmp;
 	errcode_t retval;
-	char dirname[PATH_MAX];
+	char dirname[32];
 	int i;
 
 	retval = ext2fs_mkdir(fs, 11, 11, stub_name);
@@ -811,7 +801,7 @@ int main(int argc, char *argv[])
 	retval = ext2fs_allocate_tables(fs);
 	if (retval) {
 		com_err("setup", retval,
-			"while allocating tables for test filesysmte");
+			"while allocating tables for test filesystem");
 		exit(1);
 	}
 
@@ -845,6 +835,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	printf("tst_inline_data(DIR): OK\n");
+	ext2fs_free(fs);
 
 	return 0;
 }

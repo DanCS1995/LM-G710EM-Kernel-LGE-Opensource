@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -30,7 +30,9 @@ typedef struct aead_test_vector_t aead_test_vector_t;
 typedef struct signer_test_vector_t signer_test_vector_t;
 typedef struct hasher_test_vector_t hasher_test_vector_t;
 typedef struct prf_test_vector_t prf_test_vector_t;
+typedef struct xof_test_vector_t xof_test_vector_t;
 typedef struct rng_test_vector_t rng_test_vector_t;
+typedef struct dh_test_vector_t dh_test_vector_t;
 
 struct crypter_test_vector_t {
 	/** encryption algorithm this vector tests */
@@ -54,6 +56,8 @@ struct aead_test_vector_t {
 	encryption_algorithm_t alg;
 	/** key length to use, in bytes */
 	size_t key_size;
+	/** salt length to use, in bytes */
+	size_t salt_size;
 	/** encryption key of test vector */
 	u_char *key;
 	/** initialization vector, using crypters blocksize bytes */
@@ -79,7 +83,7 @@ struct signer_test_vector_t {
 	size_t len;
 	/** input data */
 	u_char *data;
-	/** expected output, with ouput size of the tested algorithm */
+	/** expected output, with output size of the tested algorithm */
 	u_char *mac;
 };
 
@@ -111,6 +115,19 @@ struct prf_test_vector_t {
 	u_char *out;
 };
 
+struct xof_test_vector_t {
+	/** xof algorithm this test vector tests */
+	ext_out_function_t alg;
+	/** size of the seed data */
+	size_t len;
+	/** seed data */
+	u_char *seed;
+	/** size of the output */
+	size_t out_len;
+	/** expected output of size*/
+	u_char *out;
+};
+
 /**
  * Test vector for a RNG.
  *
@@ -125,6 +142,27 @@ struct rng_test_vector_t {
 	size_t len;
 	/** user data passed back to the test() function on invocation */
 	void *user;
+};
+
+struct dh_test_vector_t {
+	/** diffie hellman group to test */
+	diffie_hellman_group_t group;
+	/** private value of alice */
+	u_char *priv_a;
+	/** private value of bob */
+	u_char *priv_b;
+	/** length of private values */
+	size_t priv_len;
+	/** expected public value of alice */
+	u_char *pub_a;
+	/** expected public value of bob */
+	u_char *pub_b;
+	/** size of public values */
+	size_t pub_len;
+	/** expected shared secret */
+	u_char *shared;
+	/** size of shared secret */
+	size_t shared_len;
 };
 
 /**
@@ -150,13 +188,15 @@ struct crypto_tester_t {
 	 *
 	 * @param alg			algorithm to test
 	 * @param key_size		key size to test, 0 for default
+	 * @param salt_size		salt length to test, 0 for default
 	 * @param create		constructor function for the aead transform
 	 * @param speed			speed test result, NULL to omit
 	 * @return				TRUE if test passed
 	 */
 	bool (*test_aead)(crypto_tester_t *this, encryption_algorithm_t alg,
-						 size_t key_size, aead_constructor_t create,
-						 u_int *speed, const char *plugin_name);
+					  size_t key_size, size_t salt_size,
+					  aead_constructor_t create,
+					  u_int *speed, const char *plugin_name);
 	/**
 	 * Test a signer algorithm.
 	 *
@@ -191,6 +231,17 @@ struct crypto_tester_t {
 					 prf_constructor_t create,
 					 u_int *speed, const char *plugin_name);
 	/**
+	 * Test an XOF algorithm.
+	 *
+	 * @param alg			algorithm to test
+	 * @param create		constructor function for the XOF
+	 * @param speed			speed test result, NULL to omit
+	 * @return				TRUE if test passed
+	 */
+	bool (*test_xof)(crypto_tester_t *this, ext_out_function_t alg,
+					 xof_constructor_t create,
+					 u_int *speed, const char *plugin_name);
+	/**
 	 * Test a RNG implementation.
 	 *
 	 * @param alg			algorithm to test
@@ -201,6 +252,18 @@ struct crypto_tester_t {
 	bool (*test_rng)(crypto_tester_t *this, rng_quality_t quality,
 					 rng_constructor_t create,
 					 u_int *speed, const char *plugin_name);
+	/**
+	 * Test a Diffie-Hellman implementation.
+	 *
+	 * @param group			group to test
+	 * @param create		constructor function for the DH backend
+	 * @param speed			speeed test result, NULL to omit
+	 * @return				TRUE if test passed
+	 */
+	bool (*test_dh)(crypto_tester_t *this, diffie_hellman_group_t group,
+					dh_constructor_t create,
+					u_int *speed, const char *plugin_name);
+
 	/**
 	 * Add a test vector to test a crypter.
 	 *
@@ -237,11 +300,25 @@ struct crypto_tester_t {
 	void (*add_prf_vector)(crypto_tester_t *this, prf_test_vector_t *vector);
 
 	/**
+	 * Add a test vector to test an XOF.
+	 *
+	 * @param vector		pointer to test vector
+	 */
+	void (*add_xof_vector)(crypto_tester_t *this, xof_test_vector_t *vector);
+
+	/**
 	 * Add a test vector to test a RNG.
 	 *
 	 * @param vector		pointer to test vector
 	 */
 	void (*add_rng_vector)(crypto_tester_t *this, rng_test_vector_t *vector);
+
+	/**
+	 * Add a test vector to test a Diffie-Hellman backend.
+	 *
+	 * @param vector		pointer to test vector
+	 */
+	void (*add_dh_vector)(crypto_tester_t *this, dh_test_vector_t *vector);
 
 	/**
 	 * Destroy a crypto_tester_t.

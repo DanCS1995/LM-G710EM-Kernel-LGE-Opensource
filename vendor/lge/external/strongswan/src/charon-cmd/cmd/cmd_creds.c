@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * Copyright (C) 2013 Martin Willi
  * Copyright (C) 2013 revosec AG
@@ -72,7 +72,7 @@ static shared_key_t* callback_shared(private_cmd_creds_t *this,
 								id_match_t *match_me, id_match_t *match_other)
 {
 	shared_key_t *shared;
-	char *label, *pwd;
+	char *label, *pwd = NULL;
 
 	if (type == this->prompted)
 	{
@@ -95,7 +95,9 @@ static shared_key_t* callback_shared(private_cmd_creds_t *this,
 		default:
 			return NULL;
 	}
+#ifdef HAVE_GETPASS
 	pwd = getpass(label);
+#endif
 	if (!pwd || strlen(pwd) == 0)
 	{
 		return NULL;

@@ -46,8 +46,8 @@
 #include "g10lib.h"
 #include "cipher.h"
 
-#define MAXKC			(256/32)
-#define MAXROUNDS		14
+#define MAXKC            (256/32)
+#define MAXROUNDS        14
 #define BLOCKSIZE               (128/8)
 
 
@@ -79,7 +79,7 @@ typedef struct
   union
   {
     PROPERLY_ALIGNED_TYPE dummy;
-    byte keyschedule[MAXROUNDS+1][4][4];	
+    byte keyschedule[MAXROUNDS+1][4][4];    
   } u2;
 } RIJNDAEL_context;
 
@@ -242,7 +242,7 @@ do_setkey (RIJNDAEL_context *ctx, const byte *key, const unsigned keylen)
                   t = 0;
                 }
             }
-        }		
+        }        
 #undef W    
     }
 
@@ -303,7 +303,7 @@ prepare_decryption( RIJNDAEL_context *ctx )
     }
 #undef W
 #undef w
-}	
+}    
 
 
 
@@ -808,7 +808,7 @@ static const char*
 selftest_basic_128 (void)
 {
   RIJNDAEL_context ctx;
-  unsigned char scratch[16];	   
+  unsigned char scratch[16];       
 
   /* The test vectors are from the AES supplied ones; more or less
      randomly taken from ecb_tbl.txt (I=42,81,14) */
@@ -844,7 +844,7 @@ static const char*
 selftest_basic_192 (void)
 {
   RIJNDAEL_context ctx;
-  unsigned char scratch[16];	   
+  unsigned char scratch[16];       
   
   static unsigned char plaintext_192[16] = 
     {
@@ -880,7 +880,7 @@ static const char*
 selftest_basic_256 (void)
 {
   RIJNDAEL_context ctx;
-  unsigned char scratch[16];	   
+  unsigned char scratch[16];       
 
   static unsigned char plaintext_256[16] = 
     {

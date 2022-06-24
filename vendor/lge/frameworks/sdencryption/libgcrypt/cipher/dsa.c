@@ -29,29 +29,29 @@
 
 typedef struct
 {
-  gcry_mpi_t p;	    /* prime */
-  gcry_mpi_t q;	    /* group order */
-  gcry_mpi_t g;	    /* group generator */
-  gcry_mpi_t y;	    /* g^x mod p */
+  gcry_mpi_t p;        /* prime */
+  gcry_mpi_t q;        /* group order */
+  gcry_mpi_t g;        /* group generator */
+  gcry_mpi_t y;        /* g^x mod p */
 } DSA_public_key;
 
 
 typedef struct
 {
-  gcry_mpi_t p;	    /* prime */
-  gcry_mpi_t q;	    /* group order */
-  gcry_mpi_t g;	    /* group generator */
-  gcry_mpi_t y;	    /* g^x mod p */
-  gcry_mpi_t x;	    /* secret exponent */
+  gcry_mpi_t p;        /* prime */
+  gcry_mpi_t q;        /* group order */
+  gcry_mpi_t g;        /* group generator */
+  gcry_mpi_t y;        /* g^x mod p */
+  gcry_mpi_t x;        /* secret exponent */
 } DSA_secret_key;
 
 
 /* A structure used to hold domain parameters.  */
 typedef struct
 {
-  gcry_mpi_t p;	    /* prime */
-  gcry_mpi_t q;	    /* group order */
-  gcry_mpi_t g;	    /* group generator */
+  gcry_mpi_t p;        /* prime */
+  gcry_mpi_t q;        /* group order */
+  gcry_mpi_t g;        /* group generator */
 } dsa_domain_t;
 
 
@@ -115,7 +115,7 @@ static void *progress_cb_data;
 void
 _gcry_register_pk_dsa_progress (void (*cb) (void *, const char *,
                                             int, int, int),
-				void *cb_data)
+                void *cb_data)
 {
   progress_cb = cb;
   progress_cb_data = cb_data;
@@ -152,16 +152,16 @@ gen_k( gcry_mpi_t q )
         {
           gcry_free(rndbuf);
           rndbuf = gcry_random_bytes_secure( (nbits+7)/8, GCRY_STRONG_RANDOM );
-	}
+    }
       else
         { /* Change only some of the higher bits.  We could improve
-	     this by directly requesting more memory at the first call
-	     to get_random_bytes() and use this the here maybe it is
-	     easier to do this directly in random.c. */
+         this by directly requesting more memory at the first call
+         to get_random_bytes() and use this the here maybe it is
+         easier to do this directly in random.c. */
           char *pp = gcry_random_bytes_secure( 4, GCRY_STRONG_RANDOM );
           memcpy( rndbuf,pp, 4 );
           gcry_free(pp);
-	}
+    }
       _gcry_mpi_set_buffer( k, rndbuf, nbytes, 0 );
       if ( mpi_test_bit( k, nbits-1 ) )
         mpi_set_highbit( k, nbits-1 );
@@ -169,10 +169,10 @@ gen_k( gcry_mpi_t q )
         {
           mpi_set_highbit( k, nbits-1 );
           mpi_clear_bit( k, nbits-1 );
-	}
+    }
 
       if( !(mpi_cmp( k, q ) < 0) ) /* check: k < q */
-        {	
+        {    
           if( DBG_CIPHER )
             progress('+');
           continue; /* no  */
@@ -183,7 +183,7 @@ gen_k( gcry_mpi_t q )
             progress('-');
           continue; /* no */
         }
-      break;	/* okay */
+      break;    /* okay */
     }
   gcry_free(rndbuf);
   if( DBG_CIPHER )
@@ -241,7 +241,7 @@ test_keys (DSA_secret_key *sk, unsigned int qbits)
    very secure one.
 
    Returns: 2 structures filled with all needed values
- 	    and an array with the n-1 factors of (p-1)
+         and an array with the n-1 factors of (p-1)
  */
 static gpg_err_code_t
 generate (DSA_secret_key *sk, unsigned int nbits, unsigned int qbits,
@@ -323,7 +323,7 @@ generate (DSA_secret_key *sk, unsigned int nbits, unsigned int qbits,
     }
 
   /* Select a random number X with the property:
-   *	 0 < x < q-1
+   *     0 < x < q-1
    * This must be a very good random number because this is the secret
    * part.  The random quality depends on the transient_key flag.  */
   random_level = transient_key ? GCRY_STRONG_RANDOM : GCRY_VERY_STRONG_RANDOM;
@@ -638,9 +638,9 @@ verify (gcry_mpi_t r, gcry_mpi_t s, gcry_mpi_t hash, DSA_public_key *pkey )
   gcry_mpi_t ex[3];
 
   if( !(mpi_cmp_ui( r, 0 ) > 0 && mpi_cmp( r, pkey->q ) < 0) )
-    return 0; /* assertion	0 < r < q  failed */
+    return 0; /* assertion    0 < r < q  failed */
   if( !(mpi_cmp_ui( s, 0 ) > 0 && mpi_cmp( s, pkey->q ) < 0) )
-    return 0; /* assertion	0 < s < q  failed */
+    return 0; /* assertion    0 < s < q  failed */
 
   w  = mpi_alloc( mpi_get_nlimbs(pkey->q) );
   u1 = mpi_alloc( mpi_get_nlimbs(pkey->q) );
@@ -956,7 +956,7 @@ dsa_check_secret_key (int algo, gcry_mpi_t *skey)
       sk.y = skey[3];
       sk.x = skey[4];
       if (! check_secret_key (&sk))
-	err = GPG_ERR_BAD_SECKEY;
+    err = GPG_ERR_BAD_SECKEY;
     }
 
   return err;
@@ -1010,7 +1010,7 @@ dsa_verify (int algo, gcry_mpi_t hash, gcry_mpi_t *data, gcry_mpi_t *pkey,
       pk.g = pkey[2];
       pk.y = pkey[3];
       if (! verify (data[0], data[1], hash, &pk))
-	err = GPG_ERR_BAD_SIGNATURE;
+    err = GPG_ERR_BAD_SIGNATURE;
     }
   return err;
 }

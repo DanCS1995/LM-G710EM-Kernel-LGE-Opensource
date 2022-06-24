@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2012 Tobias Brunner
  * Copyright (C) 2008-2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,7 +18,6 @@
 #include "nm_creds.h"
 #include "nm_handler.h"
 
-#include <hydra.h>
 #include <daemon.h>
 #include <processing/jobs/callback_job.h>
 
@@ -56,7 +55,7 @@ struct nm_backend_t {
 static nm_backend_t *nm_backend = NULL;
 
 /**
- * NM plugin processing routine, creates and handles NMVPNPlugin
+ * NM plugin processing routine, creates and handles NMVpnServicePlugin
  */
 static job_requeue_t run(nm_backend_t *this)
 {
@@ -97,7 +96,8 @@ static void nm_backend_deinit()
 		g_object_unref(this->plugin);
 	}
 	lib->credmgr->remove_set(lib->credmgr, &this->creds->set);
-	hydra->attributes->remove_handler(hydra->attributes, &this->handler->handler);
+	charon->attributes->remove_handler(charon->attributes,
+									   &this->handler->handler);
 	this->creds->destroy(this->creds);
 	this->handler->destroy(this->handler);
 	free(this);
@@ -130,7 +130,7 @@ static bool nm_backend_init()
 	this->plugin = nm_strongswan_plugin_new(this->creds, this->handler);
 	nm_backend = this;
 
-	hydra->attributes->add_handler(hydra->attributes, &this->handler->handler);
+	charon->attributes->add_handler(charon->attributes, &this->handler->handler);
 	lib->credmgr->add_set(lib->credmgr, &this->creds->set);
 	if (!this->plugin)
 	{
@@ -174,5 +174,5 @@ void nm_backend_register()
 				PLUGIN_SDEPEND(CERT_DECODE, CERT_X509),
 	};
 	lib->plugins->add_static_features(lib->plugins, "nm-backend", features,
-									  countof(features), TRUE);
+									  countof(features), TRUE, NULL, NULL);
 }

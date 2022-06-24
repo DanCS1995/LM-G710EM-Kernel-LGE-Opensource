@@ -259,7 +259,7 @@ crc24rfc2440_write (void *context, const void *inbuf_arg, size_t inlen)
     for (i = 0; i < 8; i++) {
       ctx->CRC <<= 1;
       if (ctx->CRC & 0x1000000)
-	ctx->CRC ^= CRC24_POLY;
+    ctx->CRC ^= CRC24_POLY;
     }
   }
 }

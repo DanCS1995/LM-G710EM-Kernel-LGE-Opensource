@@ -1,5 +1,5 @@
 /* cast5.c  -  CAST5 cipher (RFC2144)
- *	Copyright (C) 1998, 2001, 2002, 2003 Free Software Foundation, Inc.
+ *    Copyright (C) 1998, 2001, 2002, 2003 Free Software Foundation, Inc.
  *
  * This file is part of Libgcrypt.
  *
@@ -20,19 +20,19 @@
 
 /* Test vectors:
  *
- * 128-bit key	       = 01 23 45 67 12 34 56 78 23 45 67 89 34 56 78 9A
- *	   plaintext   = 01 23 45 67 89 AB CD EF
- *	   ciphertext  = 23 8B 4F E5 84 7E 44 B2
+ * 128-bit key           = 01 23 45 67 12 34 56 78 23 45 67 89 34 56 78 9A
+ *       plaintext   = 01 23 45 67 89 AB CD EF
+ *       ciphertext  = 23 8B 4F E5 84 7E 44 B2
  *
- * 80-bit  key	       = 01 23 45 67 12 34 56 78 23 45
- *		       = 01 23 45 67 12 34 56 78 23 45 00 00 00 00 00 00
- *	   plaintext   = 01 23 45 67 89 AB CD EF
- *	   ciphertext  = EB 6A 71 1A 2C 02 27 1B
+ * 80-bit  key           = 01 23 45 67 12 34 56 78 23 45
+ *               = 01 23 45 67 12 34 56 78 23 45 00 00 00 00 00 00
+ *       plaintext   = 01 23 45 67 89 AB CD EF
+ *       ciphertext  = EB 6A 71 1A 2C 02 27 1B
  *
- * 40-bit  key	       = 01 23 45 67 12
- *		       = 01 23 45 67 12 00 00 00 00 00 00 00 00 00 00 00
- *	   plaintext   = 01 23 45 67 89 AB CD EF
- *	   ciphertext  = 7A C8 16 D1 6E 9B 30 2E
+ * 40-bit  key           = 01 23 45 67 12
+ *               = 01 23 45 67 12 00 00 00 00 00 00 00 00 00 00 00
+ *       plaintext   = 01 23 45 67 89 AB CD EF
+ *       ciphertext  = 7A C8 16 D1 6E 9B 30 2E
  */
 
 #include <config.h>
@@ -335,10 +335,10 @@ static const u32 s8[256] = {
 static inline u32
 rol(int n, u32 x)
 {
-	__asm__("roll %%cl,%0"
-		:"=r" (x)
-		:"0" (x),"c" (n));
-	return x;
+    __asm__("roll %%cl,%0"
+        :"=r" (x)
+        :"0" (x),"c" (n));
+    return x;
 }
 #else
 #define rol(n,x) ( ((x) << (n)) | ((x) >> (32-(n))) )
@@ -362,15 +362,15 @@ do_encrypt_block( CAST5_context *c, byte *outbuf, const byte *inbuf )
     Km = c->Km;
     Kr = c->Kr;
 
-    /* (L0,R0) <-- (m1...m64).	(Split the plaintext into left and
+    /* (L0,R0) <-- (m1...m64).    (Split the plaintext into left and
      * right 32-bit halves L0 = m1...m32 and R0 = m33...m64.)
      */
     l = inbuf[0] << 24 | inbuf[1] << 16 | inbuf[2] << 8 | inbuf[3];
     r = inbuf[4] << 24 | inbuf[5] << 16 | inbuf[6] << 8 | inbuf[7];
 
     /* (16 rounds) for i from 1 to 16, compute Li and Ri as follows:
-     *	Li = Ri-1;
-     *	Ri = Li-1 ^ f(Ri-1,Kmi,Kri), where f is defined in Section 2.2
+     *    Li = Ri-1;
+     *    Ri = Li-1 ^ f(Ri-1,Kmi,Kri), where f is defined in Section 2.2
      * Rounds 1, 4, 7, 10, 13, and 16 use f function Type 1.
      * Rounds 2, 5, 8, 11, and 14 use f function Type 2.
      * Rounds 3, 6, 9, 12, and 15 use f function Type 3.
@@ -393,16 +393,16 @@ do_encrypt_block( CAST5_context *c, byte *outbuf, const byte *inbuf )
     t = l; l = r; r = t ^ F3(r, Km[14], Kr[14]);
     t = l; l = r; r = t ^ F1(r, Km[15], Kr[15]);
 
-    /* c1...c64 <-- (R16,L16).	(Exchange final blocks L16, R16 and
-     *	concatenate to form the ciphertext.) */
+    /* c1...c64 <-- (R16,L16).    (Exchange final blocks L16, R16 and
+     *    concatenate to form the ciphertext.) */
     outbuf[0] = (r >> 24) & 0xff;
     outbuf[1] = (r >> 16) & 0xff;
     outbuf[2] = (r >>  8) & 0xff;
-    outbuf[3] =  r	  & 0xff;
+    outbuf[3] =  r      & 0xff;
     outbuf[4] = (l >> 24) & 0xff;
     outbuf[5] = (l >> 16) & 0xff;
     outbuf[6] = (l >>  8) & 0xff;
-    outbuf[7] =  l	  & 0xff;
+    outbuf[7] =  l      & 0xff;
 }
 
 static void
@@ -448,11 +448,11 @@ do_decrypt_block (CAST5_context *c, byte *outbuf, const byte *inbuf )
     outbuf[0] = (r >> 24) & 0xff;
     outbuf[1] = (r >> 16) & 0xff;
     outbuf[2] = (r >>  8) & 0xff;
-    outbuf[3] =  r	  & 0xff;
+    outbuf[3] =  r      & 0xff;
     outbuf[4] = (l >> 24) & 0xff;
     outbuf[5] = (l >> 16) & 0xff;
     outbuf[6] = (l >>  8) & 0xff;
-    outbuf[7] =  l	  & 0xff;
+    outbuf[7] =  l      & 0xff;
 }
 
 static void
@@ -469,7 +469,7 @@ selftest(void)
 {
     CAST5_context c;
     byte key[16]  = { 0x01, 0x23, 0x45, 0x67, 0x12, 0x34, 0x56, 0x78,
-		      0x23, 0x45, 0x67, 0x89, 0x34, 0x56, 0x78, 0x9A  };
+              0x23, 0x45, 0x67, 0x89, 0x34, 0x56, 0x78, 0x9A  };
     byte plain[8] = { 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF };
     byte cipher[8]= { 0x23, 0x8B, 0x4F, 0xE5, 0x84, 0x7E, 0x44, 0xB2 };
     byte buffer[8];
@@ -477,33 +477,33 @@ selftest(void)
     cast_setkey( &c, key, 16 );
     encrypt_block( &c, buffer, plain );
     if( memcmp( buffer, cipher, 8 ) )
-	return "1";
+    return "1";
     decrypt_block( &c, buffer, buffer );
     if( memcmp( buffer, plain, 8 ) )
-	return "2";
+    return "2";
 
 #if 0 /* full maintenance test */
     {
-	int i;
-	byte a0[16] = { 0x01,0x23,0x45,0x67,0x12,0x34,0x56,0x78,
-			0x23,0x45,0x67,0x89,0x34,0x56,0x78,0x9A };
-	byte b0[16] = { 0x01,0x23,0x45,0x67,0x12,0x34,0x56,0x78,
-			0x23,0x45,0x67,0x89,0x34,0x56,0x78,0x9A };
-	byte a1[16] = { 0xEE,0xA9,0xD0,0xA2,0x49,0xFD,0x3B,0xA6,
-			0xB3,0x43,0x6F,0xB8,0x9D,0x6D,0xCA,0x92 };
-	byte b1[16] = { 0xB2,0xC9,0x5E,0xB0,0x0C,0x31,0xAD,0x71,
-			0x80,0xAC,0x05,0xB8,0xE8,0x3D,0x69,0x6E };
+    int i;
+    byte a0[16] = { 0x01,0x23,0x45,0x67,0x12,0x34,0x56,0x78,
+            0x23,0x45,0x67,0x89,0x34,0x56,0x78,0x9A };
+    byte b0[16] = { 0x01,0x23,0x45,0x67,0x12,0x34,0x56,0x78,
+            0x23,0x45,0x67,0x89,0x34,0x56,0x78,0x9A };
+    byte a1[16] = { 0xEE,0xA9,0xD0,0xA2,0x49,0xFD,0x3B,0xA6,
+            0xB3,0x43,0x6F,0xB8,0x9D,0x6D,0xCA,0x92 };
+    byte b1[16] = { 0xB2,0xC9,0x5E,0xB0,0x0C,0x31,0xAD,0x71,
+            0x80,0xAC,0x05,0xB8,0xE8,0x3D,0x69,0x6E };
 
-	for(i=0; i < 1000000; i++ ) {
-	    cast_setkey( &c, b0, 16 );
-	    encrypt_block( &c, a0, a0 );
-	    encrypt_block( &c, a0+8, a0+8 );
-	    cast_setkey( &c, a0, 16 );
-	    encrypt_block( &c, b0, b0 );
-	    encrypt_block( &c, b0+8, b0+8 );
-	}
-	if( memcmp( a0, a1, 16 ) || memcmp( b0, b1, 16 ) )
-	    return "3";
+    for(i=0; i < 1000000; i++ ) {
+        cast_setkey( &c, b0, 16 );
+        encrypt_block( &c, a0, a0 );
+        encrypt_block( &c, a0+8, a0+8 );
+        cast_setkey( &c, a0, 16 );
+        encrypt_block( &c, b0, b0 );
+        encrypt_block( &c, b0+8, b0+8 );
+    }
+    if( memcmp( a0, a1, 16 ) || memcmp( b0, b1, 16 ) )
+        return "3";
 
     }
 #endif

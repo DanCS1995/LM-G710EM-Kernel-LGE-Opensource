@@ -80,48 +80,48 @@ struct table_s table[] =
 #ifdef RESOLVE_MACROS
 #define X(a,b,c)                                 \
     {&mkw32errmap_marker, (a), (b), (c)}
-   X( "EPERM",	ERROR_CANNOT_MAKE               , 0 ), 
-   X( "ENOENT",	ERROR_FILE_NOT_FOUND            , ERROR_PATH_NOT_FOUND ),
-   X( "EINTR",	ERROR_INVALID_AT_INTERRUPT_TIME , 0 ),
-   X( "EIO",	ERROR_IO_DEVICE                 , 0 ),
-   X( "ENXIO",	ERROR_FILE_INVALID              , 0 ),
-   X( "EBADF",	ERROR_INVALID_HANDLE            , 0 ),
-   X( "EAGAIN",	ERROR_MORE_DATA                 , WSAEWOULDBLOCK ),
+   X( "EPERM",    ERROR_CANNOT_MAKE               , 0 ), 
+   X( "ENOENT",    ERROR_FILE_NOT_FOUND            , ERROR_PATH_NOT_FOUND ),
+   X( "EINTR",    ERROR_INVALID_AT_INTERRUPT_TIME , 0 ),
+   X( "EIO",    ERROR_IO_DEVICE                 , 0 ),
+   X( "ENXIO",    ERROR_FILE_INVALID              , 0 ),
+   X( "EBADF",    ERROR_INVALID_HANDLE            , 0 ),
+   X( "EAGAIN",    ERROR_MORE_DATA                 , WSAEWOULDBLOCK ),
 
-   X( "ENOMEM",	ERROR_NOT_ENOUGH_MEMORY         , 0 ),
-   X( "EACCES",	ERROR_ACCESS_DENIED             , 0 ),
-   X( "EFAULT",	ERROR_PROCESS_ABORTED           , 0 ),
-   X( "EBUSY",	ERROR_BUSY                      , 0 ),
-   X( "EEXIST",	ERROR_FILE_EXISTS               , WSAEADDRINUSE  ),
+   X( "ENOMEM",    ERROR_NOT_ENOUGH_MEMORY         , 0 ),
+   X( "EACCES",    ERROR_ACCESS_DENIED             , 0 ),
+   X( "EFAULT",    ERROR_PROCESS_ABORTED           , 0 ),
+   X( "EBUSY",    ERROR_BUSY                      , 0 ),
+   X( "EEXIST",    ERROR_FILE_EXISTS               , WSAEADDRINUSE  ),
 
-   X( "EXDEV",	ERROR_NOT_SAME_DEVICE           , 0 ),
-   X( "ENODEV",	ERROR_BAD_DEVICE                , ERROR_DEV_NOT_EXIST ),
+   X( "EXDEV",    ERROR_NOT_SAME_DEVICE           , 0 ),
+   X( "ENODEV",    ERROR_BAD_DEVICE                , ERROR_DEV_NOT_EXIST ),
 
    X( "ENOTDIR",ERROR_DIRECTORY                 , 0 ),
-   X( "EINVAL",	ERROR_INVALID_PARAMETER         , 0 ),
-   X( "ENFILE",	ERROR_NO_MORE_FILES             , 0 ),
-   X( "EMFILE",	ERROR_TOO_MANY_OPEN_FILES       , 0 ),
-   X( "ENOSPC",	ERROR_DISK_FULL                 , 0 ),
-   X( "EROFS",	ERROR_WRITE_PROTECT             , 0 ),
-   X( "EPIPE",	ERROR_BROKEN_PIPE               , 0 ),
-   X( "ERANGE",	ERROR_ARITHMETIC_OVERFLOW       , 0 ),
+   X( "EINVAL",    ERROR_INVALID_PARAMETER         , 0 ),
+   X( "ENFILE",    ERROR_NO_MORE_FILES             , 0 ),
+   X( "EMFILE",    ERROR_TOO_MANY_OPEN_FILES       , 0 ),
+   X( "ENOSPC",    ERROR_DISK_FULL                 , 0 ),
+   X( "EROFS",    ERROR_WRITE_PROTECT             , 0 ),
+   X( "EPIPE",    ERROR_BROKEN_PIPE               , 0 ),
+   X( "ERANGE",    ERROR_ARITHMETIC_OVERFLOW       , 0 ),
    X( "EDEADLOCK",ERROR_POSSIBLE_DEADLOCK       , 0 ),
    X( "ENAMETOOLONG", ERROR_FILENAME_EXCED_RANGE, 0 ),
-   X( "ENOLCK",	ERROR_SHARING_BUFFER_EXCEEDED   , 0 ),
-   X( "ENOSYS",	ERROR_NOT_SUPPORTED             , 0 ),
+   X( "ENOLCK",    ERROR_SHARING_BUFFER_EXCEEDED   , 0 ),
+   X( "ENOSYS",    ERROR_NOT_SUPPORTED             , 0 ),
    X( "ENOTEMPTY",ERROR_DIR_NOT_EMPTY           , 0 ),
    X( "ESPIPE",  ERROR_SEEK_ON_DEVICE           , 0 ),
 #if 0 /* FIXME: Find appropriate mappings.  */
-   X( "EILSEQ",		), 
-   X( "EDOM",		), 
-   X( "EMLINK",		), 
-   X( "ESRCH",		), /* No such process */
-   X( "E2BIG",		), /* Arg list too long */
-   X( "ENOEXEC",	), /* Exec format error */
-   X( "ECHILD",		), /* No child processes */
-   X( "EISDIR",		), /* Is a directory */
-   X( "ENOTTY",		), /* Inappropriate I/O control operation */
-   X( "EFBIG",		), /* File too large */
+   X( "EILSEQ",        ), 
+   X( "EDOM",        ), 
+   X( "EMLINK",        ), 
+   X( "ESRCH",        ), /* No such process */
+   X( "E2BIG",        ), /* Arg list too long */
+   X( "ENOEXEC",    ), /* Exec format error */
+   X( "ECHILD",        ), /* No child processes */
+   X( "EISDIR",        ), /* Is a directory */
+   X( "ENOTTY",        ), /* Inappropriate I/O control operation */
+   X( "EFBIG",        ), /* File too large */
 #endif
 #undef X
 #else /*!RESOLVE_MACROS*/

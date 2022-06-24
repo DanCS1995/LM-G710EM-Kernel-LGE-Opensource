@@ -41,27 +41,15 @@ DROP TABLE IF EXISTS file_hashes;
 CREATE TABLE file_hashes (
   id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
   file INTEGER NOT NULL REFERENCES files(id),
-  product INTEGER NOT NULL REFERENCES products(id),
-  device INTEGER DEFAULT 0,
-  key INTEGER DEFAULT 0 REFERENCES keys(id),
+  version INTEGER REFERENCES versions(id),
+  device INTEGER REFERENCES devices(id),
+  size INTEGER,
   algo INTEGER NOT NULL REFERENCES algorithms(id),
-  hash BLOB NOT NULL
+  hash VARCHAR(64) NOT NULL,
+  mutable INTEGER DEFAULT 0
 );
-
-DROP TABLE IF EXISTS keys;
-CREATE TABLE keys (
-  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-  keyid BLOB NOT NULL,
-  owner TEXT NOT NULL
-);
-DROP INDEX IF EXISTS keys_keyid;
-CREATE INDEX keys_keyid ON keys (
-  keyid
-);
-DROP INDEX IF EXISTS keys_owner;
-CREATE INDEX keys_owner ON keys (
-  owner
-);
+DROP INDEX IF EXISTS "file_hashes_idx";
+CREATE INDEX "file_hashes_idx" ON "file_hashes" ("file", "version", "algo");
 
 DROP TABLE IF EXISTS groups;
 CREATE TABLE groups (
@@ -120,6 +108,14 @@ CREATE TABLE sessions (
   rec INTEGER DEFAULT 3
 );
 
+DROP TABLE IF EXISTS sessions_identities;
+CREATE TABLE sessions_identities (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL REFERENCES sessions(id),
+  identity_id INTEGER NOT NULL REFERENCES identities(id),
+  UNIQUE (session_id, identity_id)
+);
+
 DROP TABLE IF EXISTS workitems;
 CREATE TABLE workitems (
   id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -156,29 +152,19 @@ CREATE TABLE components (
   id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
   vendor_id INTEGER NOT NULL,
   name INTEGER NOT NULL,
-  qualifier INTEGER DEFAULT 0
+  qualifier INTEGER DEFAULT 0,
+  label TEXT NOT NULL
 );
-
-
-DROP TABLE IF EXISTS key_component;
-CREATE TABLE key_component (
-  key INTEGER NOT NULL,
-  component INTEGER NOT NULL,
-  depth INTEGER DEFAULT 0,
-  seq_no INTEGER DEFAULT 0,
-  PRIMARY KEY (key, component)
-);
-
 
 DROP TABLE IF EXISTS component_hashes;
 CREATE TABLE component_hashes (
-  component INTEGER NOT NULL,
-  key INTEGER NOT NULL,
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  component INTEGER NOT NULL REFERENCES components(id),
+  key INTEGER NOT NULL REFERENCES devices(id),
   seq_no INTEGER NOT NULL,
   pcr INTEGER NOT NULL,
-  algo INTEGER NOT NULL,
-  hash BLOB NOT NULL,
-  PRIMARY KEY(component, key, seq_no, algo)
+  algo INTEGER NOT NULL REFERENCES algorithms(id),
+  hash BLOB NOT NULL
 );
 
 DROP TABLE IF EXISTS packages;
@@ -195,9 +181,9 @@ CREATE INDEX packages_name ON packages (
 DROP TABLE IF EXISTS versions;
 CREATE TABLE versions (
   id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-  package INTEGER NOT NULL REFERENCES packages(id),
   product INTEGER NOT NULL REFERENCES products(id),
-  release TEXT NOT NULL,
+  package INTEGER NOT NULL REFERENCES packages(id),
+  release TEXT,
   security INTEGER DEFAULT 0,
   blacklist INTEGER DEFAULT 0,
   time INTEGER DEFAULT 0
@@ -217,7 +203,9 @@ CREATE TABLE devices (
   description TEXT DEFAULT '',
   value TEXT NOT NULL,
   product INTEGER REFERENCES products(id),
-  created INTEGER
+  trusted INTEGER DEFAULT 0,
+  created INTEGER,
+  inactive INTEGER DEFAULT 0
 );
 DROP INDEX IF EXISTS devices_id;
 CREATE INDEX devices_value ON devices (
@@ -232,25 +220,140 @@ CREATE TABLE identities (
   UNIQUE (type, value)
 );
 
-DROP TABLE IF EXISTS regids;
-CREATE TABLE regids (
-  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL
+DROP TABLE IF EXISTS "swid_entities";
+CREATE TABLE "swid_entities" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "name" VARCHAR(255) NOT NULL,
+  "regid" VARCHAR(255) NOT NULL
 );
-DROP INDEX IF EXISTS regids_name;
-CREATE INDEX regids_name ON regids (
-  name
+DROP INDEX IF EXISTS "swid_entities_name";
+DROP INDEX IF EXISTS "swid_entities_regid";
+CREATE INDEX "swid_entities_name" ON "swid_entities" (
+  "name"
 );
-
-DROP TABLE IF EXISTS tags;
-CREATE TABLE tags (
-  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-  regid INTEGER NOT NULL REFERENCES regids(id),
-  unique_sw_id TEXT NOT NULL,
-  value TEXT
-);
-DROP INDEX IF EXISTS tags_name;
-CREATE INDEX tags_unique_sw_id ON tags (
-  unique_sw_id
+CREATE INDEX "swid_entities_regid" ON "swid_entities" (
+  "regid"
 );
 
+DROP TABLE IF EXISTS "swid_entityroles";
+CREATE TABLE "swid_entityroles" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "tag_id" INTEGER NOT NULL REFERENCES "swid_tags" ("id"),
+  "entity_id" INTEGER NOT NULL,
+  "role" SMALLINT UNSIGNED NOT NULL
+);
+DROP INDEX if EXISTS "swid_entityroles_tag_id";
+DROP INDEX IF EXISTS "swid_entityroles_tag_entity_id";
+CREATE INDEX "swid_entityroles_tag_id" ON "swid_entityroles" (
+  "tag_id"
+);
+CREATE INDEX "swid_entityroles_entity_id" ON "swid_entityroles" (
+  "entity_id"
+);
+
+DROP TABLE IF EXISTS "swid_tags";
+CREATE TABLE "swid_tags" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "version_id" INTEGER REFERENCES "versions" ("id"),
+  "package_name" VARCHAR(255) NOT NULL,
+  "version_str" VARCHAR(255) NOT NULL,
+  "unique_id" VARCHAR(255) NOT NULL,
+  "swid_xml" TEXT NOT NULL,
+  "software_id" VARCHAR(255) NOT NULL
+);
+DROP INDEX IF EXISTS "swid_tags_software_id";
+DROP INDEX if EXISTS "swid_tags_unique_id";
+DROP INDEX IF EXISTS "swid_tags_version";
+DROP INDEX IF EXISTS "swid_tags_package_name";
+
+CREATE INDEX "swid_tags_software_id" ON "swid_tags" (
+  "software_id"
+);
+CREATE INDEX "swid_tags_unique_id" ON "swid_tags" (
+  "unique_id"
+);
+CREATE INDEX "swid_tags_version_id" ON "swid_tags" (
+  "version_id"
+);
+CREATE INDEX "swid_tags_package_name" ON "swid_tags" (
+  "package_name"
+);
+
+DROP TABLE IF EXISTS "swid_tags_files";
+CREATE TABLE "swid_tags_files" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "tag_id" INTEGER NOT NULL,
+  "file_id" INTEGER NOT NULL REFERENCES "files" ("id"),
+  UNIQUE ("tag_id", "file_id")
+);
+DROP INDEX IF EXISTS "swid_tags_files_file_id";
+DROP INDEX IF EXISTS "swid_tags_files_tag_id";
+CREATE INDEX "swid_tags_files_file_id" ON "swid_tags_files" (
+  "file_id"
+);
+CREATE INDEX "swid_tags_files_tag_id" ON "swid_tags_files" (
+  "tag_id"
+);
+
+DROP TABLE IF EXISTS "swid_tags_sessions";
+CREATE TABLE "swid_tags_sessions" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "tag_id" INTEGER NOT NULL,
+  "session_id" INTEGER NOT NULL REFERENCES "sessions" ("id"),
+  UNIQUE ("tag_id", "session_id")
+);
+DROP INDEX IF EXISTS "swid_tags_sessions_tag_id";
+DROP INDEX IF EXISTS "swid_tags_sessions_session_id";
+CREATE INDEX "swid_tags_sessions_tag_id" ON "swid_tags_sessions" (
+  "tag_id"
+);
+CREATE INDEX "swid_tags_sessions_session_id" ON "swid_tags_sessions" (
+"session_id"
+);
+
+DROP TABLE IF EXISTS "swid_tagstats";
+CREATE TABLE "swid_tagstats" (
+  "id" INTEGER NOT NULL PRIMARY KEY,
+  "tag_id" INTEGER NOT NULL REFERENCES "swid_tags" ("id"),
+  "device_id" INTEGER NOT NULL REFERENCES "devices" ("id"),
+  "first_seen_id" INTEGER NOT NULL REFERENCES "sessions" ("id"),
+  "last_seen_id" INTEGER NOT NULL REFERENCES "sessions" ("id"),
+  "first_installed_id" INTEGER REFERENCES "swid_events" ("id"),
+  "last_deleted_id" INTEGER REFERENCES "swid_events" ("id"),
+  UNIQUE ("tag_id", "device_id")
+);
+CREATE INDEX "swid_tagstats_tag_id" ON "swid_tagstats" ("tag_id");
+CREATE INDEX "swid_tagstats_device_id" ON "swid_tagstats" ("device_id");
+CREATE INDEX "swid_tagstats_first_seen_id" ON "swid_tagstats" ("first_seen_id");
+CREATE INDEX "swid_tagstats_last_seen_id" ON "swid_tagstats" ("last_seen_id");
+
+DROP TABLE IF EXISTS "swid_events";
+CREATE TABLE "swid_events" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "device" INTEGER REFERENCES "devices" ("id"),
+  "epoch" INTEGER NOT NULL,
+  "eid" INTEGER NOT NULL,
+  "timestamp" CHAR(20) NOT NULL
+);
+DROP INDEX IF EXISTS "swid_events_device";
+CREATE INDEX "swid_events_device" ON "swid_events" (
+  "device"
+);
+
+DROP TABLE IF EXISTS "swid_tags_events";
+CREATE TABLE "swid_tags_events" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "tag_id" INTEGER NOT NULL REFERENCES "swid_tags" ("id"),
+  "event_id" INTEGER NOT NULL REFERENCES "swid_events" ("id"),
+  "action" INTEGER NOT NULL,
+  "record_id" INTEGER DEFAULT 0,
+  "source_id" INTEGER DEFAULT 0
+);
+DROP INDEX IF EXISTS "swid_tags_events_event_id";
+DROP INDEX IF EXISTS "swid_tags_events_tag_id";
+CREATE INDEX "swid_tags_events_event_id" ON "swid_tags_events" (
+  "event_id"
+);
+CREATE INDEX "swid_tags_events_tag_id" ON "swid_tags_events" (
+  "tag_id"
+);

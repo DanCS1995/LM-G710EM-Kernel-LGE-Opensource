@@ -1,7 +1,9 @@
-/**
+/*
+ * Copyright (C) 2017 Tobias Brunner
  * Copyright (C) 2008-2009 Martin Willi
- * Copyright (C) 2007 Andreas Steffen
- * Hochschule fuer Technik Rapperswil
+ * Copyright (C) 2007-2015 Andreas Steffen
+ * HSR Hochschule fuer Technik Rapperswil
+ *
  * Copyright (C) 2003 Christoph Gysin, Simon Zwahlen
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -35,6 +37,11 @@
  */
 #define OCSP_DEFAULT_LIFETIME 30
 
+/* defined in wincrypt.h */
+#ifdef OCSP_RESPONSE
+# undef OCSP_RESPONSE
+#endif
+
 typedef struct private_x509_ocsp_response_t private_x509_ocsp_response_t;
 
 /**
@@ -57,9 +64,9 @@ struct private_x509_ocsp_response_t {
 	chunk_t tbsResponseData;
 
 	/**
-	 * signature algorithm (OID)
+	 * signature scheme
 	 */
-	int signatureAlgorithm;
+	signature_params_t *scheme;
 
 	/**
 	 * signature
@@ -128,25 +135,6 @@ typedef struct {
 
 /* our OCSP response version implementation */
 #define OCSP_BASIC_RESPONSE_VERSION 1
-
-/* some OCSP specific prefabricated ASN.1 constants */
-static const chunk_t ASN1_nonce_oid = chunk_from_chars(
-	0x06, 0x09,
-		  0x2B, 0x06,
-				0x01, 0x05, 0x05, 0x07, 0x30, 0x01, 0x02
-);
-static const chunk_t ASN1_response_oid = chunk_from_chars(
-	0x06, 0x09,
-		  0x2B, 0x06,
-				0x01, 0x05, 0x05, 0x07, 0x30, 0x01, 0x04
-);
-static const chunk_t ASN1_response_content = chunk_from_chars(
-	0x04, 0x0D,
-		  0x30, 0x0B,
-				0x06, 0x09,
-				0x2B, 0x06,
-				0x01, 0x05, 0x05, 0x07, 0x30, 0x01, 0x01
-);
 
 METHOD(ocsp_response_t, get_status, cert_validation_t,
 	private_x509_ocsp_response_t *this, x509_t *subject, x509_t *issuer,
@@ -239,6 +227,48 @@ METHOD(ocsp_response_t, create_cert_enumerator, enumerator_t*,
 	private_x509_ocsp_response_t *this)
 {
 	return this->certs->create_enumerator(this->certs);
+}
+
+CALLBACK(filter, bool,
+	void *data, enumerator_t *orig, va_list args)
+{
+	single_response_t *response;
+	cert_validation_t *status;
+	crl_reason_t *revocationReason;
+	chunk_t *serialNumber;
+	time_t *revocationTime;
+
+	VA_ARGS_VGET(args, serialNumber, status, revocationTime, revocationReason);
+
+	if (orig->enumerate(orig, &response))
+	{
+		if (serialNumber)
+		{
+			*serialNumber = response->serialNumber;
+		}
+		if (status)
+		{
+			*status = response->status;
+		}
+		if (revocationTime)
+		{
+			*revocationTime = response->revocationTime;
+		}
+		if (revocationReason)
+		{
+			*revocationReason = response->revocationReason;
+		}
+		return TRUE;
+	}
+	return FALSE;
+}
+
+METHOD(ocsp_response_t, create_response_enumerator, enumerator_t*,
+	private_x509_ocsp_response_t *this)
+{
+	return enumerator_create_filter(
+				this->responses->create_enumerator(this->responses),
+				filter, NULL, NULL);
 }
 
 /**
@@ -547,11 +577,16 @@ static bool parse_basicOCSPResponse(private_x509_ocsp_response_t *this,
 				}
 				break;
 			case BASIC_RESPONSE_ALGORITHM:
-				this->signatureAlgorithm = asn1_parse_algorithmIdentifier(object,
-												parser->get_level(parser)+1, NULL);
+				INIT(this->scheme);
+				if (!signature_params_parse(object, parser->get_level(parser)+1,
+											this->scheme))
+				{
+					DBG1(DBG_ASN, "  unable to parse signature algorithm");
+					goto end;
+				}
 				break;
 			case BASIC_RESPONSE_SIGNATURE:
-				this->signature = object;
+				this->signature = chunk_skip(object, 1);
 				break;
 			case BASIC_RESPONSE_CERTIFICATE:
 			{
@@ -674,10 +709,9 @@ METHOD(certificate_t, has_issuer, id_match_t,
 
 METHOD(certificate_t, issued_by, bool,
 	private_x509_ocsp_response_t *this, certificate_t *issuer,
-	signature_scheme_t *schemep)
+	signature_params_t **scheme)
 {
 	public_key_t *key;
-	signature_scheme_t scheme;
 	bool valid;
 	x509_t *x509 = (x509_t*)issuer;
 
@@ -714,21 +748,17 @@ METHOD(certificate_t, issued_by, bool,
 		return FALSE;
 	}
 
-	/* get the public key of the issuer */
 	key = issuer->get_public_key(issuer);
-
-	/* determine signature scheme */
-	scheme = signature_scheme_from_oid(this->signatureAlgorithm);
-
-	if (scheme == SIGN_UNKNOWN || key == NULL)
+	if (!key)
 	{
 		return FALSE;
 	}
-	valid = key->verify(key, scheme, this->tbsResponseData, this->signature);
+	valid = key->verify(key, this->scheme->scheme, this->scheme->params,
+						this->tbsResponseData, this->signature);
 	key->destroy(key);
-	if (valid && schemep)
+	if (valid && scheme)
 	{
-		*schemep = scheme;
+		*scheme = signature_params_clone(this->scheme);
 	}
 	return valid;
 }
@@ -810,6 +840,7 @@ METHOD(certificate_t, destroy, void,
 	{
 		this->certs->destroy_offset(this->certs, offsetof(certificate_t, destroy));
 		this->responses->destroy_function(this->responses, free);
+		signature_params_destroy(this->scheme);
 		DESTROY_IF(this->responderId);
 		free(this->encoding.ptr);
 		free(this);
@@ -842,6 +873,7 @@ static x509_ocsp_response_t *load(chunk_t blob)
 				},
 				.get_status = _get_status,
 				.create_cert_enumerator = _create_cert_enumerator,
+				.create_response_enumerator = _create_response_enumerator,
 			},
 		},
 		.ref = 1,
@@ -849,7 +881,6 @@ static x509_ocsp_response_t *load(chunk_t blob)
 		.producedAt = UNDEFINED_TIME,
 		.usableUntil = UNDEFINED_TIME,
 		.responses = linked_list_create(),
-		.signatureAlgorithm = OID_UNKNOWN,
 		.certs = linked_list_create(),
 	);
 
@@ -889,4 +920,3 @@ x509_ocsp_response_t *x509_ocsp_response_load(certificate_type_t type,
 	}
 	return NULL;
 }
-

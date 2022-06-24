@@ -83,7 +83,7 @@
  *     tripledes_ctx context;
  *
  *     * If you would like to use two 64bit keys, fill 'key1' and'key2'
- *	 then setup the encryption context: *
+ *     then setup the encryption context: *
  *     tripledes_set2keys(context, key1, key2);
  *
  *     * To use three 64bit keys with Triple-DES use: *
@@ -101,20 +101,20 @@
  *     char *error_msg;
  *
  *     * To perform a selftest of this DES/Triple-DES implementation use the
- *	 function selftest(). It will return an error string if there are
- *	 some problems with this library. *
+ *     function selftest(). It will return an error string if there are
+ *     some problems with this library. *
  *
  *     if ( (error_msg = selftest()) )
  *     {
- *	   fprintf(stderr, "An error in the DES/Tripple-DES implementation occured: %s\n", error_msg);
- *	   abort();
+ *       fprintf(stderr, "An error in the DES/Tripple-DES implementation occured: %s\n", error_msg);
+ *       abort();
  *     }
  */
 
 
 #include <config.h>
 #include <stdio.h>
-#include <string.h>	       /* memcpy, memcmp */
+#include <string.h>           /* memcpy, memcmp */
 #include "types.h"             /* for byte and u32 typedefs */
 #include "g10lib.h"
 #include "cipher.h"
@@ -130,8 +130,8 @@ static int
 working_memcmp( const char *a, const char *b, size_t n )
 {
     for( ; n; n--, a++, b++ )
-	if( *a != *b )
-	    return (int)(*(byte*)a) - (int)(*(byte*)b);
+    if( *a != *b )
+        return (int)(*(byte*)a) - (int)(*(byte*)b);
     return 0;
 }
 #endif
@@ -396,9 +396,9 @@ static unsigned char weak_keys_chksum[20] = {
 /*
  * Macro to swap bits across two words.
  */
-#define DO_PERMUTATION(a, temp, b, offset, mask)	\
-    temp = ((a>>offset) ^ b) & mask;			\
-    b ^= temp;						\
+#define DO_PERMUTATION(a, temp, b, offset, mask)    \
+    temp = ((a>>offset) ^ b) & mask;            \
+    b ^= temp;                        \
     a ^= temp<<offset;
 
 
@@ -407,29 +407,29 @@ static unsigned char weak_keys_chksum[20] = {
  * or decrypted. Additionally the resulting two words are rotated one bit
  * to the left.
  */
-#define INITIAL_PERMUTATION(left, temp, right)		\
-    DO_PERMUTATION(left, temp, right, 4, 0x0f0f0f0f)	\
-    DO_PERMUTATION(left, temp, right, 16, 0x0000ffff)	\
-    DO_PERMUTATION(right, temp, left, 2, 0x33333333)	\
-    DO_PERMUTATION(right, temp, left, 8, 0x00ff00ff)	\
-    right =  (right << 1) | (right >> 31);		\
-    temp  =  (left ^ right) & 0xaaaaaaaa;		\
-    right ^= temp;					\
-    left  ^= temp;					\
+#define INITIAL_PERMUTATION(left, temp, right)        \
+    DO_PERMUTATION(left, temp, right, 4, 0x0f0f0f0f)    \
+    DO_PERMUTATION(left, temp, right, 16, 0x0000ffff)    \
+    DO_PERMUTATION(right, temp, left, 2, 0x33333333)    \
+    DO_PERMUTATION(right, temp, left, 8, 0x00ff00ff)    \
+    right =  (right << 1) | (right >> 31);        \
+    temp  =  (left ^ right) & 0xaaaaaaaa;        \
+    right ^= temp;                    \
+    left  ^= temp;                    \
     left  =  (left << 1) | (left >> 31);
 
 /*
  * The 'inverse initial permutation'.
  */
-#define FINAL_PERMUTATION(left, temp, right)		\
-    left  =  (left << 31) | (left >> 1);		\
-    temp  =  (left ^ right) & 0xaaaaaaaa;		\
-    left  ^= temp;					\
-    right ^= temp;					\
-    right  =  (right << 31) | (right >> 1);		\
-    DO_PERMUTATION(right, temp, left, 8, 0x00ff00ff)	\
-    DO_PERMUTATION(right, temp, left, 2, 0x33333333)	\
-    DO_PERMUTATION(left, temp, right, 16, 0x0000ffff)	\
+#define FINAL_PERMUTATION(left, temp, right)        \
+    left  =  (left << 31) | (left >> 1);        \
+    temp  =  (left ^ right) & 0xaaaaaaaa;        \
+    left  ^= temp;                    \
+    right ^= temp;                    \
+    right  =  (right << 31) | (right >> 1);        \
+    DO_PERMUTATION(right, temp, left, 8, 0x00ff00ff)    \
+    DO_PERMUTATION(right, temp, left, 2, 0x33333333)    \
+    DO_PERMUTATION(left, temp, right, 16, 0x0000ffff)    \
     DO_PERMUTATION(left, temp, right, 4, 0x0f0f0f0f)
 
 
@@ -439,36 +439,36 @@ static unsigned char weak_keys_chksum[20] = {
  * Please note: The data in 'from' and 'to' is already rotated one bit to
  * the left, done in the initial permutation.
  */
-#define DES_ROUND(from, to, work, subkey)		\
-    work = from ^ *subkey++;				\
-    to ^= sbox8[  work	    & 0x3f ];			\
-    to ^= sbox6[ (work>>8)  & 0x3f ];			\
-    to ^= sbox4[ (work>>16) & 0x3f ];			\
-    to ^= sbox2[ (work>>24) & 0x3f ];			\
-    work = ((from << 28) | (from >> 4)) ^ *subkey++;	\
-    to ^= sbox7[  work	    & 0x3f ];			\
-    to ^= sbox5[ (work>>8)  & 0x3f ];			\
-    to ^= sbox3[ (work>>16) & 0x3f ];			\
+#define DES_ROUND(from, to, work, subkey)        \
+    work = from ^ *subkey++;                \
+    to ^= sbox8[  work        & 0x3f ];            \
+    to ^= sbox6[ (work>>8)  & 0x3f ];            \
+    to ^= sbox4[ (work>>16) & 0x3f ];            \
+    to ^= sbox2[ (work>>24) & 0x3f ];            \
+    work = ((from << 28) | (from >> 4)) ^ *subkey++;    \
+    to ^= sbox7[  work        & 0x3f ];            \
+    to ^= sbox5[ (work>>8)  & 0x3f ];            \
+    to ^= sbox3[ (work>>16) & 0x3f ];            \
     to ^= sbox1[ (work>>24) & 0x3f ];
 
 /*
  * Macros to convert 8 bytes from/to 32bit words.
  */
-#define READ_64BIT_DATA(data, left, right)				   \
+#define READ_64BIT_DATA(data, left, right)                   \
     left  = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];  \
     right = (data[4] << 24) | (data[5] << 16) | (data[6] << 8) | data[7];
 
-#define WRITE_64BIT_DATA(data, left, right)				   \
-    data[0] = (left >> 24) &0xff; data[1] = (left >> 16) &0xff; 	   \
-    data[2] = (left >> 8) &0xff; data[3] = left &0xff;			   \
-    data[4] = (right >> 24) &0xff; data[5] = (right >> 16) &0xff;	   \
+#define WRITE_64BIT_DATA(data, left, right)                   \
+    data[0] = (left >> 24) &0xff; data[1] = (left >> 16) &0xff;        \
+    data[2] = (left >> 8) &0xff; data[3] = left &0xff;               \
+    data[4] = (right >> 24) &0xff; data[5] = (right >> 16) &0xff;       \
     data[6] = (right >> 8) &0xff; data[7] = right &0xff;
 
 /*
  * Handy macros for encryption and decryption of data
  */
-#define des_ecb_encrypt(ctx, from, to)	      des_ecb_crypt(ctx, from, to, 0)
-#define des_ecb_decrypt(ctx, from, to)	      des_ecb_crypt(ctx, from, to, 1)
+#define des_ecb_encrypt(ctx, from, to)          des_ecb_crypt(ctx, from, to, 0)
+#define des_ecb_decrypt(ctx, from, to)          des_ecb_crypt(ctx, from, to, 1)
 #define tripledes_ecb_encrypt(ctx, from, to) tripledes_ecb_crypt(ctx,from,to,0)
 #define tripledes_ecb_decrypt(ctx, from, to) tripledes_ecb_crypt(ctx,from,to,1)
 
@@ -478,14 +478,14 @@ static unsigned char weak_keys_chksum[20] = {
 
 
 /*
- * des_key_schedule():	  Calculate 16 subkeys pairs (even/odd) for
- *			  16 encryption rounds.
- *			  To calculate subkeys for decryption the caller
- *			  have to reorder the generated subkeys.
+ * des_key_schedule():      Calculate 16 subkeys pairs (even/odd) for
+ *              16 encryption rounds.
+ *              To calculate subkeys for decryption the caller
+ *              have to reorder the generated subkeys.
  *
- *    rawkey:	    8 Bytes of key data
- *    subkey:	    Array of at least 32 u32s. Will be filled
- *		    with calculated subkeys.
+ *    rawkey:        8 Bytes of key data
+ *    subkey:        Array of at least 32 u32s. Will be filled
+ *            with calculated subkeys.
  *
  */
 static void
@@ -594,7 +594,7 @@ des_setkey (struct _des_ctx *ctx, const byte * key)
       selftest_failed = selftest ();
 
       if (selftest_failed)
-	log_error ("%s\n", selftest_failed);
+    log_error ("%s\n", selftest_failed);
     }
   if (selftest_failed)
     return GPG_ERR_SELFTEST_FAILED;
@@ -604,7 +604,7 @@ des_setkey (struct _des_ctx *ctx, const byte * key)
 
   for(i=0; i<32; i+=2)
     {
-      ctx->decrypt_subkeys[i]	= ctx->encrypt_subkeys[30-i];
+      ctx->decrypt_subkeys[i]    = ctx->encrypt_subkeys[30-i];
       ctx->decrypt_subkeys[i+1] = ctx->encrypt_subkeys[31-i];
     }
 
@@ -652,8 +652,8 @@ des_ecb_crypt (struct _des_ctx *ctx, const byte * from, byte * to, int mode)
  */
 static int
 tripledes_set2keys (struct _tripledes_ctx *ctx,
-		    const byte * key1,
-		    const byte * key2)
+            const byte * key1,
+            const byte * key2)
 {
   int i;
 
@@ -663,7 +663,7 @@ tripledes_set2keys (struct _tripledes_ctx *ctx,
 
   for(i=0; i<32; i+=2)
     {
-      ctx->decrypt_subkeys[i]	 = ctx->encrypt_subkeys[30-i];
+      ctx->decrypt_subkeys[i]     = ctx->encrypt_subkeys[30-i];
       ctx->decrypt_subkeys[i+1]  = ctx->encrypt_subkeys[31-i];
 
       ctx->encrypt_subkeys[i+32] = ctx->decrypt_subkeys[62-i];
@@ -688,9 +688,9 @@ tripledes_set2keys (struct _tripledes_ctx *ctx,
  */
 static int
 tripledes_set3keys (struct _tripledes_ctx *ctx,
-		    const byte * key1,
-		    const byte * key2,
-		    const byte * key3)
+            const byte * key1,
+            const byte * key2,
+            const byte * key3)
 {
   static const char *selftest_failed;
   int i;
@@ -701,7 +701,7 @@ tripledes_set3keys (struct _tripledes_ctx *ctx,
       selftest_failed = selftest ();
 
       if (selftest_failed)
-	log_error ("%s\n", selftest_failed);
+    log_error ("%s\n", selftest_failed);
     }
   if (selftest_failed)
     return GPG_ERR_SELFTEST_FAILED;
@@ -713,7 +713,7 @@ tripledes_set3keys (struct _tripledes_ctx *ctx,
 
   for(i=0; i<32; i+=2)
     {
-      ctx->decrypt_subkeys[i]	 = ctx->encrypt_subkeys[94-i];
+      ctx->decrypt_subkeys[i]     = ctx->encrypt_subkeys[94-i];
       ctx->decrypt_subkeys[i+1]  = ctx->encrypt_subkeys[95-i];
 
       ctx->encrypt_subkeys[i+32] = ctx->decrypt_subkeys[62-i];
@@ -804,12 +804,12 @@ is_weak_key ( const byte *key )
       middle = (left + right) / 2;
 
       if ( !(cmp_result=working_memcmp(work, weak_keys[middle], 8)) )
-	  return -1;
+      return -1;
 
       if ( cmp_result > 0 )
-	  left = middle + 1;
+      left = middle + 1;
       else
-	  right = middle - 1;
+      right = middle - 1;
     }
 
   return 0;
@@ -848,13 +848,13 @@ selftest (void)
 
     for (i = 0; i < 64; ++i)
       {
-	des_setkey (des, key);
-	des_ecb_encrypt (des, input, temp1);
-	des_ecb_encrypt (des, temp1, temp2);
-	des_setkey (des, temp2);
-	des_ecb_decrypt (des, temp1, temp3);
-	memcpy (key, temp3, 8);
-	memcpy (input, temp1, 8);
+    des_setkey (des, key);
+    des_ecb_encrypt (des, input, temp1);
+    des_ecb_encrypt (des, temp1, temp2);
+    des_setkey (des, temp2);
+    des_ecb_decrypt (des, temp1, temp3);
+    memcpy (key, temp3, 8);
+    memcpy (input, temp1, 8);
       }
     if (memcmp (temp3, result, 8))
       return "DES maintenance test failed.";
@@ -862,7 +862,7 @@ selftest (void)
 
 
   /*
-   * Self made Triple-DES test	(Does somebody know an official test?)
+   * Self made Triple-DES test    (Does somebody know an official test?)
    */
   {
     int i;
@@ -879,11 +879,11 @@ selftest (void)
 
     for (i = 0; i < 16; ++i)
       {
-	tripledes_set2keys (des3, key1, key2);
-	tripledes_ecb_encrypt (des3, input, key1);
-	tripledes_ecb_decrypt (des3, input, key2);
-	tripledes_set3keys (des3, key1, input, key2);
-	tripledes_ecb_encrypt (des3, input, input);
+    tripledes_set2keys (des3, key1, key2);
+    tripledes_ecb_encrypt (des3, input, key1);
+    tripledes_ecb_decrypt (des3, input, key2);
+    tripledes_set3keys (des3, key1, input, key2);
+    tripledes_ecb_encrypt (des3, input, input);
       }
     if (memcmp (input, result, 8))
       return "Triple-DES test failed.";
@@ -958,9 +958,9 @@ selftest (void)
       }
     };
 
-    byte		result[8];
-    int		i;
-    tripledes_ctx	des3;
+    byte        result[8];
+    int        i;
+    tripledes_ctx    des3;
 
     for (i=0; i<sizeof(testdata)/sizeof(*testdata); ++i)
       {

@@ -1,8 +1,9 @@
 /*
- * Copyright (C) 2012 Tobias Brunner
+ * Copyright (C) 2016-2017 Andreas Steffen
+ * Copyright (C) 2012-2015 Tobias Brunner
  * Copyright (C) 2005-2006 Martin Willi
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -26,25 +27,31 @@
 typedef enum hash_algorithm_t hash_algorithm_t;
 typedef struct hasher_t hasher_t;
 
-#include <library.h>
 #include <crypto/prfs/prf.h>
 #include <crypto/signers/signer.h>
 #include <credentials/keys/public_key.h>
 
 /**
- * Algorithms to use for hashing.
+ * Hash algorithms as defined for IKEv2
  */
 enum hash_algorithm_t {
-	/** not specified hash function */
-	HASH_UNKNOWN 		= 0,
-	HASH_MD2 			= 1,
-	HASH_MD4			= 2,
-	HASH_MD5 			= 3,
-	HASH_SHA1 			= 4,
-	HASH_SHA224			= 5,
-	HASH_SHA256 		= 6,
-	HASH_SHA384 		= 7,
-	HASH_SHA512 		= 8
+	/* RFC 7427 */
+	HASH_SHA1 			= 1,
+	HASH_SHA256			= 2,
+	HASH_SHA384			= 3,
+	HASH_SHA512			= 4,
+	/* RFC 8420 */
+	HASH_IDENTITY		= 5,
+	/* use private use range for algorithms not defined/permitted by RFC 7427 */
+	HASH_UNKNOWN 		= 1024,
+	HASH_MD2 			= 1025,
+	HASH_MD4			= 1026,
+	HASH_MD5 			= 1027,
+	HASH_SHA224			= 1028,
+	HASH_SHA3_224		= 1029,
+	HASH_SHA3_256		= 1030,
+	HASH_SHA3_384		= 1031,
+	HASH_SHA3_512		= 1032
 };
 
 #define HASH_SIZE_MD2		16
@@ -67,6 +74,11 @@ extern enum_name_t *hash_algorithm_names;
 extern enum_name_t *hash_algorithm_short_names;
 
 /**
+ * Uppercase short names for hash_algorithm_names
+ */
+extern enum_name_t *hash_algorithm_short_names_upper;
+
+/**
  * Generic interface for all hash functions.
  */
 struct hasher_t {
@@ -86,7 +98,7 @@ struct hasher_t {
 	 * @return			TRUE if hash created successfully
 	 */
 	bool (*get_hash)(hasher_t *this, chunk_t data,
-					 u_int8_t *hash) __attribute__((warn_unused_result));
+					 uint8_t *hash) __attribute__((warn_unused_result));
 
 	/**
 	 * Hash data and allocate space for the hash.
@@ -121,6 +133,14 @@ struct hasher_t {
 	 */
 	void (*destroy)(hasher_t *this);
 };
+
+/**
+ * Returns the size of the hash for the given algorithm.
+ *
+ * @param alg			hash algorithm
+ * @return				size of hash or 0 if unknown
+ */
+size_t hasher_hash_size(hash_algorithm_t alg);
 
 /**
  * Conversion of ASN.1 OID to hash algorithm.
@@ -163,6 +183,14 @@ integrity_algorithm_t hasher_algorithm_to_integrity(hash_algorithm_t alg,
 													size_t length);
 
 /**
+ * Check if the given algorithm may be used for IKEv2 signature authentication.
+ *
+ * @param alg			hash algorithm
+ * @return				TRUE if algorithm may be used, FALSE otherwise
+ */
+bool hasher_algorithm_for_ikev2(hash_algorithm_t alg);
+
+/**
  * Conversion of hash algorithm into ASN.1 OID.
  *
  * @param alg			hash algorithm
@@ -178,5 +206,15 @@ int hasher_algorithm_to_oid(hash_algorithm_t alg);
  * @return				ASN.1 OID if, or OID_UNKNOW
  */
 int hasher_signature_algorithm_to_oid(hash_algorithm_t alg, key_type_t key);
+
+/**
+ * Determine the hash algorithm associated with a given signature scheme.
+ *
+ * @param scheme		signature scheme
+ * @param params		optional parameters
+ * @return				hash algorithm (could be HASH_UNKNOWN)
+ */
+hash_algorithm_t hasher_from_signature_scheme(signature_scheme_t scheme,
+											  void *params);
 
 #endif /** HASHER_H_ @}*/

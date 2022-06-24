@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2010-2012 Tobias Brunner
+ * Copyright (C) 2010-2018 Tobias Brunner
  * Copyright (C) 2007 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,10 +18,11 @@
 
 #include <string.h>
 
-#include <hydra.h>
 #include <daemon.h>
 #include <sa/ikev2/tasks/ike_natd.h>
 #include <encoding/payloads/notify_payload.h>
+#include <utils/cust_settings.h>
+#include <libpatchcodeid.h>
 
 #define COOKIE2_SIZE 16
 #define MAX_ADDITIONAL_ADDRS 8
@@ -80,6 +81,33 @@ struct private_ike_mobike_t {
 };
 
 /**
+ * Check if a newer MOBIKE update task is queued
+ */
+static bool is_newer_update_queued(private_ike_mobike_t *this)
+{
+	enumerator_t *enumerator;
+	private_ike_mobike_t *mobike;
+	task_t *task;
+	bool found = FALSE;
+
+	enumerator = this->ike_sa->create_task_enumerator(this->ike_sa,
+													  TASK_QUEUE_QUEUED);
+	while (enumerator->enumerate(enumerator, &task))
+	{
+		if (task->get_type(task) == TASK_IKE_MOBIKE)
+		{
+			mobike = (private_ike_mobike_t*)task;
+			/* a queued check or update might invalidate the results of the
+			 * current task */
+			found = mobike->check || mobike->update;
+			break;
+		}
+	}
+	enumerator->destroy(enumerator);
+	return found;
+}
+
+/**
  * read notifys from message and evaluate them
  */
 static void process_payloads(private_ike_mobike_t *this, message_t *message)
@@ -87,6 +115,10 @@ static void process_payloads(private_ike_mobike_t *this, message_t *message)
 	enumerator_t *enumerator;
 	payload_t *payload;
 	bool first = TRUE;
+
+	/* 2019-03-06 leela.mohan@lge.com LGP_DATA_IWLAN_MOBIKE [START] */
+	bool mobike_support = FALSE;
+	/* 2019-03-06 leela.mohan@lge.com LGP_DATA_IWLAN_MOBIKE [END] */
 
 	enumerator = message->create_payload_enumerator(message);
 	while (enumerator->enumerate(enumerator, &payload))
@@ -96,7 +128,7 @@ static void process_payloads(private_ike_mobike_t *this, message_t *message)
 		chunk_t data;
 		host_t *host;
 
-		if (payload->get_type(payload) != NOTIFY)
+		if (payload->get_type(payload) != PLV2_NOTIFY)
 		{
 			continue;
 		}
@@ -106,17 +138,49 @@ static void process_payloads(private_ike_mobike_t *this, message_t *message)
 			case MOBIKE_SUPPORTED:
 			{
 				peer_cfg_t *peer_cfg;
+				/* 2019-03-18 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [START] */
+				ike_cfg_t *ike_cfg;
+				bool peer_mobike_support = FALSE;
+				char *iface = NULL;
+				int slotid = 0;
+				patch_code_id("LPCP-2526@n@c@libcharon@ike_mobike.c@1");
+				/* 2019-03-18 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [END] */
+
 
 				peer_cfg = this->ike_sa->get_peer_cfg(this->ike_sa);
-				if (!this->initiator &&
-					peer_cfg && !peer_cfg->use_mobike(peer_cfg))
+				if (!this->initiator && peer_cfg && !peer_cfg->use_mobike(peer_cfg))
 				{
 					DBG1(DBG_IKE, "peer supports MOBIKE, but disabled in config");
+
+					/* 2019-03-06 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [START] */
+					slotid = get_slotid(this->ike_sa->get_name(this->ike_sa));
+					set_cust_setting_bool_by_slotid(slotid, PEER_MOBIKE, false);
+					set_cust_setting_by_slotid(slotid, MOBIKE_IFACE, "0");
+					peer_mobike_support = get_cust_setting_bool_by_slotid(slotid, PEER_MOBIKE);
+					DBG1(DBG_IKE, "peer_mobike_support value if config not supported mobike_support=%d", peer_mobike_support);
+					/* 2019-03-06 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [END] */
 				}
 				else
 				{
 					DBG1(DBG_IKE, "peer supports MOBIKE");
+
+					/* 2019-03-06 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [START] */
+					slotid = get_slotid(this->ike_sa->get_name(this->ike_sa));
+					set_cust_setting_bool_by_slotid(slotid, PEER_MOBIKE, true);
+					ike_cfg = this->ike_sa->get_ike_cfg(this->ike_sa);
+					iface = ike_cfg->get_vif(ike_cfg);
+					set_cust_setting_by_slotid(slotid, MOBIKE_IFACE,iface);
+					DBG1(DBG_IKE, "Iface value in Case of MOBIKE=%s" , iface);
+					peer_mobike_support = get_cust_setting_bool_by_slotid(slotid, PEER_MOBIKE);
+					DBG1(DBG_IKE, "peer_mobike_support value if config supported mobike_support=%d", peer_mobike_support);
+					/* 2019-03-06 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [END] */
+
 					this->ike_sa->enable_extension(this->ike_sa, EXT_MOBIKE);
+
+					/* 2019-03-06 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [START] */
+					mobike_support = property_get_bool("persist.net.wo.mobike_supp", 0);
+					DBG1(DBG_IKE, "mobike_support value is persist.net.wo.mobike_supp %d", mobike_support);
+					/* 2019-03-06 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [END] */
 				}
 				break;
 			}
@@ -167,7 +231,7 @@ static void process_payloads(private_ike_mobike_t *this, message_t *message)
 			case NAT_DETECTION_DESTINATION_IP:
 			{
 				/* NAT check in this MOBIKE exchange, create subtask for it */
-				if (this->natd == NULL)
+				if (!this->natd)
 				{
 					this->natd = ike_natd_create(this->ike_sa, this->initiator);
 				}
@@ -191,8 +255,8 @@ static void build_address_list(private_ike_mobike_t *this, message_t *message)
 	int added = 0;
 
 	me = this->ike_sa->get_my_host(this->ike_sa);
-	enumerator = hydra->kernel_interface->create_address_enumerator(
-									hydra->kernel_interface, ADDR_TYPE_REGULAR);
+	enumerator = charon->kernel->create_address_enumerator(charon->kernel,
+														   ADDR_TYPE_REGULAR);
 	while (enumerator->enumerate(enumerator, (void**)&host))
 	{
 		if (me->ip_equals(me, host))
@@ -251,6 +315,7 @@ static void update_children(private_ike_mobike_t *this)
 	enumerator_t *enumerator;
 	child_sa_t *child_sa;
 	linked_list_t *vips;
+	status_t status;
 	host_t *host;
 
 	vips = linked_list_create();
@@ -265,15 +330,25 @@ static void update_children(private_ike_mobike_t *this)
 	enumerator = this->ike_sa->create_child_sa_enumerator(this->ike_sa);
 	while (enumerator->enumerate(enumerator, (void**)&child_sa))
 	{
-		if (child_sa->update(child_sa,
-				this->ike_sa->get_my_host(this->ike_sa),
-				this->ike_sa->get_other_host(this->ike_sa), vips,
-				this->ike_sa->has_condition(this->ike_sa,
-											COND_NAT_ANY)) == NOT_SUPPORTED)
+		status = child_sa->update(child_sa,
+					this->ike_sa->get_my_host(this->ike_sa),
+					this->ike_sa->get_other_host(this->ike_sa), vips,
+					this->ike_sa->has_condition(this->ike_sa, COND_NAT_ANY));
+		switch (status)
 		{
-			this->ike_sa->rekey_child_sa(this->ike_sa,
-					child_sa->get_protocol(child_sa),
-					child_sa->get_spi(child_sa, TRUE));
+			case NOT_SUPPORTED:
+				this->ike_sa->rekey_child_sa(this->ike_sa,
+											 child_sa->get_protocol(child_sa),
+											 child_sa->get_spi(child_sa, TRUE));
+				break;
+			case SUCCESS:
+				charon->child_sa_manager->remove(charon->child_sa_manager,
+												 child_sa);
+				charon->child_sa_manager->add(charon->child_sa_manager,
+											  child_sa, this->ike_sa);
+				break;
+			default:
+				break;
 		}
 	}
 	enumerator->destroy(enumerator);
@@ -284,7 +359,7 @@ static void update_children(private_ike_mobike_t *this)
 /**
  * Apply the port of the old host, if its ip equals the new, use port otherwise.
  */
-static void apply_port(host_t *host, host_t *old, u_int16_t port, bool local)
+static void apply_port(host_t *host, host_t *old, uint16_t port, bool local)
 {
 	if (host->ip_equals(host, old))
 	{
@@ -301,35 +376,85 @@ static void apply_port(host_t *host, host_t *old, u_int16_t port, bool local)
 	host->set_port(host, port);
 }
 
-METHOD(ike_mobike_t, transmit, void,
+METHOD(ike_mobike_t, transmit, bool,
 	   private_ike_mobike_t *this, packet_t *packet)
 {
 	host_t *me, *other, *me_old, *other_old;
 	enumerator_t *enumerator;
 	ike_cfg_t *ike_cfg;
 	packet_t *copy;
-
-	if (!this->check)
-	{
-		return;
-	}
-
+	int family = AF_UNSPEC;
+	bool found = FALSE;
+	/* 2019-03-18 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [START] */
+	char *iface = NULL;
+	int slotid = 0;
+	bool peer_mobike_support = FALSE;
+	/* 2019-03-18 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [END] */
 	me_old = this->ike_sa->get_my_host(this->ike_sa);
 	other_old = this->ike_sa->get_other_host(this->ike_sa);
 	ike_cfg = this->ike_sa->get_ike_cfg(this->ike_sa);
 
+	if (!this->check)
+	{
+		me = charon->kernel->get_source_addr(charon->kernel, other_old, me_old);
+		if (me)
+		{
+			if (me->ip_equals(me, me_old))
+			{
+				copy = packet->clone(packet);
+				/* hosts might have been updated by a peer's MOBIKE exchange */
+				copy->set_source(copy, me_old->clone(me_old));
+				copy->set_destination(copy, other_old->clone(other_old));
+				charon->sender->send(charon->sender, copy);
+				me->destroy(me);
+				return TRUE;
+			}
+			me->destroy(me);
+		}
+		this->check = TRUE;
+	}
+
+	switch (charon->socket->supported_families(charon->socket))
+	{
+		case SOCKET_FAMILY_IPV4:
+			family = AF_INET;
+			break;
+		case SOCKET_FAMILY_IPV6:
+			family = AF_INET6;
+			break;
+		case SOCKET_FAMILY_BOTH:
+		case SOCKET_FAMILY_NONE:
+			break;
+	}
+
 	enumerator = this->ike_sa->create_peer_address_enumerator(this->ike_sa);
 	while (enumerator->enumerate(enumerator, (void**)&other))
 	{
-		me = hydra->kernel_interface->get_source_addr(
-										hydra->kernel_interface, other, NULL);
-		if (me)
+		if (family != AF_UNSPEC && other->get_family(other) != family)
 		{
-			if (me->get_family(me) != other->get_family(other))
+			continue;
+		}
+		me = charon->kernel->get_source_addr(charon->kernel, other, NULL);
+		/* 2019-03-18 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [START] */
+		slotid = get_slotid(this->ike_sa->get_name(this->ike_sa));
+		peer_mobike_support = get_cust_setting_bool_by_slotid(slotid, PEER_MOBIKE);
+		patch_code_id("LPCP-2526@n@c@libcharon@ike_mobike.c@2");
+		DBG1(DBG_IKE, " Check peer_mobike_support value in L+W case mobike_support=%d", peer_mobike_support);
+		DBG1(DBG_IKE, "[LGSI_ePDG] Inside enumerate path %#H - %#H", me, other);
+
+		if(charon->kernel->get_interface(charon->kernel, me, &iface))
+		{
+			DBG1(DBG_IKE, "[LGSI_ePDG] [LGSI_epdg] Address - Associated Iface %#H - %s", me, iface);
+			if(((peer_mobike_support) && (!(strncmp(iface, "wlan", 4) == 0))) || !peer_mobike_support)
 			{
-				me->destroy(me);
+				DBG1(DBG_IKE, "[LGSI_ePDG] checking path %#H - %s", me, iface);
+				DBG1(DBG_IKE, "[LGSI_ePDG] do nothing since it is not wlan Iface %s", iface);
 				continue;
 			}
+		}
+		/* 2019-03-18 leela.mohan@lge.com LGP_DATA_IWLAN MOBIKE [END] */
+		if (me)
+		{
 			/* reuse port for an active address, 4500 otherwise */
 			apply_port(me, me_old, ike_cfg->get_my_port(ike_cfg), TRUE);
 			other = other->clone(other);
@@ -339,9 +464,11 @@ METHOD(ike_mobike_t, transmit, void,
 			copy->set_source(copy, me);
 			copy->set_destination(copy, other);
 			charon->sender->send(charon->sender, copy);
+			found = TRUE;
 		}
 	}
 	enumerator->destroy(enumerator);
+	return found;
 }
 
 METHOD(task_t, build_i, status_t,
@@ -359,7 +486,7 @@ METHOD(task_t, build_i, status_t,
 
 		/* we check if the existing address is still valid */
 		old = message->get_source(message);
-		new = hydra->kernel_interface->get_source_addr(hydra->kernel_interface,
+		new = charon->kernel->get_source_addr(charon->kernel,
 										message->get_destination(message), old);
 		if (new)
 		{
@@ -481,11 +608,8 @@ METHOD(task_t, process_i, status_t,
 	}
 	else if (message->get_exchange_type(message) == INFORMATIONAL)
 	{
-		u_int32_t updates = this->ike_sa->get_pending_updates(this->ike_sa) - 1;
-		this->ike_sa->set_pending_updates(this->ike_sa, updates);
-		if (updates > 0)
+		if (is_newer_update_queued(this))
 		{
-			/* newer update queued, ignore this one */
 			return SUCCESS;
 		}
 		if (this->cookie2.ptr)
@@ -495,7 +619,7 @@ METHOD(task_t, process_i, status_t,
 			cookie2 = this->cookie2;
 			this->cookie2 = chunk_empty;
 			process_payloads(this, message);
-			if (!chunk_equals(cookie2, this->cookie2))
+			if (!chunk_equals_const(cookie2, this->cookie2))
 			{
 				chunk_free(&cookie2);
 				DBG1(DBG_IKE, "COOKIE2 mismatch, closing IKE_SA");
@@ -510,7 +634,7 @@ METHOD(task_t, process_i, status_t,
 		if (this->natd)
 		{
 			this->natd->task.process(&this->natd->task, message);
-			if (this->natd->has_mapping_changed(this->natd))
+			if (!this->update && this->natd->has_mapping_changed(this->natd))
 			{
 				/* force an update if mappings have changed */
 				this->update = this->check = TRUE;
@@ -560,7 +684,6 @@ METHOD(task_t, process_i, status_t,
 					this->natd = ike_natd_create(this->ike_sa, this->initiator);
 				}
 				this->check = FALSE;
-				this->ike_sa->set_pending_updates(this->ike_sa, 1);
 				return NEED_MORE;
 			}
 		}
@@ -573,34 +696,34 @@ METHOD(ike_mobike_t, addresses, void,
 	   private_ike_mobike_t *this)
 {
 	this->address = TRUE;
-	this->ike_sa->set_pending_updates(this->ike_sa,
-						this->ike_sa->get_pending_updates(this->ike_sa) + 1);
 }
 
 METHOD(ike_mobike_t, roam, void,
 	   private_ike_mobike_t *this, bool address)
 {
 	this->check = TRUE;
-	this->address = address;
-	this->ike_sa->set_pending_updates(this->ike_sa,
-						this->ike_sa->get_pending_updates(this->ike_sa) + 1);
+	this->address |= address;
 }
 
 METHOD(ike_mobike_t, dpd, void,
 	   private_ike_mobike_t *this)
 {
-	if (!this->natd)
+	if (!this->natd && this->ike_sa->has_condition(this->ike_sa, COND_NAT_HERE))
 	{
 		this->natd = ike_natd_create(this->ike_sa, this->initiator);
 	}
-	this->ike_sa->set_pending_updates(this->ike_sa,
-						this->ike_sa->get_pending_updates(this->ike_sa) + 1);
 }
 
 METHOD(ike_mobike_t, is_probing, bool,
 	   private_ike_mobike_t *this)
 {
 	return this->check;
+}
+
+METHOD(ike_mobike_t, enable_probing, void,
+	private_ike_mobike_t *this)
+{
+	this->check = TRUE;
 }
 
 METHOD(task_t, get_type, task_type_t,
@@ -650,6 +773,7 @@ ike_mobike_t *ike_mobike_create(ike_sa_t *ike_sa, bool initiator)
 			.dpd = _dpd,
 			.transmit = _transmit,
 			.is_probing = _is_probing,
+			.enable_probing = _enable_probing,
 		},
 		.ike_sa = ike_sa,
 		.initiator = initiator,

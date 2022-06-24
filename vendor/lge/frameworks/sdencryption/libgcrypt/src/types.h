@@ -1,5 +1,5 @@
 /* types.h - some common typedefs
- *	Copyright (C) 1998, 2000, 2002, 2003 Free Software Foundation, Inc.
+ *    Copyright (C) 1998, 2000, 2002, 2003 Free Software Foundation, Inc.
  *
  * This file is part of Libgcrypt.
  *
@@ -42,7 +42,7 @@
 
 
 #ifndef HAVE_BYTE_TYPEDEF
-#undef byte	    /* maybe there is a macro with this name */
+#undef byte        /* maybe there is a macro with this name */
 /* Windows typedefs byte in the rpc headers.  Avoid warning about
    double definition.  */
 #if !(defined(_WIN32) && defined(cbNDRContext))
@@ -58,13 +58,13 @@
 #endif
 
 #ifndef HAVE_ULONG_TYPEDEF
-#undef ulong	    /* maybe there is a macro with this name */
+#undef ulong        /* maybe there is a macro with this name */
   typedef unsigned long ulong;
 #define HAVE_ULONG_TYPEDEF
 #endif
 
 #ifndef HAVE_U16_TYPEDEF
-#undef u16	    /* maybe there is a macro with this name */
+#undef u16        /* maybe there is a macro with this name */
 #if SIZEOF_UNSIGNED_INT == 2
     typedef unsigned int   u16;
 #elif SIZEOF_UNSIGNED_SHORT == 2
@@ -76,7 +76,7 @@
 #endif
 
 #ifndef HAVE_U32_TYPEDEF
-#undef u32	    /* maybe there is a macro with this name */
+#undef u32        /* maybe there is a macro with this name */
 #if SIZEOF_UNSIGNED_INT == 4
     typedef unsigned int u32;
 #elif SIZEOF_UNSIGNED_LONG == 4
@@ -93,7 +93,7 @@
  * Solaris and IRIX.
  */
 #ifndef HAVE_U64_TYPEDEF
-#undef u64	    /* maybe there is a macro with this name */
+#undef u64        /* maybe there is a macro with this name */
 #if SIZEOF_UNSIGNED_INT == 8
     typedef unsigned int u64;
 #define U64_C(c) (c ## U)

@@ -30,10 +30,10 @@
 
 #ifndef HAVE_STPCPY
 char *
-stpcpy(char *a,const char *b) __overloadable
+stpcpy(char *a,const char *b)
 {
     while( *b )
-	*a++ = *b++;
+    *a++ = *b++;
     *a = 0;
 
     return (char*)a;
@@ -46,8 +46,8 @@ int
 strcasecmp( const char *a, const char *b )
 {
     for( ; *a && *b; a++, b++ ) {
-	if( *a != *b && toupper(*a) != toupper(*b) )
-	    break;
+    if( *a != *b && toupper(*a) != toupper(*b) )
+        break;
     }
     return *(const byte*)a - *(const byte*)b;
 }

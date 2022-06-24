@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -52,7 +52,7 @@ struct private_gcrypt_crypter_t {
 	struct {
 		char nonce[4];
 		char iv[8];
-		u_int32_t counter;
+		uint32_t counter;
 	} __attribute__((packed)) ctr;
 };
 

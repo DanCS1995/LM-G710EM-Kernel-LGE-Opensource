@@ -1,7 +1,8 @@
 /*
- * Copyright (C) 2008-2012 Tobias Brunner
+ * Copyright (C) 2008-2017 Tobias Brunner
  * Copyright (C) 2007-2009 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * Copyright (C) 2016 Andreas Steffen
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -34,7 +35,7 @@ ENUM(auth_class_names, AUTH_CLASS_ANY, AUTH_CLASS_XAUTH,
 	"XAuth",
 );
 
-ENUM(auth_rule_names, AUTH_RULE_IDENTITY, AUTH_HELPER_REVOCATION_CERT,
+ENUM(auth_rule_names, AUTH_RULE_IDENTITY, AUTH_HELPER_AC_CERT,
 	"RULE_IDENTITY",
 	"RULE_IDENTITY_LOOSE",
 	"RULE_AUTH_CLASS",
@@ -49,16 +50,20 @@ ENUM(auth_rule_names, AUTH_RULE_IDENTITY, AUTH_HELPER_REVOCATION_CERT,
 	"RULE_SUBJECT_CERT",
 	"RULE_CRL_VALIDATION",
 	"RULE_OCSP_VALIDATION",
+	"RULE_CERT_VALIDATION_SUSPENDED",
 	"RULE_GROUP",
 	"RULE_RSA_STRENGTH",
 	"RULE_ECDSA_STRENGTH",
+	"RULE_BLISS_STRENGTH",
 	"RULE_SIGNATURE_SCHEME",
+	"RULE_IKE_SIGNATURE_SCHEME",
 	"RULE_CERT_POLICY",
 	"HELPER_IM_CERT",
 	"HELPER_SUBJECT_CERT",
 	"HELPER_IM_HASH_URL",
 	"HELPER_SUBJECT_HASH_URL",
 	"HELPER_REVOCATION_CERT",
+	"HELPER_AC_CERT",
 	"RULE_IDENTITY_APN",
 	"HELPER_BUNDLE_HASH_URL",
 );
@@ -73,8 +78,6 @@ static inline bool is_multi_value_rule(auth_rule_t type)
 		case AUTH_RULE_AUTH_CLASS:
 		case AUTH_RULE_EAP_TYPE:
 		case AUTH_RULE_EAP_VENDOR:
-		case AUTH_RULE_RSA_STRENGTH:
-		case AUTH_RULE_ECDSA_STRENGTH:
 		case AUTH_RULE_IDENTITY:
 		case AUTH_RULE_IDENTITY_LOOSE:
 		case AUTH_RULE_IDENTITY_APN:
@@ -82,6 +85,7 @@ static inline bool is_multi_value_rule(auth_rule_t type)
 		case AUTH_RULE_AAA_IDENTITY:
 		case AUTH_RULE_XAUTH_IDENTITY:
 		case AUTH_RULE_XAUTH_BACKEND:
+		case AUTH_RULE_CERT_VALIDATION_SUSPENDED:
 		case AUTH_HELPER_SUBJECT_CERT:
 		case AUTH_HELPER_SUBJECT_HASH_URL:
 		case AUTH_RULE_MAX:
@@ -94,10 +98,15 @@ static inline bool is_multi_value_rule(auth_rule_t type)
 		case AUTH_RULE_CA_CERT:
 		case AUTH_RULE_IM_CERT:
 		case AUTH_RULE_CERT_POLICY:
+		case AUTH_RULE_RSA_STRENGTH:
+		case AUTH_RULE_ECDSA_STRENGTH:
+		case AUTH_RULE_BLISS_STRENGTH:
 		case AUTH_RULE_SIGNATURE_SCHEME:
+		case AUTH_RULE_IKE_SIGNATURE_SCHEME:
 		case AUTH_HELPER_IM_CERT:
 		case AUTH_HELPER_IM_HASH_URL:
 		case AUTH_HELPER_REVOCATION_CERT:
+		case AUTH_HELPER_AC_CERT:
 			return TRUE;
 	}
 	return FALSE;
@@ -144,12 +153,14 @@ typedef struct {
 	bool enumerated[AUTH_RULE_MAX];
 } entry_enumerator_t;
 
-/**
- * enumerate function for item_enumerator_t
- */
-static bool enumerate(entry_enumerator_t *this, auth_rule_t *type, void **value)
+METHOD(enumerator_t, enumerate, bool,
+	entry_enumerator_t *this, va_list args)
 {
+	auth_rule_t *type;
 	entry_t *entry;
+	void **value;
+
+	VA_ARGS_VGET(args, type, value);
 
 	while (this->inner->enumerate(this->inner, &entry))
 	{
@@ -172,10 +183,8 @@ static bool enumerate(entry_enumerator_t *this, auth_rule_t *type, void **value)
 	return FALSE;
 }
 
-/**
- * destroy function for item_enumerator_t
- */
-static void entry_enumerator_destroy(entry_enumerator_t *this)
+METHOD(enumerator_t, entry_enumerator_destroy, void,
+	entry_enumerator_t *this)
 {
 	this->inner->destroy(this->inner);
 	free(this);
@@ -188,8 +197,9 @@ METHOD(auth_cfg_t, create_enumerator, enumerator_t*,
 
 	INIT(enumerator,
 		.public = {
-			.enumerate = (void*)enumerate,
-			.destroy = (void*)entry_enumerator_destroy,
+			.enumerate = enumerator_enumerate_default,
+			.venumerate = _enumerate,
+			.destroy = _entry_enumerator_destroy,
 		},
 		.inner = array_create_enumerator(this->entries),
 	);
@@ -212,7 +222,8 @@ static void init_entry(entry_t *this, auth_rule_t type, va_list args)
 		case AUTH_RULE_OCSP_VALIDATION:
 		case AUTH_RULE_RSA_STRENGTH:
 		case AUTH_RULE_ECDSA_STRENGTH:
-		case AUTH_RULE_SIGNATURE_SCHEME:
+		case AUTH_RULE_BLISS_STRENGTH:
+		case AUTH_RULE_CERT_VALIDATION_SUSPENDED:
 			/* integer type */
 			this->value = (void*)(uintptr_t)va_arg(args, u_int);
 			break;
@@ -227,11 +238,14 @@ static void init_entry(entry_t *this, auth_rule_t type, va_list args)
 		case AUTH_RULE_IM_CERT:
 		case AUTH_RULE_SUBJECT_CERT:
 		case AUTH_RULE_CERT_POLICY:
+		case AUTH_RULE_SIGNATURE_SCHEME:
+		case AUTH_RULE_IKE_SIGNATURE_SCHEME:
 		case AUTH_HELPER_IM_CERT:
 		case AUTH_HELPER_SUBJECT_CERT:
 		case AUTH_HELPER_IM_HASH_URL:
 		case AUTH_HELPER_SUBJECT_HASH_URL:
 		case AUTH_HELPER_REVOCATION_CERT:
+		case AUTH_HELPER_AC_CERT:
 		case AUTH_HELPER_BUNDLE_HASH_URL:
 			/* pointer type */
 			this->value = va_arg(args, void*);
@@ -261,7 +275,8 @@ static bool entry_equals(entry_t *e1, entry_t *e2)
 		case AUTH_RULE_OCSP_VALIDATION:
 		case AUTH_RULE_RSA_STRENGTH:
 		case AUTH_RULE_ECDSA_STRENGTH:
-		case AUTH_RULE_SIGNATURE_SCHEME:
+		case AUTH_RULE_BLISS_STRENGTH:
+		case AUTH_RULE_CERT_VALIDATION_SUSPENDED:
 		{
 			return e1->value == e2->value;
 		}
@@ -271,6 +286,7 @@ static bool entry_equals(entry_t *e1, entry_t *e2)
 		case AUTH_HELPER_IM_CERT:
 		case AUTH_HELPER_SUBJECT_CERT:
 		case AUTH_HELPER_REVOCATION_CERT:
+		case AUTH_HELPER_AC_CERT:
 		{
 			certificate_t *c1, *c2;
 
@@ -292,6 +308,11 @@ static bool entry_equals(entry_t *e1, entry_t *e2)
 			id2 = (identification_t*)e2->value;
 
 			return id1->equals(id1, id2);
+		}
+		case AUTH_RULE_SIGNATURE_SCHEME:
+		case AUTH_RULE_IKE_SIGNATURE_SCHEME:
+		{
+			return signature_params_equal(e1->value, e2->value);
 		}
 		case AUTH_RULE_CERT_POLICY:
 		case AUTH_RULE_XAUTH_BACKEND:
@@ -331,6 +352,7 @@ static void destroy_entry_value(entry_t *entry)
 		case AUTH_HELPER_IM_CERT:
 		case AUTH_HELPER_SUBJECT_CERT:
 		case AUTH_HELPER_REVOCATION_CERT:
+		case AUTH_HELPER_AC_CERT:
 		{
 			certificate_t *cert = (certificate_t*)entry->value;
 			cert->destroy(cert);
@@ -345,6 +367,12 @@ static void destroy_entry_value(entry_t *entry)
 			free(entry->value);
 			break;
 		}
+		case AUTH_RULE_SIGNATURE_SCHEME:
+		case AUTH_RULE_IKE_SIGNATURE_SCHEME:
+		{
+			signature_params_destroy(entry->value);
+			break;
+		}
 		case AUTH_RULE_IDENTITY_LOOSE:
 		case AUTH_RULE_AUTH_CLASS:
 		case AUTH_RULE_EAP_TYPE:
@@ -353,7 +381,8 @@ static void destroy_entry_value(entry_t *entry)
 		case AUTH_RULE_OCSP_VALIDATION:
 		case AUTH_RULE_RSA_STRENGTH:
 		case AUTH_RULE_ECDSA_STRENGTH:
-		case AUTH_RULE_SIGNATURE_SCHEME:
+		case AUTH_RULE_BLISS_STRENGTH:
+		case AUTH_RULE_CERT_VALIDATION_SUSPENDED:
 		case AUTH_RULE_MAX:
 			break;
 	}
@@ -384,7 +413,8 @@ static void replace(private_auth_cfg_t *this, entry_enumerator_t *enumerator,
 			case AUTH_RULE_OCSP_VALIDATION:
 			case AUTH_RULE_RSA_STRENGTH:
 			case AUTH_RULE_ECDSA_STRENGTH:
-			case AUTH_RULE_SIGNATURE_SCHEME:
+			case AUTH_RULE_BLISS_STRENGTH:
+			case AUTH_RULE_CERT_VALIDATION_SUSPENDED:
 				/* integer type */
 				entry->value = (void*)(uintptr_t)va_arg(args, u_int);
 				break;
@@ -399,11 +429,14 @@ static void replace(private_auth_cfg_t *this, entry_enumerator_t *enumerator,
 			case AUTH_RULE_IM_CERT:
 			case AUTH_RULE_SUBJECT_CERT:
 			case AUTH_RULE_CERT_POLICY:
+			case AUTH_RULE_SIGNATURE_SCHEME:
+			case AUTH_RULE_IKE_SIGNATURE_SCHEME:
 			case AUTH_HELPER_IM_CERT:
 			case AUTH_HELPER_SUBJECT_CERT:
 			case AUTH_HELPER_IM_HASH_URL:
 			case AUTH_HELPER_SUBJECT_HASH_URL:
 			case AUTH_HELPER_REVOCATION_CERT:
+			case AUTH_HELPER_AC_CERT:
 			case AUTH_HELPER_BUNDLE_HASH_URL:
 				/* pointer type */
 				entry->value = va_arg(args, void*);
@@ -459,13 +492,13 @@ METHOD(auth_cfg_t, get, void*,
 		case AUTH_RULE_EAP_VENDOR:
 		case AUTH_RULE_RSA_STRENGTH:
 		case AUTH_RULE_ECDSA_STRENGTH:
+		case AUTH_RULE_BLISS_STRENGTH:
 			return (void*)0;
-		case AUTH_RULE_SIGNATURE_SCHEME:
-			return HASH_UNKNOWN;
 		case AUTH_RULE_CRL_VALIDATION:
 		case AUTH_RULE_OCSP_VALIDATION:
 			return (void*)VALIDATION_FAILED;
 		case AUTH_RULE_IDENTITY_LOOSE:
+		case AUTH_RULE_CERT_VALIDATION_SUSPENDED:
 			return (void*)FALSE;
 		case AUTH_RULE_IDENTITY:
 		case AUTH_RULE_IDENTITY_APN:
@@ -478,11 +511,14 @@ METHOD(auth_cfg_t, get, void*,
 		case AUTH_RULE_IM_CERT:
 		case AUTH_RULE_SUBJECT_CERT:
 		case AUTH_RULE_CERT_POLICY:
+		case AUTH_RULE_SIGNATURE_SCHEME:
+		case AUTH_RULE_IKE_SIGNATURE_SCHEME:
 		case AUTH_HELPER_IM_CERT:
 		case AUTH_HELPER_SUBJECT_CERT:
 		case AUTH_HELPER_IM_HASH_URL:
 		case AUTH_HELPER_SUBJECT_HASH_URL:
 		case AUTH_HELPER_REVOCATION_CERT:
+		case AUTH_HELPER_AC_CERT:
 		case AUTH_HELPER_BUNDLE_HASH_URL:
 		case AUTH_RULE_MAX:
 			break;
@@ -513,16 +549,287 @@ static void add(private_auth_cfg_t *this, auth_rule_t type, ...)
 	}
 }
 
+/**
+ * Create a constraint for RSA/PSS signatures
+ */
+static signature_params_t *create_rsa_pss_constraint(char *token)
+{
+	signature_params_t *params = NULL;
+	hash_algorithm_t hash;
+
+	if (enum_from_name(hash_algorithm_short_names, token, &hash))
+	{
+		rsa_pss_params_t pss = {
+			.hash = hash,
+			.mgf1_hash = hash,
+			.salt_len = RSA_PSS_SALT_LEN_DEFAULT,
+		};
+		signature_params_t pss_params = {
+			.scheme = SIGN_RSA_EMSA_PSS,
+			.params = &pss,
+		};
+		params = signature_params_clone(&pss_params);
+	}
+	return params;
+}
+
+METHOD(auth_cfg_t, add_pubkey_constraints, void,
+	private_auth_cfg_t *this, char* constraints, bool ike)
+{
+	enumerator_t *enumerator;
+	bool ike_added = FALSE, rsa_pss;
+	key_type_t expected_type = -1;
+	auth_rule_t expected_strength = AUTH_RULE_MAX;
+	signature_params_t *params;
+	int strength;
+	char *token, *key_token = NULL;
+	auth_rule_t type;
+	void *value;
+
+	rsa_pss = lib->settings->get_bool(lib->settings, "%s.rsa_pss", FALSE,
+									  lib->ns);
+
+	enumerator = enumerator_create_token(constraints, "-", "");
+	while (enumerator->enumerate(enumerator, &token))
+	{
+		bool found = FALSE;
+		int i;
+		struct {
+			char *name;
+			signature_scheme_t scheme;
+			key_type_t key;
+		} schemes[] = {
+			{ "md5",		SIGN_RSA_EMSA_PKCS1_MD5,		KEY_RSA,	 },
+			{ "sha1",		SIGN_RSA_EMSA_PKCS1_SHA1,		KEY_RSA,	 },
+			{ "sha224",		SIGN_RSA_EMSA_PKCS1_SHA2_224,	KEY_RSA,	 },
+			{ "sha256",		SIGN_RSA_EMSA_PKCS1_SHA2_256,	KEY_RSA,	 },
+			{ "sha384",		SIGN_RSA_EMSA_PKCS1_SHA2_384,	KEY_RSA,	 },
+			{ "sha512",		SIGN_RSA_EMSA_PKCS1_SHA2_512,	KEY_RSA,	 },
+			{ "sha1",		SIGN_ECDSA_WITH_SHA1_DER,		KEY_ECDSA,	 },
+			{ "sha256",		SIGN_ECDSA_WITH_SHA256_DER,		KEY_ECDSA,	 },
+			{ "sha384",		SIGN_ECDSA_WITH_SHA384_DER,		KEY_ECDSA,	 },
+			{ "sha512",		SIGN_ECDSA_WITH_SHA512_DER,		KEY_ECDSA,	 },
+			{ "sha256",		SIGN_ECDSA_256,					KEY_ECDSA,	 },
+			{ "sha384",		SIGN_ECDSA_384,					KEY_ECDSA,	 },
+			{ "sha512",		SIGN_ECDSA_521,					KEY_ECDSA,	 },
+			{ "sha256",		SIGN_BLISS_WITH_SHA2_256,		KEY_BLISS,	 },
+			{ "sha384",		SIGN_BLISS_WITH_SHA2_384,		KEY_BLISS,	 },
+			{ "sha512",		SIGN_BLISS_WITH_SHA2_512,		KEY_BLISS,	 },
+			{ "identity",	SIGN_ED25519,					KEY_ED25519, },
+			{ "identity",	SIGN_ED448,						KEY_ED448,	 },
+		};
+
+		if (expected_strength != AUTH_RULE_MAX)
+		{	/* expecting a key strength token */
+			strength = atoi(token);
+			if (strength)
+			{
+				add(this, expected_strength, (uintptr_t)strength);
+			}
+			expected_strength = AUTH_RULE_MAX;
+			if (strength)
+			{
+				continue;
+			}
+		}
+		if (streq(token, "rsa") || streq(token, "ike:rsa"))
+		{
+			key_token = token;
+			expected_type = KEY_RSA;
+			expected_strength = AUTH_RULE_RSA_STRENGTH;
+			continue;
+		}
+		if (streq(token, "rsa/pss") || streq(token, "ike:rsa/pss"))
+		{
+			key_token = token;
+			expected_type = KEY_RSA;
+			expected_strength = AUTH_RULE_RSA_STRENGTH;
+			continue;
+		}
+		if (streq(token, "ecdsa") || streq(token, "ike:ecdsa"))
+		{
+			key_token = token;
+			expected_type = KEY_ECDSA;
+			expected_strength = AUTH_RULE_ECDSA_STRENGTH;
+			continue;
+		}
+		if (streq(token, "ed25519") || streq(token, "ike:ed25519"))
+		{
+			key_token = token;
+			expected_type = KEY_ED25519;
+			continue;
+		}
+		if (streq(token, "ed448") || streq(token, "ike:ed448"))
+		{
+			key_token = token;
+			expected_type = KEY_ED448;
+			continue;
+		}
+		if (streq(token, "bliss") || streq(token, "ike:bliss"))
+		{
+			key_token = token;
+			expected_type = KEY_BLISS;
+			expected_strength = AUTH_RULE_BLISS_STRENGTH;
+			continue;
+		}
+		if (streq(token, "pubkey") || streq(token, "ike:pubkey"))
+		{
+			key_token = token;
+			expected_type = KEY_ANY;
+			continue;
+		}
+		if (key_token && strpfx(key_token, "ike:") && !ike)
+		{
+			continue;
+		}
+
+		if (key_token && streq(key_token + strlen(key_token) - 3, "pss"))
+		{
+			params = create_rsa_pss_constraint(token);
+			if (params)
+			{
+				if (strpfx(key_token, "ike:"))
+				{
+					add(this, AUTH_RULE_IKE_SIGNATURE_SCHEME, params);
+					ike_added = TRUE;
+				}
+				else
+				{
+					add(this, AUTH_RULE_SIGNATURE_SCHEME, params);
+				}
+				found = TRUE;
+			}
+		}
+		else
+		{
+			if (rsa_pss)
+			{
+				if (expected_type == KEY_ANY ||
+					expected_type == KEY_RSA)
+				{
+					params = create_rsa_pss_constraint(token);
+					if (params)
+					{
+						if (strpfx(key_token, "ike:"))
+						{
+							add(this, AUTH_RULE_IKE_SIGNATURE_SCHEME, params);
+							ike_added = TRUE;
+						}
+						else
+						{
+							add(this, AUTH_RULE_SIGNATURE_SCHEME, params);
+						}
+						found = TRUE;
+					}
+				}
+			}
+			for (i = 0; i < countof(schemes); i++)
+			{
+				if (streq(schemes[i].name, token))
+				{
+					if (expected_type == KEY_ANY ||
+						expected_type == schemes[i].key)
+					{
+						INIT(params,
+							.scheme = schemes[i].scheme,
+						);
+						if (strpfx(key_token, "ike:"))
+						{
+							add(this, AUTH_RULE_IKE_SIGNATURE_SCHEME, params);
+							ike_added = TRUE;
+						}
+						else
+						{
+							add(this, AUTH_RULE_SIGNATURE_SCHEME, params);
+						}
+					}
+					found = TRUE;
+				}
+			}
+		}
+		if (!found)
+		{
+			DBG1(DBG_CFG, "ignoring invalid auth token: '%s'", token);
+		}
+	}
+	enumerator->destroy(enumerator);
+
+	/* if no explicit IKE signature constraints were added we add them for all
+	 * configured signature constraints */
+	if (ike && !ike_added &&
+		lib->settings->get_bool(lib->settings,
+							"%s.signature_authentication_constraints", TRUE,
+							lib->ns))
+	{
+		enumerator = create_enumerator(this);
+		while (enumerator->enumerate(enumerator, &type, &value))
+		{
+			if (type == AUTH_RULE_SIGNATURE_SCHEME)
+			{
+				add(this, AUTH_RULE_IKE_SIGNATURE_SCHEME,
+					signature_params_clone(value));
+			}
+		}
+		enumerator->destroy(enumerator);
+	}
+}
+
+/**
+ * Check if signature schemes of a specific type are compliant
+ */
+static bool complies_scheme(private_auth_cfg_t *this, auth_cfg_t *constraints,
+							auth_rule_t type, bool log_error)
+{
+	enumerator_t *e1, *e2;
+	auth_rule_t t1, t2;
+	signature_params_t *params, *constraint;
+	bool success = TRUE;
+
+	e2 = create_enumerator(this);
+	while (e2->enumerate(e2, &t2, &params))
+	{
+		if (t2 == type)
+		{
+			success = FALSE;
+			e1 = constraints->create_enumerator(constraints);
+			while (e1->enumerate(e1, &t1, &constraint))
+			{
+				if (t1 == type &&
+					signature_params_comply(constraint, params))
+				{
+					success = TRUE;
+					break;
+				}
+			}
+			e1->destroy(e1);
+			if (!success)
+			{
+				if (log_error)
+				{
+					DBG1(DBG_CFG, "%s signature scheme %N not acceptable",
+						 AUTH_RULE_SIGNATURE_SCHEME == type ? "X.509" : "IKE",
+						 signature_scheme_names, params->scheme);
+				}
+				break;
+			}
+		}
+	}
+	e2->destroy(e2);
+	return success;
+}
+
 METHOD(auth_cfg_t, complies, bool,
 	private_auth_cfg_t *this, auth_cfg_t *constraints, bool log_error)
 {
 	enumerator_t *e1, *e2;
-	bool success = TRUE, group_match = FALSE, cert_match = FALSE;
+	bool success = TRUE, group_match = FALSE;
+	bool ca_match = FALSE, cert_match = FALSE;
 	identification_t *require_group = NULL;
-	certificate_t *require_cert = NULL;
-	signature_scheme_t scheme = SIGN_UNKNOWN;
+	certificate_t *require_ca = NULL, *require_cert = NULL;
+	signature_params_t *ike_scheme = NULL, *scheme = NULL;
 	u_int strength = 0;
 	auth_rule_t t1, t2;
+	char *key_type;
 	void *value;
 
 	e1 = constraints->create_enumerator(constraints);
@@ -533,26 +840,21 @@ METHOD(auth_cfg_t, complies, bool,
 			case AUTH_RULE_CA_CERT:
 			case AUTH_RULE_IM_CERT:
 			{
-				certificate_t *c1, *c2;
+				certificate_t *cert;
 
-				c1 = (certificate_t*)value;
+				/* for CA certs, a match of a single cert is sufficient */
+				require_ca = (certificate_t*)value;
 
-				success = FALSE;
 				e2 = create_enumerator(this);
-				while (e2->enumerate(e2, &t2, &c2))
+				while (e2->enumerate(e2, &t2, &cert))
 				{
 					if ((t2 == AUTH_RULE_CA_CERT || t2 == AUTH_RULE_IM_CERT) &&
-						c1->equals(c1, c2))
+						cert->equals(cert, require_ca))
 					{
-						success = TRUE;
+						ca_match = TRUE;
 					}
 				}
 				e2->destroy(e2);
-				if (!success && log_error)
-				{
-					DBG1(DBG_CFG, "constraint check failed: peer not "
-						 "authenticated by CA '%Y'.", c1->get_subject(c1));
-				}
 				break;
 			}
 			case AUTH_RULE_SUBJECT_CERT:
@@ -578,6 +880,11 @@ METHOD(auth_cfg_t, complies, bool,
 			case AUTH_RULE_OCSP_VALIDATION:
 			{
 				uintptr_t validated;
+
+				if (get(this, AUTH_RULE_CERT_VALIDATION_SUSPENDED))
+				{	/* skip validation, may happen later */
+					break;
+				}
 
 				e2 = create_enumerator(this);
 				while (e2->enumerate(e2, &t2, &validated))
@@ -634,7 +941,7 @@ METHOD(auth_cfg_t, complies, bool,
 					{	/* also verify identity against subjectAltNames */
 						certificate_t *cert;
 
-						cert = get(this, AUTH_HELPER_SUBJECT_CERT);
+						cert = get(this, AUTH_RULE_SUBJECT_CERT);
 						if (cert && cert->has_subject(cert, id1))
 						{
 							break;
@@ -661,13 +968,13 @@ METHOD(auth_cfg_t, complies, bool,
 				if ((uintptr_t)value != AUTH_CLASS_ANY &&
 					(uintptr_t)value != (uintptr_t)get(this, t1))
 				{
+					success = FALSE;
 #ifdef ANDROID
 					if (property_get_bool("persist.net.wo.nocert", 1)) {
 						DBG1(DBG_IKE, "*** skip certificate check OKOKOKOKOK ***");
 						success = TRUE;
 					} else 
 #endif
-					success = FALSE;
 					if (log_error)
 					{
 						DBG1(DBG_CFG, "constraint requires %N authentication, "
@@ -679,7 +986,9 @@ METHOD(auth_cfg_t, complies, bool,
 			}
 			case AUTH_RULE_EAP_TYPE:
 			{
-				if ((uintptr_t)value != (uintptr_t)get(this, t1))
+				if ((uintptr_t)value != (uintptr_t)get(this, t1) &&
+					(uintptr_t)value != EAP_DYNAMIC &&
+					(uintptr_t)value != EAP_RADIUS)
 				{
 					success = FALSE;
 					if (log_error)
@@ -725,13 +1034,19 @@ METHOD(auth_cfg_t, complies, bool,
 			}
 			case AUTH_RULE_RSA_STRENGTH:
 			case AUTH_RULE_ECDSA_STRENGTH:
+			case AUTH_RULE_BLISS_STRENGTH:
 			{
 				strength = (uintptr_t)value;
 				break;
 			}
+			case AUTH_RULE_IKE_SIGNATURE_SCHEME:
+			{
+				ike_scheme = value;
+				break;
+			}
 			case AUTH_RULE_SIGNATURE_SCHEME:
 			{
-				scheme = (uintptr_t)value;
+				scheme = value;
 				break;
 			}
 			case AUTH_RULE_CERT_POLICY:
@@ -762,11 +1077,14 @@ METHOD(auth_cfg_t, complies, bool,
 				/* just an indication when verifying AUTH_RULE_IDENTITY */
 			case AUTH_RULE_XAUTH_BACKEND:
 				/* not enforced, just a hint for local authentication */
+			case AUTH_RULE_CERT_VALIDATION_SUSPENDED:
+				/* not a constraint */
 			case AUTH_HELPER_IM_CERT:
 			case AUTH_HELPER_SUBJECT_CERT:
 			case AUTH_HELPER_IM_HASH_URL:
 			case AUTH_HELPER_SUBJECT_HASH_URL:
 			case AUTH_HELPER_REVOCATION_CERT:
+			case AUTH_HELPER_AC_CERT:
 			case AUTH_HELPER_BUNDLE_HASH_URL:
 			case AUTH_RULE_MAX:
 				/* skip helpers */
@@ -781,37 +1099,15 @@ METHOD(auth_cfg_t, complies, bool,
 
 	/* Check if we have a matching constraint (or none at all) for used
 	 * signature schemes. */
-	if (success && scheme != SIGN_UNKNOWN)
+	if (success && scheme)
 	{
-		e2 = create_enumerator(this);
-		while (e2->enumerate(e2, &t2, &scheme))
-		{
-			if (t2 == AUTH_RULE_SIGNATURE_SCHEME)
-			{
-				success = FALSE;
-				e1 = constraints->create_enumerator(constraints);
-				while (e1->enumerate(e1, &t1, &value))
-				{
-					if (t1 == AUTH_RULE_SIGNATURE_SCHEME &&
-						(uintptr_t)value == scheme)
-					{
-						success = TRUE;
-						break;
-					}
-				}
-				e1->destroy(e1);
-				if (!success)
-				{
-					if (log_error)
-					{
-						DBG1(DBG_CFG, "signature scheme %N not acceptable",
-							 signature_scheme_names, (int)scheme);
-					}
-					break;
-				}
-			}
-		}
-		e2->destroy(e2);
+		success = complies_scheme(this, constraints,
+								  AUTH_RULE_SIGNATURE_SCHEME, log_error);
+	}
+	if (success && ike_scheme)
+	{
+		success = complies_scheme(this, constraints,
+								  AUTH_RULE_IKE_SIGNATURE_SCHEME, log_error);
 	}
 
 	/* Check if we have a matching constraint (or none at all) for used
@@ -821,30 +1117,39 @@ METHOD(auth_cfg_t, complies, bool,
 		e2 = create_enumerator(this);
 		while (e2->enumerate(e2, &t2, &strength))
 		{
-			if (t2 == AUTH_RULE_RSA_STRENGTH ||
-				t2 == AUTH_RULE_ECDSA_STRENGTH)
+			switch (t2)
 			{
-				success = FALSE;
-				e1 = constraints->create_enumerator(constraints);
-				while (e1->enumerate(e1, &t1, &value))
+				default:
+					continue;
+				case AUTH_RULE_RSA_STRENGTH:
+					key_type = "RSA";
+					break;
+				case AUTH_RULE_ECDSA_STRENGTH:
+					key_type = "ECDSA";
+					break;
+				case AUTH_RULE_BLISS_STRENGTH:
+					key_type = "BLISS";
+					break;
+			}
+			success = FALSE;
+			e1 = constraints->create_enumerator(constraints);
+			while (e1->enumerate(e1, &t1, &value))
+			{
+				if (t1 == t2 && (uintptr_t)value <= strength)
 				{
-					if (t1 == t2 && (uintptr_t)value <= strength)
-					{
-						success = TRUE;
-						break;
-					}
-				}
-				e1->destroy(e1);
-				if (!success)
-				{
-					if (log_error)
-					{
-						DBG1(DBG_CFG, "%s-%d signatures not acceptable",
-							 t2 == AUTH_RULE_RSA_STRENGTH ? "RSA" : "ECDSA",
-							 strength);
-					}
+					success = TRUE;
 					break;
 				}
+			}
+			e1->destroy(e1);
+			if (!success)
+			{
+				if (log_error)
+				{
+					DBG1(DBG_CFG, "%s-%d signatures not acceptable",
+						 key_type, strength);
+				}
+				break;
 			}
 		}
 		e2->destroy(e2);
@@ -859,13 +1164,22 @@ METHOD(auth_cfg_t, complies, bool,
 		}
 		return FALSE;
 	}
-
+	if (require_ca && !ca_match)
+	{
+		if (log_error)
+		{
+			DBG1(DBG_CFG, "constraint check failed: peer not "
+				 "authenticated by CA '%Y'",
+				 require_ca->get_subject(require_ca));
+		}
+		return FALSE;
+	}
 	if (require_cert && !cert_match)
 	{
 		if (log_error)
 		{
 			DBG1(DBG_CFG, "constraint check failed: peer not "
-				 "authenticated with peer cert '%Y'.",
+				 "authenticated with peer cert '%Y'",
 				 require_cert->get_subject(require_cert));
 		}
 		return FALSE;
@@ -900,6 +1214,7 @@ static void merge(private_auth_cfg_t *this, private_auth_cfg_t *other, bool copy
 				case AUTH_HELPER_IM_CERT:
 				case AUTH_HELPER_SUBJECT_CERT:
 				case AUTH_HELPER_REVOCATION_CERT:
+				case AUTH_HELPER_AC_CERT:
 				{
 					certificate_t *cert = (certificate_t*)value;
 
@@ -914,7 +1229,8 @@ static void merge(private_auth_cfg_t *this, private_auth_cfg_t *other, bool copy
 				case AUTH_RULE_EAP_VENDOR:
 				case AUTH_RULE_RSA_STRENGTH:
 				case AUTH_RULE_ECDSA_STRENGTH:
-				case AUTH_RULE_SIGNATURE_SCHEME:
+				case AUTH_RULE_BLISS_STRENGTH:
+				case AUTH_RULE_CERT_VALIDATION_SUSPENDED:
 				{
 					add(this, type, (uintptr_t)value);
 					break;
@@ -929,6 +1245,12 @@ static void merge(private_auth_cfg_t *this, private_auth_cfg_t *other, bool copy
 					identification_t *id = (identification_t*)value;
 
 					add(this, type, id->clone(id));
+					break;
+				}
+				case AUTH_RULE_SIGNATURE_SCHEME:
+				case AUTH_RULE_IKE_SIGNATURE_SCHEME:
+				{
+					add(this, type, signature_params_clone(value));
 					break;
 				}
 				case AUTH_RULE_XAUTH_BACKEND:
@@ -950,9 +1272,9 @@ static void merge(private_auth_cfg_t *this, private_auth_cfg_t *other, bool copy
 	{
 		entry_t entry;
 
-		while (array_remove(other->entries, ARRAY_HEAD, &entry))
-		{
-			array_insert(this->entries, ARRAY_TAIL, &entry);
+		while (array_remove(other->entries, ARRAY_TAIL, &entry))
+		{	/* keep order but prefer new values (esp. for single valued ones) */
+			array_insert(this->entries, ARRAY_HEAD, &entry);
 		}
 		array_compress(other->entries);
 	}
@@ -1023,8 +1345,8 @@ METHOD(auth_cfg_t, purge, void,
 	{
 		if (!keep_ca || entry->type != AUTH_RULE_CA_CERT)
 		{
-			array_remove_at(this->entries, enumerator);
 			destroy_entry_value(entry);
+			array_remove_at(this->entries, enumerator);
 		}
 	}
 	enumerator->destroy(enumerator);
@@ -1064,6 +1386,7 @@ METHOD(auth_cfg_t, clone_, auth_cfg_t*,
 			case AUTH_HELPER_IM_CERT:
 			case AUTH_HELPER_SUBJECT_CERT:
 			case AUTH_HELPER_REVOCATION_CERT:
+			case AUTH_HELPER_AC_CERT:
 			{
 				certificate_t *cert = (certificate_t*)value;
 				clone->add(clone, type, cert->get_ref(cert));
@@ -1086,9 +1409,16 @@ METHOD(auth_cfg_t, clone_, auth_cfg_t*,
 			case AUTH_RULE_OCSP_VALIDATION:
 			case AUTH_RULE_RSA_STRENGTH:
 			case AUTH_RULE_ECDSA_STRENGTH:
-			case AUTH_RULE_SIGNATURE_SCHEME:
+			case AUTH_RULE_BLISS_STRENGTH:
+			case AUTH_RULE_CERT_VALIDATION_SUSPENDED:
 				clone->add(clone, type, (uintptr_t)value);
 				break;
+			case AUTH_RULE_SIGNATURE_SCHEME:
+			case AUTH_RULE_IKE_SIGNATURE_SCHEME:
+			{
+				clone->add(clone, type, signature_params_clone(value));
+				break;
+			}
 			case AUTH_RULE_MAX:
 				break;
 		}
@@ -1115,6 +1445,7 @@ auth_cfg_t *auth_cfg_create()
 	INIT(this,
 		.public = {
 			.add = (void(*)(auth_cfg_t*, auth_rule_t type, ...))add,
+			.add_pubkey_constraints = _add_pubkey_constraints,
 			.get = _get,
 			.create_enumerator = _create_enumerator,
 			.replace = (void(*)(auth_cfg_t*,enumerator_t*,auth_rule_t,...))replace,

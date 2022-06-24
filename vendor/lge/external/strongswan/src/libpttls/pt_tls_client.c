@@ -60,7 +60,7 @@ struct private_pt_tls_client_t {
 	/**
 	 * Current PT-TLS message identifier
 	 */
-	u_int32_t identifier;
+	uint32_t identifier;
 };
 
 /**
@@ -84,7 +84,8 @@ static bool make_connection(private_pt_tls_client_t *this)
 		return FALSE;
 	}
 
-	this->tls = tls_socket_create(FALSE, this->server, this->client, fd, NULL);
+	this->tls = tls_socket_create(FALSE, this->server, this->client, fd,
+								  NULL, TLS_1_2, FALSE);
 	if (!this->tls)
 	{
 		close(fd);
@@ -100,8 +101,8 @@ static bool negotiate_version(private_pt_tls_client_t *this)
 {
 	bio_writer_t *writer;
 	bio_reader_t *reader;
-	u_int32_t type, vendor, identifier, reserved;
-	u_int8_t version;
+	uint32_t type, vendor, identifier, reserved;
+	uint8_t version;
 	bool res;
 
 	DBG1(DBG_TNC, "sending offer for PT-TLS version %d", PT_TLS_VERSION);
@@ -142,8 +143,8 @@ static bool negotiate_version(private_pt_tls_client_t *this)
  */
 static status_t do_sasl(private_pt_tls_client_t *this, sasl_mechanism_t *sasl)
 {
-	u_int32_t type, vendor, identifier;
-	u_int8_t result;
+	uint32_t type, vendor, identifier;
+	uint8_t result;
 	bio_reader_t *reader;
 	bio_writer_t *writer;
 	chunk_t data;
@@ -224,7 +225,7 @@ static status_t do_sasl(private_pt_tls_client_t *this, sasl_mechanism_t *sasl)
 								reader->destroy(reader);
 								return SUCCESS;
 							case NEED_MORE:
-								/* inacceptable, it won't get more. FALL */
+								/* unacceptable, it won't get more. FALL */
 							case FAILED:
 							default:
 								reader->destroy(reader);
@@ -276,8 +277,8 @@ static status_t select_and_do_sasl(private_pt_tls_client_t *this)
 {
 	bio_reader_t *reader;
 	sasl_mechanism_t *sasl = NULL;
-	u_int32_t type, vendor, identifier;
-	u_int8_t len;
+	uint32_t type, vendor, identifier;
+	uint8_t len;
 	chunk_t chunk;
 	char buf[21];
 	status_t status = NEED_MORE;
@@ -363,7 +364,7 @@ static bool assess(private_pt_tls_client_t *this, tls_t *tnccs)
 		size_t buflen = PT_TLS_MAX_MESSAGE_LEN;
 		char buf[buflen];
 		bio_reader_t *reader;
-		u_int32_t vendor, type, identifier;
+		uint32_t vendor, type, identifier;
 		chunk_t data;
 
 		switch (tnccs->build(tnccs, buf, &buflen, &msglen))
@@ -449,6 +450,7 @@ METHOD(pt_tls_client_t, run_assessment, status_t,
 	{
 		return FAILED;
 	}
+	tnccs->set_auth_type(tnccs, TNC_AUTH_X509_CERT);
 
 	DBG1(DBG_TNC, "entering PT-TLS data transport phase");
 	if (!assess(this, (tls_t*)tnccs))

@@ -1,10 +1,10 @@
 /*
+ * Copyright (C) 2006-2018 Tobias Brunner
  * Copyright (C) 2005-2010 Martin Willi
  * Copyright (C) 2010 revosec AG
- * Copyright (C) 2006-2008 Tobias Brunner
  * Copyright (C) 2006 Daniel Roethlisberger
  * Copyright (C) 2005 Jan Hutter
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -114,7 +114,11 @@ ENUM_NEXT(notify_type_names, INITIAL_CONTACT, SIGNATURE_HASH_ALGORITHMS, MS_NOTI
 	"SENDER_REQUEST_ID",
 	"FRAGMENTATION_SUPPORTED",
 	"SIGNATURE_HASH_ALGORITHMS");
-ENUM_NEXT(notify_type_names, INITIAL_CONTACT_IKEV1, INITIAL_CONTACT_IKEV1, SIGNATURE_HASH_ALGORITHMS,
+ENUM_NEXT(notify_type_names, USE_PPK, NO_PPK_AUTH, SIGNATURE_HASH_ALGORITHMS,
+	"USE_PPK",
+	"PPK_IDENTITY",
+	"NO_PPK_AUTH");
+ENUM_NEXT(notify_type_names, INITIAL_CONTACT_IKEV1, INITIAL_CONTACT_IKEV1, NO_PPK_AUTH,
 	"INITIAL_CONTACT");
 ENUM_NEXT(notify_type_names, DPD_R_U_THERE, DPD_R_U_THERE_ACK, INITIAL_CONTACT_IKEV1,
 	"DPD_R_U_THERE",
@@ -224,7 +228,11 @@ ENUM_NEXT(notify_type_short_names, INITIAL_CONTACT, SIGNATURE_HASH_ALGORITHMS, M
 	"SENDER_REQ_ID",
 	"FRAG_SUP",
 	"HASH_ALG");
-ENUM_NEXT(notify_type_short_names, INITIAL_CONTACT_IKEV1, INITIAL_CONTACT_IKEV1, SIGNATURE_HASH_ALGORITHMS,
+ENUM_NEXT(notify_type_short_names, USE_PPK, NO_PPK_AUTH, SIGNATURE_HASH_ALGORITHMS,
+	"USE_PPK",
+	"PPK_ID",
+	"NO_PPK");
+ENUM_NEXT(notify_type_short_names, INITIAL_CONTACT_IKEV1, INITIAL_CONTACT_IKEV1, NO_PPK_AUTH,
 	"INITIAL_CONTACT");
 ENUM_NEXT(notify_type_short_names, DPD_R_U_THERE, DPD_R_U_THERE_ACK, INITIAL_CONTACT_IKEV1,
 	"DPD",
@@ -260,7 +268,7 @@ struct private_notify_payload_t {
 	/**
 	 * Next payload type.
 	 */
-	u_int8_t  next_payload;
+	uint8_t  next_payload;
 
 	/**
 	 * Critical flag.
@@ -275,27 +283,27 @@ struct private_notify_payload_t {
 	/**
 	 * Length of this payload.
 	 */
-	u_int16_t payload_length;
+	uint16_t payload_length;
 
 	/**
 	 * Domain of interpretation, IKEv1 only.
 	 */
-	u_int32_t doi;
+	uint32_t doi;
 
 	/**
 	 * Protocol id.
 	 */
-	u_int8_t protocol_id;
+	uint8_t protocol_id;
 
 	/**
 	 * Spi size.
 	 */
-	u_int8_t spi_size;
+	uint8_t spi_size;
 
 	/**
 	 * Notify message type.
 	 */
-	u_int16_t notify_type;
+	uint16_t notify_type;
 
 	/**
 	 * Security parameter index (spi).
@@ -308,7 +316,7 @@ struct private_notify_payload_t {
 	chunk_t notify_data;
 
 	/**
-	 * Type of payload, NOTIFY or NOTIFY_V1
+	 * Type of payload, PLV2_NOTIFY or PLV1_NOTIFY
 	 */
 	payload_type_t type;
 };
@@ -433,7 +441,7 @@ METHOD(payload_t, verify, status_t,
 	{
 		case INVALID_KE_PAYLOAD:
 		{
-			if (this->type == NOTIFY && this->notify_data.len != 2)
+			if (this->type == PLV2_NOTIFY && this->notify_data.len != 2)
 			{
 				bad_length = TRUE;
 			}
@@ -453,7 +461,7 @@ METHOD(payload_t, verify, status_t,
 		case INVALID_MAJOR_VERSION:
 		case NO_PROPOSAL_CHOSEN:
 		{
-			if (this->type == NOTIFY && this->notify_data.len != 0)
+			if (this->type == PLV2_NOTIFY && this->notify_data.len != 0)
 			{
 				bad_length = TRUE;
 			}
@@ -545,7 +553,7 @@ METHOD(payload_t, verify, status_t,
 METHOD(payload_t, get_encoding_rules, int,
 	private_notify_payload_t *this, encoding_rule_t **rules)
 {
-	if (this->type == NOTIFY)
+	if (this->type == PLV2_NOTIFY)
 	{
 		*rules = encodings_v2;
 		return countof(encodings_v2);
@@ -557,7 +565,7 @@ METHOD(payload_t, get_encoding_rules, int,
 METHOD(payload_t, get_header_length, int,
 	private_notify_payload_t *this)
 {
-	if (this->type == NOTIFY)
+	if (this->type == PLV2_NOTIFY)
 	{
 		return 8 + this->spi_size;
 	}
@@ -596,14 +604,14 @@ METHOD(payload_t, get_length, size_t,
 	return this->payload_length;
 }
 
-METHOD(notify_payload_t, get_protocol_id, u_int8_t,
+METHOD(notify_payload_t, get_protocol_id, uint8_t,
 	private_notify_payload_t *this)
 {
 	return this->protocol_id;
 }
 
 METHOD(notify_payload_t, set_protocol_id, void,
-	private_notify_payload_t *this, u_int8_t protocol_id)
+	private_notify_payload_t *this, uint8_t protocol_id)
 {
 	this->protocol_id = protocol_id;
 }
@@ -620,7 +628,7 @@ METHOD(notify_payload_t, set_notify_type, void,
 	this->notify_type = notify_type;
 }
 
-METHOD(notify_payload_t, get_spi, u_int32_t,
+METHOD(notify_payload_t, get_spi, uint32_t,
 	private_notify_payload_t *this)
 {
 	switch (this->protocol_id)
@@ -629,7 +637,7 @@ METHOD(notify_payload_t, get_spi, u_int32_t,
 		case PROTO_ESP:
 			if (this->spi.len == 4)
 			{
-				return *((u_int32_t*)this->spi.ptr);
+				return *((uint32_t*)this->spi.ptr);
 			}
 		default:
 			break;
@@ -638,7 +646,7 @@ METHOD(notify_payload_t, get_spi, u_int32_t,
 }
 
 METHOD(notify_payload_t, set_spi, void,
-	private_notify_payload_t *this, u_int32_t spi)
+	private_notify_payload_t *this, uint32_t spi)
 {
 	chunk_free(&this->spi);
 	switch (this->protocol_id)
@@ -646,7 +654,7 @@ METHOD(notify_payload_t, set_spi, void,
 		case PROTO_AH:
 		case PROTO_ESP:
 			this->spi = chunk_alloc(4);
-			*((u_int32_t*)this->spi.ptr) = spi;
+			*((uint32_t*)this->spi.ptr) = spi;
 			break;
 		default:
 			break;
@@ -740,7 +748,7 @@ notify_payload_t *notify_payload_create(payload_type_t type)
 			.destroy = _destroy,
 		},
 		.doi = IKEV1_DOI_IPSEC,
-		.next_payload = NO_PAYLOAD,
+		.next_payload = PL_NONE,
 		.type = type,
 	);
 	compute_length(this);

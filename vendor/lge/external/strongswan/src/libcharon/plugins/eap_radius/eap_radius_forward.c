@@ -63,31 +63,15 @@ struct private_eap_radius_forward_t {
  */
 typedef struct {
 	/** vendor ID, 0 for standard attributes */
-	u_int32_t vendor;
+	uint32_t vendor;
 	/** attribute type */
-	u_int8_t type;
+	uint8_t type;
 } attr_t;
 
 /**
  * Single instance of this
  */
 static private_eap_radius_forward_t *singleton = NULL;
-
-/**
- * Hashtable hash function
- */
-static u_int hash(uintptr_t key)
-{
-	return key;
-}
-
-/**
- * Hashtable equals function
- */
-static bool equals(uintptr_t a, uintptr_t b)
-{
-	return a == b;
-}
 
 /**
  * Free a queue entry
@@ -148,7 +132,7 @@ static bool is_attribute_selected(linked_list_t *selector,
 								  radius_attribute_type_t type, chunk_t data)
 {
 	enumerator_t *enumerator;
-	u_int32_t vendor = 0;
+	uint32_t vendor = 0;
 	attr_t *sel;
 	bool found = FALSE;
 
@@ -248,8 +232,8 @@ static void ike2queue(message_t *message, linked_list_t *queue,
 	enumerator = message->create_payload_enumerator(message);
 	while (enumerator->enumerate(enumerator, &payload))
 	{
-		if (payload->get_type(payload) == NOTIFY ||
-			payload->get_type(payload) == NOTIFY_V1)
+		if (payload->get_type(payload) == PLV2_NOTIFY ||
+			payload->get_type(payload) == PLV1_NOTIFY)
 		{
 			notify = (notify_payload_t*)payload;
 			if (notify->get_notify_type(notify) == RADIUS_ATTRIBUTE)
@@ -378,8 +362,7 @@ static linked_list_t* parse_selector(char *selector)
 			vendor = atoi(token);
 			token = pos;
 		}
-		type = enum_from_name(radius_attribute_type_names, token);
-		if (type == -1)
+		if (!enum_from_name(radius_attribute_type_names, token, &type))
 		{
 			type = atoi(token);
 		}
@@ -442,10 +425,8 @@ eap_radius_forward_t *eap_radius_forward_create()
 		.to_attr = parse_selector(lib->settings->get_str(lib->settings,
 							"%s.plugins.eap-radius.forward.radius_to_ike", "",
 							lib->ns)),
-		.from = hashtable_create((hashtable_hash_t)hash,
-						(hashtable_equals_t)equals, 8),
-		.to = hashtable_create((hashtable_hash_t)hash,
-						(hashtable_equals_t)equals, 8),
+		.from = hashtable_create(hashtable_hash_ptr, hashtable_equals_ptr, 8),
+		.to = hashtable_create(hashtable_hash_ptr, hashtable_equals_ptr, 8),
 		.mutex = mutex_create(MUTEX_TYPE_DEFAULT),
 	);
 

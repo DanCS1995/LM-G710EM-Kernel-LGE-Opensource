@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -26,6 +26,7 @@ typedef struct update_sa_job_t update_sa_job_t;
 #include <library.h>
 #include <networking/host.h>
 #include <processing/jobs/job.h>
+#include <crypto/proposal/proposal.h>
 
 /**
  * Update the addresses of an IKE and its CHILD_SAs.
@@ -41,10 +42,13 @@ struct update_sa_job_t {
 /**
  * Creates a job to update IKE and CHILD_SA addresses.
  *
- * @param reqid			reqid of the CHILD_SA
+ * @param protocol		IPsec protocol of SA to update
+ * @param spi			SPI of SA to update
+ * @param dst			old destination host of SA to update
  * @param new			new address and port
  * @return				update_sa_job_t object
  */
-update_sa_job_t *update_sa_job_create(u_int32_t reqid, host_t *new);
+update_sa_job_t *update_sa_job_create(protocol_id_t protocol,
+									  uint32_t spi, host_t *dst, host_t *new);
 
 #endif /** UPDATE_SA_JOB_H_ @}*/

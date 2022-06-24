@@ -64,7 +64,7 @@ _gcry_hash_selftest_check_one (int algo,
       break;
 
     case 1: /* Hash one million times an "a". */
-      {		
+      {        
         char aaa[1000];
         int i;
 

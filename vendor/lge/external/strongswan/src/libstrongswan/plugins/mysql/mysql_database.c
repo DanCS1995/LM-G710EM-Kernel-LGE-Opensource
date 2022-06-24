@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2013 Tobias Brunner
  * Copyright (C) 2007 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -14,11 +14,11 @@
  * for more details.
  */
 
+#include "mysql_database.h"
+
 #define _GNU_SOURCE
 #include <string.h>
 #include <mysql.h>
-
-#include "mysql_database.h"
 
 #include <utils/debug.h>
 #include <utils/chunk.h>
@@ -403,10 +403,8 @@ typedef struct {
 	unsigned long *length;
 } mysql_enumerator_t;
 
-/**
- * create a mysql enumerator
- */
-static void mysql_enumerator_destroy(mysql_enumerator_t *this)
+METHOD(enumerator_t, mysql_enumerator_destroy, void,
+	mysql_enumerator_t *this)
 {
 	int columns, i;
 
@@ -434,13 +432,10 @@ static void mysql_enumerator_destroy(mysql_enumerator_t *this)
 	free(this);
 }
 
-/**
- * Implementation of database.query().enumerate
- */
-static bool mysql_enumerator_enumerate(mysql_enumerator_t *this, ...)
+METHOD(enumerator_t, mysql_enumerator_enumerate, bool,
+	mysql_enumerator_t *this, va_list args)
 {
 	int i, columns;
-	va_list args;
 
 	columns = mysql_stmt_field_count(this->stmt);
 
@@ -477,7 +472,6 @@ static bool mysql_enumerator_enumerate(mysql_enumerator_t *this, ...)
 			return FALSE;
 	}
 
-	va_start(args, this);
 	for (i = 0; i < columns; i++)
 	{
 		switch (this->bind[i].buffer_type)
@@ -526,7 +520,6 @@ static bool mysql_enumerator_enumerate(mysql_enumerator_t *this, ...)
 				break;
 		}
 	}
-	va_end(args);
 	return TRUE;
 }
 
@@ -552,9 +545,9 @@ METHOD(database_t, query, enumerator_t*,
 
 		INIT(enumerator,
 			.public = {
-				.enumerate = (void*)mysql_enumerator_enumerate,
-				.destroy = (void*)mysql_enumerator_destroy,
-
+				.enumerate = enumerator_enumerate_default,
+				.venumerate = _mysql_enumerator_enumerate,
+				.destroy = _mysql_enumerator_destroy,
 			},
 			.db = this,
 			.stmt = stmt,
@@ -730,7 +723,7 @@ static bool finalize_transaction(private_mysql_database_t *this,
 	return TRUE;
 }
 
-METHOD(database_t, commit, bool,
+METHOD(database_t, commit_, bool,
 	private_mysql_database_t *this)
 {
 	return finalize_transaction(this, FALSE);
@@ -768,7 +761,7 @@ static bool parse_uri(private_mysql_database_t *this, char *uri)
 	/**
 	 * parse mysql://username:pass@host:port/database uri
 	 */
-	username = strdupa(uri + 8);
+	username = strdup(uri + 8);
 	pos = strchr(username, ':');
 	if (pos)
 	{
@@ -800,10 +793,12 @@ static bool parse_uri(private_mysql_database_t *this, char *uri)
 				this->password = strdup(password);
 				this->database = strdup(database);
 				this->port = atoi(port);
+				free(username);
 				return TRUE;
 			}
 		}
 	}
+	free(username);
 	DBG1(DBG_LIB, "parsing MySQL database uri '%s' failed", uri);
 	return FALSE;
 }
@@ -828,7 +823,7 @@ mysql_database_t *mysql_database_create(char *uri)
 				.query = _query,
 				.execute = _execute,
 				.transaction = _transaction,
-				.commit = _commit,
+				.commit = _commit_,
 				.rollback = _rollback,
 				.get_driver = _get_driver,
 				.destroy = _destroy,

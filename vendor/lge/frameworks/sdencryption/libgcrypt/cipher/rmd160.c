@@ -1,4 +1,4 @@
-/* rmd160.c  -	RIPE-MD160
+/* rmd160.c  -    RIPE-MD160
  * Copyright (C) 1998, 2001, 2002, 2003 Free Software Foundation, Inc.
  *
  * This file is part of Libgcrypt.
@@ -50,20 +50,20 @@
  *
  *   nonlinear functions at bit level: exor, mux, -, mux, -
  *
- *   f(j, x, y, z) = x XOR y XOR z		  (0 <= j <= 15)
+ *   f(j, x, y, z) = x XOR y XOR z          (0 <= j <= 15)
  *   f(j, x, y, z) = (x AND y) OR (NOT(x) AND z)  (16 <= j <= 31)
- *   f(j, x, y, z) = (x OR NOT(y)) XOR z	  (32 <= j <= 47)
+ *   f(j, x, y, z) = (x OR NOT(y)) XOR z      (32 <= j <= 47)
  *   f(j, x, y, z) = (x AND z) OR (y AND NOT(z))  (48 <= j <= 63)
- *   f(j, x, y, z) = x XOR (y OR NOT(z))	  (64 <= j <= 79)
+ *   f(j, x, y, z) = x XOR (y OR NOT(z))      (64 <= j <= 79)
  *
  *
  *   added constants (hexadecimal)
  *
- *   K(j) = 0x00000000	    (0 <= j <= 15)
- *   K(j) = 0x5A827999	   (16 <= j <= 31)	int(2**30 x sqrt(2))
- *   K(j) = 0x6ED9EBA1	   (32 <= j <= 47)	int(2**30 x sqrt(3))
- *   K(j) = 0x8F1BBCDC	   (48 <= j <= 63)	int(2**30 x sqrt(5))
- *   K(j) = 0xA953FD4E	   (64 <= j <= 79)	int(2**30 x sqrt(7))
+ *   K(j) = 0x00000000        (0 <= j <= 15)
+ *   K(j) = 0x5A827999       (16 <= j <= 31)    int(2**30 x sqrt(2))
+ *   K(j) = 0x6ED9EBA1       (32 <= j <= 47)    int(2**30 x sqrt(3))
+ *   K(j) = 0x8F1BBCDC       (48 <= j <= 63)    int(2**30 x sqrt(5))
+ *   K(j) = 0xA953FD4E       (64 <= j <= 79)    int(2**30 x sqrt(7))
  *   K'(j) = 0x50A28BE6     (0 <= j <= 15)      int(2**30 x cbrt(2))
  *   K'(j) = 0x5C4DD124    (16 <= j <= 31)      int(2**30 x cbrt(3))
  *   K'(j) = 0x6D703EF3    (32 <= j <= 47)      int(2**30 x cbrt(5))
@@ -73,7 +73,7 @@
  *
  *   selection of message word
  *
- *   r(j)      = j		      (0 <= j <= 15)
+ *   r(j)      = j              (0 <= j <= 15)
  *   r(16..31) = 7, 4, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5, 2, 14, 11, 8
  *   r(32..47) = 3, 10, 14, 4, 9, 15, 8, 1, 2, 7, 0, 6, 13, 11, 5, 12
  *   r(48..63) = 1, 9, 11, 10, 0, 8, 12, 4, 13, 3, 7, 15, 14, 5, 6, 2
@@ -102,7 +102,7 @@
  *   initial value (hexadecimal)
  *
  *   h0 = 0x67452301; h1 = 0xEFCDAB89; h2 = 0x98BADCFE; h3 = 0x10325476;
- *							h4 = 0xC3D2E1F0;
+ *                            h4 = 0xC3D2E1F0;
  *
  *
  * RIPEMD-160: pseudo-code
@@ -114,17 +114,17 @@
  *
  *
  *   for i := 0 to t-1 {
- *	 A := h0; B := h1; C := h2; D = h3; E = h4;
- *	 A' := h0; B' := h1; C' := h2; D' = h3; E' = h4;
- *	 for j := 0 to 79 {
- *	     T := rol_s(j)(A [+] f(j, B, C, D) [+] X[i][r(j)] [+] K(j)) [+] E;
- *	     A := E; E := D; D := rol_10(C); C := B; B := T;
- *	     T := rol_s'(j)(A' [+] f(79-j, B', C', D') [+] X[i][r'(j)]
-						       [+] K'(j)) [+] E';
- *	     A' := E'; E' := D'; D' := rol_10(C'); C' := B'; B' := T;
- *	 }
- *	 T := h1 [+] C [+] D'; h1 := h2 [+] D [+] E'; h2 := h3 [+] E [+] A';
- *	 h3 := h4 [+] A [+] B'; h4 := h0 [+] B [+] C'; h0 := T;
+ *     A := h0; B := h1; C := h2; D = h3; E = h4;
+ *     A' := h0; B' := h1; C' := h2; D' = h3; E' = h4;
+ *     for j := 0 to 79 {
+ *         T := rol_s(j)(A [+] f(j, B, C, D) [+] X[i][r(j)] [+] K(j)) [+] E;
+ *         A := E; E := D; D := rol_10(C); C := B; B := T;
+ *         T := rol_s'(j)(A' [+] f(79-j, B', C', D') [+] X[i][r'(j)]
+                               [+] K'(j)) [+] E';
+ *         A' := E'; E' := D'; D' := rol_10(C'); C' := B'; B' := T;
+ *     }
+ *     T := h1 [+] C [+] D'; h1 := h2 [+] D [+] E'; h2 := h3 [+] E [+] A';
+ *     h3 := h4 [+] A [+] B'; h4 := h0 [+] B [+] C'; h0 := T;
  *   }
  */
 
@@ -207,9 +207,9 @@ transform ( RMD160_CONTEXT *hd, const unsigned char *data )
 #define F3(x,y,z)   ( ((x) & (z)) | ((y) & ~(z)) )
 #define F4(x,y,z)   ( (x) ^ ((y) | ~(z)) )
 #define R(a,b,c,d,e,f,k,r,s) do { t = a + f(b,c,d) + k + x[r]; \
-				  a = rol(t,s) + e;	       \
-				  c = rol(c,10);	       \
-				} while(0)
+                  a = rol(t,s) + e;           \
+                  c = rol(c,10);           \
+                } while(0)
 
   /* left lane */
   a = hd->h0;
@@ -306,89 +306,89 @@ transform ( RMD160_CONTEXT *hd, const unsigned char *data )
   c = hd->h2;
   d = hd->h3;
   e = hd->h4;
-  R( a, b, c, d, e, F4, KK0,	5,  8);
+  R( a, b, c, d, e, F4, KK0,    5,  8);
   R( e, a, b, c, d, F4, KK0, 14,  9);
-  R( d, e, a, b, c, F4, KK0,	7,  9);
-  R( c, d, e, a, b, F4, KK0,	0, 11);
-  R( b, c, d, e, a, F4, KK0,	9, 13);
-  R( a, b, c, d, e, F4, KK0,	2, 15);
+  R( d, e, a, b, c, F4, KK0,    7,  9);
+  R( c, d, e, a, b, F4, KK0,    0, 11);
+  R( b, c, d, e, a, F4, KK0,    9, 13);
+  R( a, b, c, d, e, F4, KK0,    2, 15);
   R( e, a, b, c, d, F4, KK0, 11, 15);
-  R( d, e, a, b, c, F4, KK0,	4,  5);
+  R( d, e, a, b, c, F4, KK0,    4,  5);
   R( c, d, e, a, b, F4, KK0, 13,  7);
-  R( b, c, d, e, a, F4, KK0,	6,  7);
+  R( b, c, d, e, a, F4, KK0,    6,  7);
   R( a, b, c, d, e, F4, KK0, 15,  8);
-  R( e, a, b, c, d, F4, KK0,	8, 11);
-  R( d, e, a, b, c, F4, KK0,	1, 14);
+  R( e, a, b, c, d, F4, KK0,    8, 11);
+  R( d, e, a, b, c, F4, KK0,    1, 14);
   R( c, d, e, a, b, F4, KK0, 10, 14);
-  R( b, c, d, e, a, F4, KK0,	3, 12);
+  R( b, c, d, e, a, F4, KK0,    3, 12);
   R( a, b, c, d, e, F4, KK0, 12,  6);
-  R( e, a, b, c, d, F3, KK1,	6,  9);
+  R( e, a, b, c, d, F3, KK1,    6,  9);
   R( d, e, a, b, c, F3, KK1, 11, 13);
-  R( c, d, e, a, b, F3, KK1,	3, 15);
-  R( b, c, d, e, a, F3, KK1,	7,  7);
-  R( a, b, c, d, e, F3, KK1,	0, 12);
+  R( c, d, e, a, b, F3, KK1,    3, 15);
+  R( b, c, d, e, a, F3, KK1,    7,  7);
+  R( a, b, c, d, e, F3, KK1,    0, 12);
   R( e, a, b, c, d, F3, KK1, 13,  8);
-  R( d, e, a, b, c, F3, KK1,	5,  9);
+  R( d, e, a, b, c, F3, KK1,    5,  9);
   R( c, d, e, a, b, F3, KK1, 10, 11);
   R( b, c, d, e, a, F3, KK1, 14,  7);
   R( a, b, c, d, e, F3, KK1, 15,  7);
-  R( e, a, b, c, d, F3, KK1,	8, 12);
+  R( e, a, b, c, d, F3, KK1,    8, 12);
   R( d, e, a, b, c, F3, KK1, 12,  7);
-  R( c, d, e, a, b, F3, KK1,	4,  6);
-  R( b, c, d, e, a, F3, KK1,	9, 15);
-  R( a, b, c, d, e, F3, KK1,	1, 13);
-  R( e, a, b, c, d, F3, KK1,	2, 11);
+  R( c, d, e, a, b, F3, KK1,    4,  6);
+  R( b, c, d, e, a, F3, KK1,    9, 15);
+  R( a, b, c, d, e, F3, KK1,    1, 13);
+  R( e, a, b, c, d, F3, KK1,    2, 11);
   R( d, e, a, b, c, F2, KK2, 15,  9);
-  R( c, d, e, a, b, F2, KK2,	5,  7);
-  R( b, c, d, e, a, F2, KK2,	1, 15);
-  R( a, b, c, d, e, F2, KK2,	3, 11);
-  R( e, a, b, c, d, F2, KK2,	7,  8);
+  R( c, d, e, a, b, F2, KK2,    5,  7);
+  R( b, c, d, e, a, F2, KK2,    1, 15);
+  R( a, b, c, d, e, F2, KK2,    3, 11);
+  R( e, a, b, c, d, F2, KK2,    7,  8);
   R( d, e, a, b, c, F2, KK2, 14,  6);
-  R( c, d, e, a, b, F2, KK2,	6,  6);
-  R( b, c, d, e, a, F2, KK2,	9, 14);
+  R( c, d, e, a, b, F2, KK2,    6,  6);
+  R( b, c, d, e, a, F2, KK2,    9, 14);
   R( a, b, c, d, e, F2, KK2, 11, 12);
-  R( e, a, b, c, d, F2, KK2,	8, 13);
+  R( e, a, b, c, d, F2, KK2,    8, 13);
   R( d, e, a, b, c, F2, KK2, 12,  5);
-  R( c, d, e, a, b, F2, KK2,	2, 14);
+  R( c, d, e, a, b, F2, KK2,    2, 14);
   R( b, c, d, e, a, F2, KK2, 10, 13);
-  R( a, b, c, d, e, F2, KK2,	0, 13);
-  R( e, a, b, c, d, F2, KK2,	4,  7);
+  R( a, b, c, d, e, F2, KK2,    0, 13);
+  R( e, a, b, c, d, F2, KK2,    4,  7);
   R( d, e, a, b, c, F2, KK2, 13,  5);
-  R( c, d, e, a, b, F1, KK3,	8, 15);
-  R( b, c, d, e, a, F1, KK3,	6,  5);
-  R( a, b, c, d, e, F1, KK3,	4,  8);
-  R( e, a, b, c, d, F1, KK3,	1, 11);
-  R( d, e, a, b, c, F1, KK3,	3, 14);
+  R( c, d, e, a, b, F1, KK3,    8, 15);
+  R( b, c, d, e, a, F1, KK3,    6,  5);
+  R( a, b, c, d, e, F1, KK3,    4,  8);
+  R( e, a, b, c, d, F1, KK3,    1, 11);
+  R( d, e, a, b, c, F1, KK3,    3, 14);
   R( c, d, e, a, b, F1, KK3, 11, 14);
   R( b, c, d, e, a, F1, KK3, 15,  6);
-  R( a, b, c, d, e, F1, KK3,	0, 14);
-  R( e, a, b, c, d, F1, KK3,	5,  6);
+  R( a, b, c, d, e, F1, KK3,    0, 14);
+  R( e, a, b, c, d, F1, KK3,    5,  6);
   R( d, e, a, b, c, F1, KK3, 12,  9);
-  R( c, d, e, a, b, F1, KK3,	2, 12);
+  R( c, d, e, a, b, F1, KK3,    2, 12);
   R( b, c, d, e, a, F1, KK3, 13,  9);
-  R( a, b, c, d, e, F1, KK3,	9, 12);
-  R( e, a, b, c, d, F1, KK3,	7,  5);
+  R( a, b, c, d, e, F1, KK3,    9, 12);
+  R( e, a, b, c, d, F1, KK3,    7,  5);
   R( d, e, a, b, c, F1, KK3, 10, 15);
   R( c, d, e, a, b, F1, KK3, 14,  8);
   R( b, c, d, e, a, F0, KK4, 12,  8);
   R( a, b, c, d, e, F0, KK4, 15,  5);
   R( e, a, b, c, d, F0, KK4, 10, 12);
-  R( d, e, a, b, c, F0, KK4,	4,  9);
-  R( c, d, e, a, b, F0, KK4,	1, 12);
-  R( b, c, d, e, a, F0, KK4,	5,  5);
-  R( a, b, c, d, e, F0, KK4,	8, 14);
-  R( e, a, b, c, d, F0, KK4,	7,  6);
-  R( d, e, a, b, c, F0, KK4,	6,  8);
-  R( c, d, e, a, b, F0, KK4,	2, 13);
+  R( d, e, a, b, c, F0, KK4,    4,  9);
+  R( c, d, e, a, b, F0, KK4,    1, 12);
+  R( b, c, d, e, a, F0, KK4,    5,  5);
+  R( a, b, c, d, e, F0, KK4,    8, 14);
+  R( e, a, b, c, d, F0, KK4,    7,  6);
+  R( d, e, a, b, c, F0, KK4,    6,  8);
+  R( c, d, e, a, b, F0, KK4,    2, 13);
   R( b, c, d, e, a, F0, KK4, 13,  6);
   R( a, b, c, d, e, F0, KK4, 14,  5);
-  R( e, a, b, c, d, F0, KK4,	0, 15);
-  R( d, e, a, b, c, F0, KK4,	3, 13);
-  R( c, d, e, a, b, F0, KK4,	9, 11);
+  R( e, a, b, c, d, F0, KK4,    0, 15);
+  R( d, e, a, b, c, F0, KK4,    3, 13);
+  R( c, d, e, a, b, F0, KK4,    9, 11);
   R( b, c, d, e, a, F0, KK4, 11, 11);
 
 
-  t	   = hd->h1 + d + cc;
+  t       = hd->h1 + d + cc;
   hd->h1 = hd->h2 + e + dd;
   hd->h2 = hd->h3 + a + ee;
   hd->h3 = hd->h4 + b + aa;
@@ -500,11 +500,11 @@ rmd160_final( void *context )
       memset(hd->buf, 0, 56 ); /* fill next block with zeroes */
     }
   /* append the 64 bit count */
-  hd->buf[56] = lsb	   ;
+  hd->buf[56] = lsb       ;
   hd->buf[57] = lsb >>  8;
   hd->buf[58] = lsb >> 16;
   hd->buf[59] = lsb >> 24;
-  hd->buf[60] = msb	   ;
+  hd->buf[60] = msb       ;
   hd->buf[61] = msb >>  8;
   hd->buf[62] = msb >> 16;
   hd->buf[63] = msb >> 24;
@@ -513,8 +513,8 @@ rmd160_final( void *context )
 
   p = hd->buf;
 #ifdef WORDS_BIGENDIAN
-#define X(a) do { *p++ = hd->h##a	   ; *p++ = hd->h##a >> 8;	\
-	          *p++ = hd->h##a >> 16; *p++ = hd->h##a >> 24; } while(0)
+#define X(a) do { *p++ = hd->h##a       ; *p++ = hd->h##a >> 8;    \
+              *p++ = hd->h##a >> 16; *p++ = hd->h##a >> 24; } while(0)
 #else /* little endian */
 #define X(a) do { *(u32*)p = hd->h##a ; p += 4; } while(0)
 #endif

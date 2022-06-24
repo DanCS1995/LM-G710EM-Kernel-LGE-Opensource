@@ -105,7 +105,7 @@
 #endif
 #ifndef MAGIC_ECRYPTFS_MARKER
 #define MAGIC_ECRYPTFS_MARKER 0x3c81b7f5
-#define MAGIC_ECRYPTFS_MARKER_SIZE_BYTES 8	/* 4*2 */
+#define MAGIC_ECRYPTFS_MARKER_SIZE_BYTES 8    /* 4*2 */
 #endif
 #define MAX_NAME_SIZE 128
 #define MAX_KEY_MOD_VALUE_SIZE 4096
@@ -150,7 +150,7 @@
 #define ECRYPTFS_TAG_67_PACKET 0x43
 
 #define ecryptfs_syslog(type, fmt, arg...) \
-	syslog(type, "%s: " fmt, __FUNCTION__, ## arg);
+    syslog(type, "%s: " fmt, __FUNCTION__, ## arg);
 
 #define ECRYPTFS_MAX_NUM_CIPHERS 64
 #define ECRYPTFS_ECHO_ON 1
@@ -183,38 +183,38 @@ struct ecryptfs_session_key {
 #define ECRYPTFS_USERSPACE_SHOULD_TRY_TO_ENCRYPT 0x00000002
 #define ECRYPTFS_CONTAINS_DECRYPTED_KEY 0x00000004
 #define ECRYPTFS_CONTAINS_ENCRYPTED_KEY 0x00000008
-	int32_t flags;
-	int32_t encrypted_key_size;
-	int32_t decrypted_key_size;
-	uint8_t encrypted_key[ECRYPTFS_MAX_ENCRYPTED_KEY_BYTES];
-	uint8_t decrypted_key[ECRYPTFS_MAX_KEY_BYTES];
+    int32_t flags;
+    int32_t encrypted_key_size;
+    int32_t decrypted_key_size;
+    uint8_t encrypted_key[ECRYPTFS_MAX_ENCRYPTED_KEY_BYTES];
+    uint8_t decrypted_key[ECRYPTFS_MAX_KEY_BYTES];
 };
 
 static const char common_salt[ECRYPTFS_SALT_SIZE] =
-	{ (char)0x00, (char)0x11, (char)0x22, (char)0x33, (char)0x44,
-	  (char)0x55, (char)0x66, (char)0x77 };
+    { (char)0x00, (char)0x11, (char)0x22, (char)0x33, (char)0x44,
+      (char)0x55, (char)0x66, (char)0x77 };
 
 struct ecryptfs_password {
-	int32_t password_bytes;
-	int32_t hash_algo;
-	int32_t hash_iterations;
-	int32_t session_key_encryption_key_bytes;
+    int32_t password_bytes;
+    int32_t hash_algo;
+    int32_t hash_iterations;
+    int32_t session_key_encryption_key_bytes;
 #define ECRYPTFS_PERSISTENT_PASSWORD             0x01
 #define ECRYPTFS_SESSION_KEY_ENCRYPTION_KEY_SET  0x02
-	uint32_t flags;
-	/* Iterated-hash concatenation of salt and passphrase */
-	uint8_t session_key_encryption_key[ECRYPTFS_MAX_KEY_BYTES];
-	uint8_t signature[ECRYPTFS_PASSWORD_SIG_SIZE + 1];
-	/* Always in expanded hex */
-	uint8_t salt[ECRYPTFS_SALT_SIZE];
+    uint32_t flags;
+    /* Iterated-hash concatenation of salt and passphrase */
+    uint8_t session_key_encryption_key[ECRYPTFS_MAX_KEY_BYTES];
+    uint8_t signature[ECRYPTFS_PASSWORD_SIG_SIZE + 1];
+    /* Always in expanded hex */
+    uint8_t salt[ECRYPTFS_SALT_SIZE];
 };
 
 struct ecryptfs_private_key {
-	uint32_t key_size;
-	uint32_t data_len;
-	uint8_t signature[ECRYPTFS_PASSWORD_SIG_SIZE + 1];
-	char key_mod_alias[ECRYPTFS_MAX_KEY_MOD_NAME_BYTES + 1];
-	uint8_t data[];
+    uint32_t key_size;
+    uint32_t data_len;
+    uint8_t signature[ECRYPTFS_PASSWORD_SIG_SIZE + 1];
+    char key_mod_alias[ECRYPTFS_MAX_KEY_MOD_NAME_BYTES + 1];
+    uint8_t data[];
 };
 
 enum ecryptfs_token_types {ECRYPTFS_PASSWORD, ECRYPTFS_PRIVATE_KEY};
@@ -223,34 +223,34 @@ enum ecryptfs_token_types {ECRYPTFS_PASSWORD, ECRYPTFS_PRIVATE_KEY};
 
 /* This struct must be identical to that as defined in the kernel. */
 struct ecryptfs_auth_tok {
-	uint16_t version; /* 8-bit major and 8-bit minor */
-	uint16_t token_type;
+    uint16_t version; /* 8-bit major and 8-bit minor */
+    uint16_t token_type;
 #define ECRYPTFS_ENCRYPT_ONLY 0x00000001
-	uint32_t flags;
-	struct ecryptfs_session_key session_key;
-	uint8_t reserved[32];
-	union {
-		struct ecryptfs_password password;
-		struct ecryptfs_private_key private_key;
-	} token;
+    uint32_t flags;
+    struct ecryptfs_session_key session_key;
+    uint8_t reserved[32];
+    union {
+        struct ecryptfs_password password;
+        struct ecryptfs_private_key private_key;
+    } token;
 }  __attribute__ ((packed));
 
 struct ecryptfs_auth_tok_list {
-	struct ecryptfs_auth_tok *auth_tok;
-	struct ecryptfs_auth_tok_list *next;
+    struct ecryptfs_auth_tok *auth_tok;
+    struct ecryptfs_auth_tok_list *next;
 };
 
 struct ecryptfs_name_val_pair {
-#define ECRYPTFS_DEFAULT_VALUE_SET	0x00000004
-#define ECRYPTFS_PROCESSED      	0x00000008
-#define ECRYPTFS_NO_ECHO		0x00000010
-	uint32_t flags;
-	char *name;
-	char *value;
-	struct ecryptfs_name_val_pair *parent;
+#define ECRYPTFS_DEFAULT_VALUE_SET    0x00000004
+#define ECRYPTFS_PROCESSED          0x00000008
+#define ECRYPTFS_NO_ECHO        0x00000010
+    uint32_t flags;
+    char *name;
+    char *value;
+    struct ecryptfs_name_val_pair *parent;
 #define NV_MAX_CHILDREN 16
-	struct ecryptfs_name_val_pair *children[NV_MAX_CHILDREN];
-	struct ecryptfs_name_val_pair *next;
+    struct ecryptfs_name_val_pair *children[NV_MAX_CHILDREN];
+    struct ecryptfs_name_val_pair *next;
 };
 
 #ifdef __cplusplus
@@ -261,17 +261,17 @@ void dump_auth_tok( struct ecryptfs_auth_tok *auth_tok );
 extern void to_hex( char *dst, char *src, int src_size );
 extern void from_hex( char *dst, char *src, int dst_size );
 extern int generate_version_from_string(unsigned char *major,
-					unsigned char *minor,
-					char *version);
+                    unsigned char *minor,
+                    char *version);
 
 struct ecryptfs_daemon_info {
-	char socket_file_full_path[PATH_MAX];
+    char socket_file_full_path[PATH_MAX];
 };
 
 struct ecryptfs_message {
-	uint32_t index;
-	uint32_t data_len;
-	uint8_t data[];
+    uint32_t index;
+    uint32_t data_len;
+    uint8_t data[];
 };
 
 struct transition_node;
@@ -283,8 +283,8 @@ struct transition_node;
  * @val: The value provided
  */
 struct key_mod_param_val {
-	int id;
-	char *val;
+    int id;
+    char *val;
 };
 
 /**
@@ -301,13 +301,13 @@ struct key_mod_param_val {
  *       struct key_mod_param. This is matched based on @id
  */
 struct key_mod_param {
-	int id;
-	uint32_t flags;
-	char *option;
-	char *description;
-	char *suggested_val;
-	char *default_val;
-	struct key_mod_param_val *val;
+    int id;
+    uint32_t flags;
+    char *option;
+    char *description;
+    char *suggested_val;
+    char *default_val;
+    struct key_mod_param_val *val;
 };
 
 #define ECRYPTFS_BLOB_TYPE_BLOB 0
@@ -324,8 +324,8 @@ struct key_mod_param {
 #define ECRYPTFS_KEY_MOD_HINT_INSUFFICIENT   8
 
 struct ecryptfs_ctx_ops {
-	int (*prompt)(char *prompt_type, char *prompt, char *input,
-		      int input_size);
+    int (*prompt)(char *prompt_type, char *prompt, char *input,
+              int input_size);
 };
 
 /**
@@ -348,28 +348,28 @@ struct ecryptfs_ctx_ops {
  * @finalize: Call when the entire key module is shutting down
  */
 struct ecryptfs_key_mod_ops {
-	int (*init)(char **alias);
-	int (*get_gen_key_params)(struct key_mod_param **params,
-				  uint32_t *num_params);
-	int (*get_gen_key_subgraph_trans_node)(struct transition_node **trans,
-					       uint32_t version);
-	int (*get_params)(struct key_mod_param **params, uint32_t *num_params);
-	int (*get_param_subgraph_trans_node)(struct transition_node **trans,
-					     uint32_t version);
-	int (*get_blob)(unsigned char *blob, size_t *blob_size,
-			struct key_mod_param_val *param_vals,
-			uint32_t num_param_vals);
-	int (*get_key_data)(unsigned char *key_data, size_t *key_data_len,
-			    unsigned char *blob);
-	int (*get_key_sig)(unsigned char *sig, unsigned char *blob);
-	int (*get_key_hint)(unsigned char *hint, size_t *hint_len,
-			    unsigned char *blob);
-	int (*encrypt)(char *to, size_t *to_size, char *from, size_t from_size,
-		       unsigned char *blob, int blob_type);
-	int (*decrypt)(char *to, size_t *to_size, char *from, size_t from_size,
-		       unsigned char *blob, int blob_type);
-	int (*destroy)(unsigned char *blob);
-	int (*finalize)(void);
+    int (*init)(char **alias);
+    int (*get_gen_key_params)(struct key_mod_param **params,
+                  uint32_t *num_params);
+    int (*get_gen_key_subgraph_trans_node)(struct transition_node **trans,
+                           uint32_t version);
+    int (*get_params)(struct key_mod_param **params, uint32_t *num_params);
+    int (*get_param_subgraph_trans_node)(struct transition_node **trans,
+                         uint32_t version);
+    int (*get_blob)(unsigned char *blob, size_t *blob_size,
+            struct key_mod_param_val *param_vals,
+            uint32_t num_param_vals);
+    int (*get_key_data)(unsigned char *key_data, size_t *key_data_len,
+                unsigned char *blob);
+    int (*get_key_sig)(unsigned char *sig, unsigned char *blob);
+    int (*get_key_hint)(unsigned char *hint, size_t *hint_len,
+                unsigned char *blob);
+    int (*encrypt)(char *to, size_t *to_size, char *from, size_t from_size,
+               unsigned char *blob, int blob_type);
+    int (*decrypt)(char *to, size_t *to_size, char *from, size_t from_size,
+               unsigned char *blob, int blob_type);
+    int (*destroy)(unsigned char *blob);
+    int (*finalize)(void);
 };
 
 /**
@@ -384,62 +384,62 @@ struct ecryptfs_key_mod_ops {
  * @next:
  */
 struct ecryptfs_key_mod {
-	void *lib_handle;
-	char *alias;
-	char *lib_path;
-	struct transition_node *trans_into_mod_subgraph;
-	struct transition_node *trans_into_mod_key_gen_subgraph;
-	struct ecryptfs_key_mod_ops *ops;
-	struct key_mod_param_val *param_vals;
-	uint32_t num_param_vals;
-	char *blob;
-	size_t blob_size;
-	struct ecryptfs_key_mod *next;
+    void *lib_handle;
+    char *alias;
+    char *lib_path;
+    struct transition_node *trans_into_mod_subgraph;
+    struct transition_node *trans_into_mod_key_gen_subgraph;
+    struct ecryptfs_key_mod_ops *ops;
+    struct key_mod_param_val *param_vals;
+    uint32_t num_param_vals;
+    char *blob;
+    size_t blob_size;
+    struct ecryptfs_key_mod *next;
 };
 
 struct ecryptfs_ctx {
-	void *ctx_mutex;
-	struct ecryptfs_key_mod key_mod_list_head;
-	int verbosity;
-	int (*get_string)(char **val, char *prompt, int echo);
-	FILE *file_in;
-	FILE *file_out;
-	struct ecryptfs_name_val_pair *nvp_head;
+    void *ctx_mutex;
+    struct ecryptfs_key_mod key_mod_list_head;
+    int verbosity;
+    int (*get_string)(char **val, char *prompt, int echo);
+    FILE *file_in;
+    FILE *file_out;
+    struct ecryptfs_name_val_pair *nvp_head;
 };
 
 enum main_menu_enum {
-	MME_NULL,
-	MME_MOUNT_PASSPHRASE,
-	MME_MOUNT_PUBKEY,
-	MME_GEN_PUBKEY,
-	MME_ABORT
+    MME_NULL,
+    MME_MOUNT_PASSPHRASE,
+    MME_MOUNT_PUBKEY,
+    MME_GEN_PUBKEY,
+    MME_ABORT
 };
 
 struct val_node;
 struct param_node;
 
 struct ecryptfs_nl_ctx {
-	int socket_fd;
+    int socket_fd;
 };
 
 #define ECRYPTFS_DEFAULT_MISCDEV_FULLPATH_0 "/dev/ecryptfs"
 #define ECRYPTFS_DEFAULT_MISCDEV_FULLPATH_1 "/dev/misc/ecryptfs"
 
 struct ecryptfs_miscdev_ctx {
-	char *miscdev_filename;
-	int miscdev_fd;
+    char *miscdev_filename;
+    int miscdev_fd;
 };
 
 struct ecryptfs_messaging_ctx {
 #define ECRYPTFS_MESSAGING_TYPE_NETLINK 0x00000001
 #define ECRYPTFS_MESSAGING_TYPE_MISCDEV 0x00000002
-	uint32_t type;
+    uint32_t type;
 #define ECRYPTFS_MESSAGING_STATE_LISTENING 0x00000001
-	uint32_t state;
-	union {
-		struct ecryptfs_miscdev_ctx miscdev_ctx;
-		struct ecryptfs_nl_ctx nl_ctx;
-	} ctx;
+    uint32_t state;
+    union {
+        struct ecryptfs_miscdev_ctx miscdev_ctx;
+        struct ecryptfs_nl_ctx nl_ctx;
+    } ctx;
 };
 
 struct ecryptfs_crypt_stat_user {
@@ -454,19 +454,19 @@ struct ecryptfs_crypt_stat_user {
 #define ECRYPTFS_METADATA_IN_XATTR  0x00000100
 #define ECRYPTFS_VIEW_AS_ENCRYPTED  0x00000200
 #define ECRYPTFS_KEY_SET            0x00000400
-	uint32_t flags;
-	unsigned int file_version;
-	uint64_t file_size;
-	size_t iv_bytes;
-	size_t num_header_bytes_at_front;
-	size_t extent_size;
-	size_t key_size;
-	struct ecryptfs_auth_tok_list *ptr_to_auth_tok_list_head;
+    uint32_t flags;
+    unsigned int file_version;
+    uint64_t file_size;
+    size_t iv_bytes;
+    size_t num_header_bytes_at_front;
+    size_t extent_size;
+    size_t key_size;
+    struct ecryptfs_auth_tok_list *ptr_to_auth_tok_list_head;
 };
 
 typedef struct binary_data {
-	int size;
-	unsigned char *data;
+    int size;
+    unsigned char *data;
 } binary_data;
 
 int ecryptfs_get_version(uint32_t *version);
@@ -483,7 +483,7 @@ int ecryptfs_process_decision_graph(struct ecryptfs_ctx *ctx,
                                     struct val_node **head, uint32_t version,
                                     char *opts_str, int key_module_only);
 int ecryptfs_process_key_gen_decision_graph(struct ecryptfs_ctx *ctx,
-					    uint32_t version);
+                        uint32_t version);
 int get_string(char *val, int len, int echo);
 int get_string_stdin(char **val, char *prompt, int echo);
 int stack_pop(struct val_node **head);
@@ -494,13 +494,13 @@ int ecryptfs_get_key_mod_list(struct ecryptfs_ctx* ctx);
 int ecryptfs_parse_rc_file(struct ecryptfs_name_val_pair *nvp_list_head);
 int ecryptfs_parse_options(char *opts, struct ecryptfs_name_val_pair *head);
 int ecryptfs_eval_decision_graph(struct ecryptfs_ctx *ctx,
-				 struct val_node **head,
-				 struct param_node *root_node,
-				 struct ecryptfs_name_val_pair *nvp_head);
+                 struct val_node **head,
+                 struct param_node *root_node,
+                 struct ecryptfs_name_val_pair *nvp_head);
 int ecryptfs_add_passphrase_key_to_keyring(char *auth_tok_sig, char *passphrase,
-					   char *salt);
+                       char *salt);
 int ecryptfs_add_key_module_key_to_keyring(char *auth_tok_sig,
-					   struct ecryptfs_key_mod *key_mod);
+                       struct ecryptfs_key_mod *key_mod);
 int ecryptfs_read_salt_hex_from_rc(char *salt_hex);
 int ecryptfs_generate_key(void);
 int ecryptfs_free_key_mod_list(struct ecryptfs_ctx *ctx);
@@ -508,49 +508,49 @@ int create_default_dir(char *home, struct ecryptfs_key_mod *key_mod);
 int
 create_subdirectory(char *file, char *home, struct ecryptfs_key_mod *key_mod);
 int parse_packet(struct ecryptfs_ctx *ctx,
-		 struct ecryptfs_message *emsg,
-		 struct ecryptfs_message **reply);
+         struct ecryptfs_message *emsg,
+         struct ecryptfs_message **reply);
 int ecryptfs_find_key_mod(struct ecryptfs_key_mod **key_mod,
-			  struct ecryptfs_ctx *ctx, char *key_mod_alias);
+              struct ecryptfs_ctx *ctx, char *key_mod_alias);
 int generate_passphrase_sig(char *passphrase_sig, char *fekek, char *salt,
-			    char *passphrase);
+                char *passphrase);
 int
 generate_payload(struct ecryptfs_auth_tok *auth_tok, char *passphrase_sig,
-		 char *salt, char *session_key_encryption_key);
+         char *salt, char *session_key_encryption_key);
 int
 ecryptfs_generate_key_payload(struct ecryptfs_auth_tok *auth_tok,
-			      struct ecryptfs_key_mod *key_mod, char *sig,
-			      size_t blob_size);
+                  struct ecryptfs_key_mod *key_mod, char *sig,
+                  size_t blob_size);
 int parse_options_file(int fd, struct ecryptfs_name_val_pair *head);
 int free_name_val_pairs(struct ecryptfs_name_val_pair *pair);
 int ecryptfs_init_messaging(struct ecryptfs_messaging_ctx *mctx, uint32_t type);
 int ecryptfs_messaging_exit(struct ecryptfs_messaging_ctx *mctx);
 int ecryptfs_send_netlink(struct ecryptfs_nl_ctx *nl_ctx,
-			  struct ecryptfs_message *emsg, uint8_t msg_type,
-			  uint16_t msg_flags, uint32_t msg_seq);
+              struct ecryptfs_message *emsg, uint8_t msg_type,
+              uint16_t msg_flags, uint32_t msg_seq);
 void ecryptfs_release_netlink(struct ecryptfs_nl_ctx *nl_ctx);
 int ecryptfs_init_netlink_daemon(void);
 int ecryptfs_run_netlink_daemon(struct ecryptfs_nl_ctx *nl_ctx);
 int ecryptfs_init_netlink(struct ecryptfs_nl_ctx *nl_ctx);
 int ecryptfs_nvp_list_union(struct ecryptfs_name_val_pair *dst,
-			    struct ecryptfs_name_val_pair *src,
-			    struct ecryptfs_name_val_pair *allowed_duplicates);
+                struct ecryptfs_name_val_pair *src,
+                struct ecryptfs_name_val_pair *allowed_duplicates);
 int ecryptfs_read_salt_hex_from_rc(char *salt_hex);
 #define ECRYPTFS_SIG_FLAG_NOENT 0x00000001
 int ecryptfs_check_sig(char *auth_tok_sig, char *sig_cache_filename,
-		       int *flags);
+               int *flags);
 int ecryptfs_append_sig(char *auth_tok_sig, char *sig_cache_filename);
 int __ecryptfs_detect_wrapped_passphrase_file_version(const char *filename,
-						      uint8_t *version);
+                              uint8_t *version);
 int ecryptfs_wrap_passphrase_file(char *dest, char *wrapping_passphrase,
- 			     char *wrapping_salt, char *src);
+                  char *wrapping_salt, char *src);
 int ecryptfs_wrap_passphrase(char *filename, char *wrapping_passphrase,
-			     char *unused, char *decrypted_passphrase);
+                 char *unused, char *decrypted_passphrase);
 int ecryptfs_unwrap_passphrase(char *decrypted_passphrase, char *filename,
-			       char *wrapping_passphrase, char *wrapping_salt);
+                   char *wrapping_passphrase, char *wrapping_salt);
 int ecryptfs_insert_wrapped_passphrase_into_keyring(
-	char *auth_tok_sig, char *filename, char *wrapping_passphrase,
-	char *salt);
+    char *auth_tok_sig, char *filename, char *wrapping_passphrase,
+    char *salt);
 char *ecryptfs_get_wrapped_passphrase_filename();
 struct ecryptfs_key_mod_ops *passphrase_get_key_mod_ops(void);
 int ecryptfs_validate_keyring(void);
@@ -562,38 +562,38 @@ int ecryptfs_set_zombie_session_placeholder(void);
 int ecryptfs_kill_and_clear_zombie_session_placeholder(void);
 int ecryptfs_list_zombie_session_placeholders(void);
 int ecryptfs_build_linear_subgraph_from_nvp(struct transition_node **trans_node,
-					    struct ecryptfs_key_mod *key_mod);
+                        struct ecryptfs_key_mod *key_mod);
 int ecryptfs_build_linear_subgraph(struct transition_node **trans_node,
-				   struct ecryptfs_key_mod *key_mod);
+                   struct ecryptfs_key_mod *key_mod);
 int ecryptfs_generate_sig_from_key_data(unsigned char *sig,
-					unsigned char *key_data,
-					size_t key_data_len);
+                    unsigned char *key_data,
+                    size_t key_data_len);
 int ecryptfs_fill_in_dummy_ops(struct ecryptfs_key_mod_ops *key_mod_ops);
 int ecryptfs_register_key_modules(struct ecryptfs_ctx* ctx);
 int ecryptfs_write_packet_length(char *dest, size_t size,
-				 size_t *packet_size_length);
+                 size_t *packet_size_length);
 int ecryptfs_parse_packet_length(unsigned char *data, size_t *size,
-				 size_t *length_size);
+                 size_t *length_size);
 int ecryptfs_get_proc_mount_point(char **proc_mount_point);
 int ecryptfs_send_message(struct ecryptfs_messaging_ctx *mctx,
-			  struct ecryptfs_message *msg,
-			  unsigned char msg_type, uint16_t msg_flags,
-			  uint32_t msg_seq);
+              struct ecryptfs_message *msg,
+              unsigned char msg_type, uint16_t msg_flags,
+              uint32_t msg_seq);
 int ecryptfs_init_miscdev(struct ecryptfs_miscdev_ctx *miscdev_ctx);
 int ecryptfs_send_miscdev(struct ecryptfs_miscdev_ctx *miscdev_ctx,
-			  struct ecryptfs_message *msg, uint8_t msg_type,
-			  uint16_t msg_flags, uint32_t msg_seq);
+              struct ecryptfs_message *msg, uint8_t msg_type,
+              uint16_t msg_flags, uint32_t msg_seq);
 void ecryptfs_release_miscdev(struct ecryptfs_miscdev_ctx *miscdev_ctx);
 int ecryptfs_run_miscdev_daemon(struct ecryptfs_miscdev_ctx *miscdev_ctx);
 struct ecryptfs_ctx_ops *cryptfs_get_ctx_opts(void);
 int ecryptfs_parse_stat(struct ecryptfs_crypt_stat_user *crypt_stat, char *buf,
-			size_t buf_size);
+            size_t buf_size);
 binary_data ecryptfs_passphrase_blob(char *salt, char *passphrase);
 binary_data ecryptfs_passphrase_sig_from_blob(char *blob);
 int ecryptfs_add_passphrase_blob_to_keyring(char *blob, char *sig);
 int ecryptfs_remove_auth_tok_from_keyring(char *auth_tok_sig);
 int ecryptfs_add_auth_tok_to_keyring(struct ecryptfs_auth_tok *auth_tok,
-				     char *auth_tok_sig);
+                     char *auth_tok_sig);
 #if 1 /* hyunk */
 int ecryptfs_clear_keyring(void);
 void init_param_node(void);

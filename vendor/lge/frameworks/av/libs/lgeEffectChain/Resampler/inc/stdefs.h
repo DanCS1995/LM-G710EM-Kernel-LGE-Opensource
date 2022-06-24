@@ -51,6 +51,9 @@ typedef unsigned int   UWORD;
 #define MAX_HWORD (32767)
 #define MIN_HWORD (-32768)
 
+#define MAX_24WORD (8388607)
+#define MIN_24WORD (-8388608)
+
 #ifdef DEBUG
 #define INLINE
 #else

@@ -761,9 +761,9 @@ verify (gcry_mpi_t input, ECC_public_key *pkey, gcry_mpi_t r, gcry_mpi_t s)
   mpi_ec_t ctx;
 
   if( !(mpi_cmp_ui (r, 0) > 0 && mpi_cmp (r, pkey->E.n) < 0) )
-    return GPG_ERR_BAD_SIGNATURE; /* Assertion	0 < r < n  failed.  */
+    return GPG_ERR_BAD_SIGNATURE; /* Assertion    0 < r < n  failed.  */
   if( !(mpi_cmp_ui (s, 0) > 0 && mpi_cmp (s, pkey->E.n) < 0) )
-    return GPG_ERR_BAD_SIGNATURE; /* Assertion	0 < s < n  failed.  */
+    return GPG_ERR_BAD_SIGNATURE; /* Assertion    0 < s < n  failed.  */
 
   h  = mpi_alloc (0);
   h1 = mpi_alloc (0);
@@ -1225,13 +1225,13 @@ compute_keygrip (gcry_md_hd_t md, gcry_sexp_t keyparam)
       if (l1)
         {
           values[idx] = gcry_sexp_nth_mpi (l1, 1, GCRYMPI_FMT_USG);
-	  gcry_sexp_release (l1);
-	  if (!values[idx])
+      gcry_sexp_release (l1);
+      if (!values[idx])
             {
               ec = GPG_ERR_INV_OBJ;
               goto leave;
             }
-	}
+    }
     }
   
   /* Check whether a curve parameter is available and use that to fill

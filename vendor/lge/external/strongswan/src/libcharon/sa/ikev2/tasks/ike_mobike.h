@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -63,15 +63,16 @@ struct ike_mobike_t {
 	void (*dpd)(ike_mobike_t *this);
 
 	/**
-	 * Transmision hook, called by task manager.
+	 * Transmission hook, called by task manager.
 	 *
 	 * The task manager calls this hook whenever it transmits a packet. It
 	 * allows the mobike task to send the packet on multiple paths to do path
 	 * probing.
 	 *
 	 * @param packet		the packet to transmit
+	 * @return				TRUE if transmitted, FALSE if no path found
 	 */
-	void (*transmit)(ike_mobike_t *this, packet_t *packet);
+	bool (*transmit)(ike_mobike_t *this, packet_t *packet);
 
 	/**
 	 * Check if this task is probing for routability.
@@ -79,13 +80,18 @@ struct ike_mobike_t {
 	 * @return				TRUE if task is probing
 	 */
 	bool (*is_probing)(ike_mobike_t *this);
+
+	/**
+	 * Enable probing for routability.
+	 */
+	void (*enable_probing)(ike_mobike_t *this);
 };
 
 /**
  * Create a new ike_mobike task.
  *
  * @param ike_sa		IKE_SA this task works for
- * @param initiator		TRUE if taks is initiated by us
+ * @param initiator		TRUE if task is initiated by us
  * @return				ike_mobike task to handle by the task_manager
  */
 ike_mobike_t *ike_mobike_create(ike_sa_t *ike_sa, bool initiator);

@@ -2,7 +2,7 @@
  * Copyright (C) 2012 Tobias Brunner
  * Copyright (C) 2012 Giuliano Grassi
  * Copyright (C) 2012 Ralf Sager
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,7 +22,7 @@
 #include <collections/linked_list.h>
 
 /** Base priority for installed policies */
-#define PRIO_BASE 512
+#define PRIO_BASE 384
 
 typedef struct private_ipsec_policy_mgr_t private_ipsec_policy_mgr_t;
 
@@ -57,7 +57,7 @@ typedef struct {
 	/**
 	 * Priority used to sort policies
 	 */
-	u_int32_t priority;
+	uint32_t priority;
 
 	/**
 	 * The policy
@@ -70,13 +70,13 @@ typedef struct {
  * Calculate the pseudo-priority to sort policies.  This is the same algorithm
  * used by the NETLINK kernel interface (i.e. high priority -> low value).
  */
-static u_int32_t calculate_priority(policy_priority_t policy_priority,
+static uint32_t calculate_priority(policy_priority_t policy_priority,
 									traffic_selector_t *src,
 									traffic_selector_t *dst)
 {
-	u_int32_t priority = PRIO_BASE;
-	u_int16_t port;
-	u_int8_t mask, proto;
+	uint32_t priority = PRIO_BASE;
+	uint16_t port;
+	uint8_t mask, proto;
 	host_t *net;
 
 	switch (policy_priority)
@@ -88,6 +88,9 @@ static u_int32_t calculate_priority(policy_priority_t policy_priority,
 			priority <<= 1;
 			/* fall-through */
 		case POLICY_PRIORITY_DEFAULT:
+			priority <<= 1;
+			/* fall-through */
+		case POLICY_PRIORITY_PASS:
 			break;
 	}
 	/* calculate priority based on selector size, small size = high prio */
@@ -172,15 +175,16 @@ METHOD(ipsec_policy_mgr_t, add_policy, status_t,
 }
 
 METHOD(ipsec_policy_mgr_t, del_policy, status_t,
-	private_ipsec_policy_mgr_t *this, traffic_selector_t *src_ts,
-	traffic_selector_t *dst_ts, policy_dir_t direction, u_int32_t reqid,
-	mark_t mark, policy_priority_t policy_priority)
+	private_ipsec_policy_mgr_t *this, host_t *src, host_t *dst,
+	traffic_selector_t *src_ts, traffic_selector_t *dst_ts,
+	policy_dir_t direction, policy_type_t type, ipsec_sa_cfg_t *sa, mark_t mark,
+	policy_priority_t policy_priority)
 {
 	enumerator_t *enumerator;
 	ipsec_policy_entry_t *current, *found = NULL;
-	u_int32_t priority;
+	uint32_t priority;
 
-	if (direction == POLICY_FWD)
+	if (type != POLICY_IPSEC || direction == POLICY_FWD)
 	{	/* we ignore these policies as we currently have no use for them */
 		return SUCCESS;
 	}
@@ -195,7 +199,7 @@ METHOD(ipsec_policy_mgr_t, del_policy, status_t,
 	{
 		if (current->priority == priority &&
 			current->policy->match(current->policy, src_ts, dst_ts, direction,
-								   reqid, mark, policy_priority))
+								   sa->reqid, mark, policy_priority))
 		{
 			this->policies->remove_at(this->policies, enumerator);
 			found = current;
@@ -231,7 +235,7 @@ METHOD(ipsec_policy_mgr_t, flush_policies, status_t,
 
 METHOD(ipsec_policy_mgr_t, find_by_packet, ipsec_policy_t*,
 	private_ipsec_policy_mgr_t *this, ip_packet_t *packet, bool inbound,
-	u_int32_t reqid)
+	uint32_t reqid)
 {
 	enumerator_t *enumerator;
 	ipsec_policy_entry_t *current;

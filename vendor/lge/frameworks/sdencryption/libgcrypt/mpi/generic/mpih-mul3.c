@@ -19,10 +19,10 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  *
  * Note: This code is heavily based on the GNU MP Library.
- *	 Actually it's the same code with only minor changes in the
- *	 way the data is stored; this is to support the abstraction
- *	 of an optional secure memory allocation which may be used
- *	 to avoid revealing of sensitive data due to paging etc.
+ *     Actually it's the same code with only minor changes in the
+ *     way the data is stored; this is to support the abstraction
+ *     of an optional secure memory allocation which may be used
+ *     to avoid revealing of sensitive data due to paging etc.
  */
 
 #include <config.h>
@@ -34,7 +34,7 @@
 
 mpi_limb_t
 _gcry_mpih_submul_1( mpi_ptr_t res_ptr, mpi_ptr_t s1_ptr,
-		  mpi_size_t s1_size, mpi_limb_t s2_limb)
+          mpi_size_t s1_size, mpi_limb_t s2_limb)
 {
   mpi_limb_t cy_limb;
   mpi_size_t j;

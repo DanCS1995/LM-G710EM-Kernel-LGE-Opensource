@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2012 Reto Buerki
+ * Copyright (C) 2012-2014 Reto Buerki
  * Copyright (C) 2012 Adrian-Ken Rueegsegger
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -57,6 +57,11 @@ struct sad_entry_t {
 	esa_id_type esa_id;
 
 	/**
+	 * Reqid.
+	 */
+	uint32_t reqid;
+
+	/**
 	 * Source address of CHILD SA.
 	 */
 	host_t *src;
@@ -67,14 +72,19 @@ struct sad_entry_t {
 	host_t *dst;
 
 	/**
-	 * SPI of CHILD SA.
+	 * Local SPI of CHILD SA.
 	 */
-	u_int32_t spi;
+	uint32_t spi_loc;
+
+	/**
+	 * Remote SPI of CHILD SA.
+	 */
+	uint32_t spi_rem;
 
 	/**
 	 * Protocol of CHILD SA (ESP/AH).
 	 */
-	u_int8_t proto;
+	uint8_t proto;
 
 };
 
@@ -91,63 +101,90 @@ static void sad_entry_destroy(sad_entry_t *entry)
 	}
 }
 
-/**
- * Find a list entry with given src, dst, spi and proto values.
- */
-static bool sad_entry_match(sad_entry_t * const entry, const host_t * const src,
-							const host_t * const dst, const u_int32_t * const spi,
-							const u_int8_t * const proto)
+CALLBACK(sad_entry_match, bool,
+	sad_entry_t * const entry, va_list args)
 {
-	if (entry->src == NULL || entry->dst == NULL)
+	const host_t *src, *dst;
+	const uint32_t *spi;
+	const uint8_t *proto;
+	const bool *local;
+
+	VA_ARGS_VGET(args, src, dst, spi, proto, local);
+
+	if (entry->src == NULL || entry->dst == NULL || entry->proto != *proto)
 	{
 		return FALSE;
 	}
-
-	return src->ip_equals(entry->src, (host_t *)src) &&
-		   dst->ip_equals(entry->dst, (host_t *)dst) &&
-		   entry->spi == *spi && entry->proto == *proto;
+	if (*local)
+	{
+		return entry->src->ip_equals(entry->src, (host_t *)dst) &&
+			   entry->dst->ip_equals(entry->dst, (host_t *)src) &&
+			   entry->spi_loc == *spi;
+	}
+	return entry->src->ip_equals(entry->src, (host_t *)src) &&
+		   entry->dst->ip_equals(entry->dst, (host_t *)dst) &&
+		   entry->spi_rem == *spi;
 }
 
-/**
- * Compare two SAD entries for equality.
- */
-static bool sad_entry_equal(sad_entry_t * const left, sad_entry_t * const right)
+CALLBACK(sad_entry_match_dst, bool,
+	sad_entry_t * const entry, va_list args)
 {
+	const uint32_t *reqid, *spi;
+	const uint8_t *proto;
+
+	VA_ARGS_VGET(args, reqid, spi, proto);
+	return entry->reqid   == *reqid &&
+		   entry->spi_rem == *spi   &&
+		   entry->proto   == *proto;
+}
+
+CALLBACK(sad_entry_equal, bool,
+	sad_entry_t * const left, va_list args)
+{
+	sad_entry_t *right;
+
+	VA_ARGS_VGET(args, right);
+
 	if (left->src == NULL || left->dst == NULL || right->src == NULL ||
 		right->dst == NULL)
 	{
 		return FALSE;
 	}
 	return left->esa_id == right->esa_id &&
+		   left->reqid == right->reqid &&
 		   left->src->ip_equals(left->src, right->src) &&
 		   left->dst->ip_equals(left->dst, right->dst) &&
-		   left->spi == right->spi && left->proto == right->proto;
+		   left->spi_loc == right->spi_loc &&
+		   left->spi_rem == right->spi_rem &&
+		   left->proto == right->proto;
 }
 
 METHOD(tkm_kernel_sad_t, insert, bool,
 	private_tkm_kernel_sad_t * const this, const esa_id_type esa_id,
-	const host_t * const src, const host_t * const dst, const u_int32_t spi,
-	const u_int8_t proto)
+	const uint32_t reqid, const host_t * const src, const host_t * const dst,
+	const uint32_t spi_loc, const uint32_t spi_rem, const uint8_t proto)
 {
-	status_t result;
 	sad_entry_t *new_entry;
+	bool found;
 
 	INIT(new_entry,
 		 .esa_id = esa_id,
+		 .reqid = reqid,
 		 .src = (host_t *)src,
 		 .dst = (host_t *)dst,
-		 .spi = spi,
+		 .spi_loc = spi_loc,
+		 .spi_rem = spi_rem,
 		 .proto = proto,
 	);
 
 	this->mutex->lock(this->mutex);
-	result = this->data->find_first(this->data,
-									(linked_list_match_t)sad_entry_equal, NULL,
+	found = this->data->find_first(this->data, sad_entry_equal, NULL,
 									new_entry);
-	if (result == NOT_FOUND)
+	if (!found)
 	{
-		DBG3(DBG_KNL, "inserting SAD entry (esa: %llu, src: %H, dst: %H, "
-			 "spi: %x, proto: %u)", esa_id, src, dst, ntohl(spi), proto);
+		DBG3(DBG_KNL, "inserting SAD entry (esa: %llu, reqid: %u, src: %H, "
+			 "dst: %H, spi_loc: %x, spi_rem: %x,proto: %u)", esa_id, reqid, src,
+			 dst, ntohl(spi_loc), ntohl(spi_rem), proto);
 		new_entry->src = src->clone((host_t *)src);
 		new_entry->dst = dst->clone((host_t *)dst);
 		this->data->insert_last(this->data, new_entry);
@@ -158,34 +195,60 @@ METHOD(tkm_kernel_sad_t, insert, bool,
 		free(new_entry);
 	}
 	this->mutex->unlock(this->mutex);
-	return result == NOT_FOUND;
+	return !found;
 }
 
 METHOD(tkm_kernel_sad_t, get_esa_id, esa_id_type,
 	private_tkm_kernel_sad_t * const this, const host_t * const src,
-	const host_t * const dst, const u_int32_t spi, const u_int8_t proto)
+	const host_t * const dst, const uint32_t spi, const uint8_t proto,
+	const bool local)
 {
 	esa_id_type id = 0;
 	sad_entry_t *entry = NULL;
 
 	this->mutex->lock(this->mutex);
-	const status_t res = this->data->find_first(this->data,
-												(linked_list_match_t)sad_entry_match,
-												(void**)&entry, src, dst, &spi,
-												&proto);
-	if (res == SUCCESS && entry)
+	const bool res = this->data->find_first(this->data, sad_entry_match,
+											(void**)&entry, src, dst, &spi,
+											&proto, &local);
+	if (res && entry)
 	{
 		id = entry->esa_id;
-		DBG3(DBG_KNL, "getting ESA id of SAD entry (esa: %llu, src: %H, "
-			 "dst: %H, spi: %x, proto: %u)", id, src, dst, ntohl(spi),
-			 proto);
+		DBG3(DBG_KNL, "returning ESA id %llu of SAD entry (src: %H, dst: %H, "
+			 "%sbound spi: %x, proto: %u)", id, src, dst, local ? "in" : "out",
+			 ntohl(spi), proto);
 	}
 	else
 	{
-		DBG3(DBG_KNL, "no SAD entry found");
+		DBG3(DBG_KNL, "no SAD entry found for src %H, dst %H, %sbound spi %x, "
+			 "proto %u", src, dst, local ? "in" : "out", ntohl(spi), proto);
 	}
 	this->mutex->unlock(this->mutex);
 	return id;
+}
+
+METHOD(tkm_kernel_sad_t, get_dst_host, host_t *,
+	private_tkm_kernel_sad_t * const this, const uint32_t reqid,
+	const uint32_t spi, const uint8_t proto)
+{
+	host_t *dst = NULL;
+	sad_entry_t *entry = NULL;
+
+	this->mutex->lock(this->mutex);
+	const bool res = this->data->find_first(this->data, sad_entry_match_dst,
+											(void**)&entry, &reqid, &spi, &proto);
+	if (res && entry)
+	{
+		dst = entry->dst->clone(entry->dst);
+		DBG3(DBG_KNL, "returning destination host %H of SAD entry (reqid: %u,"
+			 " spi: %x, proto: %u)", dst, reqid, ntohl(spi), proto);
+	}
+	else
+	{
+		DBG3(DBG_KNL, "no SAD entry found for reqid %u, spi %x, proto: %u",
+			 reqid, ntohl(spi), proto);
+	}
+	this->mutex->unlock(this->mutex);
+	return dst;
 }
 
 METHOD(tkm_kernel_sad_t, _remove, bool,
@@ -242,6 +305,7 @@ tkm_kernel_sad_t *tkm_kernel_sad_create()
 		.public = {
 			.insert = _insert,
 			.get_esa_id = _get_esa_id,
+			.get_dst_host = _get_dst_host,
 			.remove = __remove,
 			.destroy = _destroy,
 		},

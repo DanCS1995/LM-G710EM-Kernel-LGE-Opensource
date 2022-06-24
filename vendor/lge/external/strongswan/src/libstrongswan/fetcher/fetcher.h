@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2011 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  * Copyright (C) 2011 revosec AG
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -80,6 +80,12 @@ enum fetcher_option_t {
 	 * Additional argument is u_int
 	 */
 	FETCH_TIMEOUT,
+
+	/**
+	 * Sets a pointer to a variable that receives the request's response code.
+	 * Additional argument is a u_int*.
+	 */
+	FETCH_RESPONSE_CODE,
 
 	/**
 	 * Callback to invoke with each chunk of data.

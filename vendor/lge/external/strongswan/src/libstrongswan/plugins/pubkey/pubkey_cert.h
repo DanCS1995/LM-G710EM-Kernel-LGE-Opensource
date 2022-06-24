@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 Martin Willi
- * Hochschule fuer Technik Rapperswil
+ * HSR Hochschule fuer Technik Rapperswil
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -35,6 +35,13 @@ struct pubkey_cert_t {
 	 * Implements certificate_t.
 	 */
 	certificate_t interface;
+
+	/**
+	 * Set the subject of the trusted public key.
+	 *
+	 * @param subject	subject to be set
+	 */
+	void (*set_subject)(pubkey_cert_t *this, identification_t *subject);
 };
 
 /**

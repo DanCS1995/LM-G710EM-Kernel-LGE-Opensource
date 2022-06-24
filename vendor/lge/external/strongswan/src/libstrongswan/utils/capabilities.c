@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2012-2013 Tobias Brunner
- * Hochschule fuer Technik Rapperswil
+ * Copyright (C) 2012-2015 Tobias Brunner
+ * HSR Hochschule fuer Technik Rapperswil
  * Copyright (C) 2012 Martin Willi
  * Copyright (C) 2012 revosec AG
  *
@@ -17,24 +17,29 @@
 
 #include "capabilities.h"
 
+#include <utils/debug.h>
+
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
+#include <unistd.h>
+
+#ifndef WIN32
 #include <pwd.h>
 #include <grp.h>
-#include <unistd.h>
 #ifdef HAVE_PRCTL
 # include <sys/prctl.h>
 #endif /* HAVE_PRCTL */
 
-#include <utils/debug.h>
-#include <sys/capability.h>
 #if !defined(HAVE_GETPWNAM_R) || \
     !defined(HAVE_GETGRNAM_R) || \
     !defined(HAVE_GETPWUID_R)
 # include <threading/mutex.h>
 # define EMULATE_R_FUNCS
 #endif
+#endif /* !WIN32 */
+
+#include <sys/capability.h>
 
 typedef struct private_capabilities_t private_capabilities_t;
 
@@ -75,6 +80,8 @@ struct private_capabilities_t {
 	mutex_t *mutex;
 #endif
 };
+
+#ifndef WIN32
 
 /**
  * Returns TRUE if the current process/user is member of the given group
@@ -181,6 +188,19 @@ static bool has_capability(private_capabilities_t *this, u_int cap,
 #endif /* CAPABILITIES_NATIVE */
 }
 
+#else /* WIN32 */
+
+/**
+ * Verify that the current process has the given capability, dummy variant
+ */
+static bool has_capability(private_capabilities_t *this, u_int cap,
+						   bool *ignore)
+{
+	return TRUE;
+}
+
+#endif /* WIN32 */
+
 /**
  * Keep the given capability if it is held by the current process.  Returns
  * FALSE, if this is not the case.
@@ -232,13 +252,21 @@ METHOD(capabilities_t, check, bool,
 METHOD(capabilities_t, get_uid, uid_t,
 	private_capabilities_t *this)
 {
+#ifdef WIN32
+	return this->uid;
+#else
 	return this->uid ?: geteuid();
+#endif
 }
 
 METHOD(capabilities_t, get_gid, gid_t,
 	private_capabilities_t *this)
 {
+#ifdef WIN32
+	return this->gid;
+#else
 	return this->gid ?: getegid();
+#endif
 }
 
 METHOD(capabilities_t, set_uid, void,
@@ -256,18 +284,31 @@ METHOD(capabilities_t, set_gid, void,
 METHOD(capabilities_t, resolve_uid, bool,
 	private_capabilities_t *this, char *username)
 {
+#ifndef WIN32
 	struct passwd *pwp;
 	int err;
 
 #ifdef HAVE_GETPWNAM_R
 	struct passwd passwd;
-	char buf[1024];
+	size_t buflen = 1024;
+	char *buf = NULL;
 
-	err = getpwnam_r(username, &passwd, buf, sizeof(buf), &pwp);
-	if (pwp)
+	while (TRUE)
 	{
-		this->uid = pwp->pw_uid;
+		buf = realloc(buf, buflen);
+		err = getpwnam_r(username, &passwd, buf, buflen, &pwp);
+		if (err == ERANGE)
+		{
+			buflen *= 2;
+			continue;
+		}
+		if (pwp)
+		{
+			this->uid = pwp->pw_uid;
+		}
+		break;
 	}
+	free(buf);
 #else /* HAVE GETPWNAM_R */
 	this->mutex->lock(this->mutex);
 	pwp = getpwnam(username);
@@ -284,24 +325,38 @@ METHOD(capabilities_t, resolve_uid, bool,
 	}
 	DBG1(DBG_LIB, "resolving user '%s' failed: %s", username,
 		 err ? strerror(err) : "user not found");
+#endif /* !WIN32 */
 	return FALSE;
 }
 
 METHOD(capabilities_t, resolve_gid, bool,
 	private_capabilities_t *this, char *groupname)
 {
+#ifndef WIN32
 	struct group *grp;
 	int err;
 
 #ifdef HAVE_GETGRNAM_R
 	struct group group;
-	char buf[1024];
+	size_t buflen = 1024;
+	char *buf = NULL;
 
-	err = getgrnam_r(groupname, &group, buf, sizeof(buf), &grp);
-	if (grp)
+	while (TRUE)
 	{
-		this->gid = grp->gr_gid;
+		buf = realloc(buf, buflen);
+		err = getgrnam_r(groupname, &group, buf, buflen, &grp);
+		if (err == ERANGE)
+		{
+			buflen *= 2;
+			continue;
+		}
+		if (grp)
+		{
+			this->gid = grp->gr_gid;
+		}
+		break;
 	}
+	free(buf);
 #else /* HAVE_GETGRNAM_R */
 	this->mutex->lock(this->mutex);
 	grp = getgrnam(groupname);
@@ -318,9 +373,11 @@ METHOD(capabilities_t, resolve_gid, bool,
 	}
 	DBG1(DBG_LIB, "resolving user '%s' failed: %s", groupname,
 		 err ? strerror(err) : "group not found");
+#endif /* !WIN32 */
 	return FALSE;
 }
 
+#ifndef WIN32
 /**
  * Initialize supplementary groups for unprivileged user
  */
@@ -331,12 +388,24 @@ static bool init_supplementary_groups(private_capabilities_t *this)
 
 #ifdef HAVE_GETPWUID_R
 	struct passwd pwd;
-	char buf[1024];
+	size_t buflen = 1024;
+	char *buf = NULL;
 
-	if (getpwuid_r(this->uid, &pwd, buf, sizeof(buf), &pwp) == 0 && pwp)
+	while (TRUE)
 	{
-		res = initgroups(pwp->pw_name, this->gid);
+		buf = realloc(buf, buflen);
+		if (getpwuid_r(this->uid, &pwd, buf, buflen, &pwp) == ERANGE)
+		{
+			buflen *= 2;
+			continue;
+		}
+		if (pwp)
+		{
+			res = initgroups(pwp->pw_name, this->gid);
+		}
+		break;
 	}
+	free(buf);
 #else /* HAVE_GETPWUID_R */
 	this->mutex->lock(this->mutex);
 	pwp = getpwuid(this->uid);
@@ -348,12 +417,17 @@ static bool init_supplementary_groups(private_capabilities_t *this)
 #endif /* HAVE_GETPWUID_R */
 	return res == 0;
 }
+#endif /* WIN32 */
 
 METHOD(capabilities_t, drop, bool,
 	private_capabilities_t *this)
 {
+#ifndef WIN32
 #ifdef HAVE_PRCTL
-	prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0);
+	if (has_capability(this, CAP_SETPCAP, NULL))
+	{
+		prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0);
+	}
 #endif
 
 	if (this->uid && !init_supplementary_groups(this))
@@ -409,6 +483,7 @@ METHOD(capabilities_t, drop, bool,
 	DBG1(DBG_LIB, "dropped capabilities, running as uid %u, gid %u",
 		 geteuid(), getegid());
 #endif /* CAPABILITIES */
+#endif /*!WIN32 */
 	return TRUE;
 }
 

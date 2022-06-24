@@ -30,7 +30,7 @@
 #include <stdio.h>
 
 #ifdef HAVE_LOCALE_H
-# include <locale.h>	
+# include <locale.h>    
 #endif
 #ifdef ENABLE_NLS
 #ifdef HAVE_W32_SYSTEM
@@ -161,7 +161,7 @@ drop_locale_dir (char *locale_dir)
   free (locale_dir);
 }
 
-#endif	/* HAVE_W32_SYSTEM */
+#endif    /* HAVE_W32_SYSTEM */
 
 
 const char *gpg_strerror_sym (gpg_error_t err);
@@ -186,10 +186,10 @@ get_err_from_number (char *str, gpg_error_t *err)
     {
       unsigned long cnr = strtoul (tail + 1, &tail, 0);
       if (errno || *tail)
-	return 0;
+    return 0;
 
       if (nr >= GPG_ERR_SOURCE_DIM || cnr >= GPG_ERR_CODE_DIM)
-	return 0;
+    return 0;
 
       nr = gpg_err_make (nr, cnr);
     }
@@ -201,7 +201,7 @@ get_err_from_number (char *str, gpg_error_t *err)
 
 static int
 get_err_from_symbol_one (char *str, gpg_error_t *err,
-			 int *have_source, int *have_code)
+             int *have_source, int *have_code)
 {
   static const char src_prefix[] = "GPG_ERR_SOURCE_";
   static const char code_prefix[] = "GPG_ERR_";
@@ -211,41 +211,41 @@ get_err_from_symbol_one (char *str, gpg_error_t *err,
       gpg_err_source_t src;
 
       if (*have_source)
-	return 0;
+    return 0;
       *have_source = 1;
       str += sizeof (src_prefix) - 1;
 
       for (src = 0; src < GPG_ERR_SOURCE_DIM; src++)
-	{
-	  const char *src_sym;
+    {
+      const char *src_sym;
 
-	  src_sym = gpg_strsource_sym (src << GPG_ERR_SOURCE_SHIFT);
-	  if (src_sym && !strcasecmp (str, src_sym + sizeof (src_prefix) - 1))
-	    {
-	      *err |= src << GPG_ERR_SOURCE_SHIFT;
-	      return 1;
-	    }
-	}
+      src_sym = gpg_strsource_sym (src << GPG_ERR_SOURCE_SHIFT);
+      if (src_sym && !strcasecmp (str, src_sym + sizeof (src_prefix) - 1))
+        {
+          *err |= src << GPG_ERR_SOURCE_SHIFT;
+          return 1;
+        }
+    }
     }
   else if (!strncasecmp (code_prefix, str, sizeof (code_prefix) - 1))
     {
       gpg_err_code_t code;
 
       if (*have_code)
-	return 0;
+    return 0;
       *have_code = 1;
       str += sizeof (code_prefix) - 1;
 
       for (code = 0; code < GPG_ERR_CODE_DIM; code++)
-	{
-	  const char *code_sym = gpg_strerror_sym (code);
-	  if (code_sym
-	      && !strcasecmp (str, code_sym + sizeof (code_prefix) - 1))
-	    {
-	      *err |= code;
-	      return 1;
-	    }
-	}
+    {
+      const char *code_sym = gpg_strerror_sym (code);
+      if (code_sym
+          && !strcasecmp (str, code_sym + sizeof (code_prefix) - 1))
+        {
+          *err |= code;
+          return 1;
+        }
+    }
     }
   return 0;
 }
@@ -263,8 +263,8 @@ get_err_from_symbol (char *str, gpg_error_t *err)
 
   *err = 0;
   while (*str2 && ((*str2 >= 'A' && *str2 <= 'Z')
-		   || (*str2 >= '0' && *str2 <= '9')
-		   || *str2 == '_'))
+           || (*str2 >= '0' && *str2 <= '9')
+           || *str2 == '_'))
     str2++;
   if (*str2)
     {
@@ -288,7 +288,7 @@ get_err_from_symbol (char *str, gpg_error_t *err)
 
 static int
 get_err_from_str_one (char *str, gpg_error_t *err,
-		      int *have_source, int *have_code)
+              int *have_source, int *have_code)
 {
   gpg_err_source_t src;
   gpg_err_code_t code;
@@ -297,28 +297,28 @@ get_err_from_str_one (char *str, gpg_error_t *err,
     {
       const char *src_str = gpg_strsource (src << GPG_ERR_SOURCE_SHIFT);
       if (src_str && !strcasecmp (str, src_str))
-	{
-	  if (*have_source)
-	    return 0;
+    {
+      if (*have_source)
+        return 0;
 
-	  *have_source = 1;
-	  *err |= src << GPG_ERR_SOURCE_SHIFT;
-	  return 1;
-	}
+      *have_source = 1;
+      *err |= src << GPG_ERR_SOURCE_SHIFT;
+      return 1;
+    }
     }
 
   for (code = 0; code < GPG_ERR_CODE_DIM; code++)
     {
       const char *code_str = gpg_strerror (code);
       if (code_str && !strcasecmp (str, code_str))
-	{
-	  if (*have_code)
-	    return 0;
-	  
-	  *have_code = 1;
-	  *err |= code;
-	  return 1;
-	}
+    {
+      if (*have_code)
+        return 0;
+      
+      *have_code = 1;
+      *err |= code;
+      return 1;
+    }
     }
 
   return 0;
@@ -341,9 +341,9 @@ get_err_from_str (char *str, gpg_error_t *err)
     return ret;
 
   while (*str2 && ((*str2 >= 'A' && *str2 <= 'Z')
-		   || (*str2 >= 'a' && *str2 <= 'z')
-		   || (*str2 >= '0' && *str2 <= '9')
-		   || *str2 == '_'))
+           || (*str2 >= 'a' && *str2 <= 'z')
+           || (*str2 >= '0' && *str2 <= '9')
+           || *str2 == '_'))
     str2++;
   if (*str2)
     {
@@ -352,10 +352,10 @@ get_err_from_str (char *str, gpg_error_t *err)
       *((char *) str2) = '\0';
       str2++;
       while (*str2 && !((*str2 >= 'A' && *str2 <= 'Z')
-			|| (*str2 >= 'a' && *str2 <= 'z')
-			|| (*str2 >= '0' && *str2 <= '9')
-			|| *str2 == '_'))
-	str2++;
+            || (*str2 >= 'a' && *str2 <= 'z')
+            || (*str2 >= '0' && *str2 <= '9')
+            || *str2 == '_'))
+    str2++;
     }
   else
     str2 = NULL;
@@ -412,7 +412,7 @@ main (int argc, char *argv[])
              non-zero error code. */
           err = gpg_err_make (i, 1);
           err -= 1;
-	  source_sym = gpg_strsource_sym (err);
+      source_sym = gpg_strsource_sym (err);
           if (source_sym)
             printf ("%u = (%u, -) = (%s, -) = (%s, -)\n",
                     err, gpg_err_source (err),
@@ -421,7 +421,7 @@ main (int argc, char *argv[])
       for (i=0; i <  GPG_ERR_CODE_DIM; i++)
         {
           err = gpg_err_make (GPG_ERR_SOURCE_UNKNOWN, i);
-	  error_sym = gpg_strerror_sym (err);
+      error_sym = gpg_strerror_sym (err);
           if (error_sym)
             printf ("%u = (-, %u) = (-, %s) = (-, %s)\n",
                     err, gpg_err_code (err),
@@ -433,20 +433,20 @@ main (int argc, char *argv[])
   while (i < argc)
     {
       if (get_err_from_number (argv[i], &err)
-	  || get_err_from_symbol (argv[i], &err)
-	  || get_err_from_str (argv[i], &err))
-	{
-	  source_sym = gpg_strsource_sym (err);
-	  error_sym = gpg_strerror_sym (err);
-	  
-	  printf ("%u = (%u, %u) = (%s, %s) = (%s, %s)\n",
-		  err, gpg_err_source (err), gpg_err_code (err),
-		  source_sym ? source_sym : "-", error_sym ? error_sym : "-",
-		  gpg_strsource (err), gpg_strerror (err));
-	}
+      || get_err_from_symbol (argv[i], &err)
+      || get_err_from_str (argv[i], &err))
+    {
+      source_sym = gpg_strsource_sym (err);
+      error_sym = gpg_strerror_sym (err);
+      
+      printf ("%u = (%u, %u) = (%s, %s) = (%s, %s)\n",
+          err, gpg_err_source (err), gpg_err_code (err),
+          source_sym ? source_sym : "-", error_sym ? error_sym : "-",
+          gpg_strsource (err), gpg_strerror (err));
+    }
       else
-	fprintf (stderr, _("%s: warning: could not recognize %s\n"),
-		 argv[0], argv[i]);
+    fprintf (stderr, _("%s: warning: could not recognize %s\n"),
+         argv[0], argv[i]);
       i++;
     }
 
